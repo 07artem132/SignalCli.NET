@@ -1,6 +1,6 @@
-﻿using JetBrains.Annotations;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using System.Text.Json;
+using JetBrains.Annotations;
+using System.Text.Json.Serialization;
 
 namespace SignalCli.Models.Rpc;
 
@@ -17,7 +17,7 @@ public record JsonRpcResponse
     /// Версія протоколу JSON-RPC.
     /// </summary>
     /// <value>Зазвичай "2.0" для JSON-RPC 2.0.</value>
-    [JsonProperty("jsonrpc")]
+    [JsonPropertyName("jsonrpc")]
     public string JsonRpc { get; init; }
 
     /// <summary>
@@ -27,8 +27,8 @@ public record JsonRpcResponse
     /// Доступний, якщо виконання методу завершилось успішно.
     /// Має значення null, якщо сталася помилка.
     /// </remarks>
-    [JsonProperty("result")]
-    public JToken Result { get; init; }
+    [JsonPropertyName("result")]
+    public JsonElement Result { get; init; }
 
     /// <summary>
     /// Інформація про помилку.
@@ -37,7 +37,7 @@ public record JsonRpcResponse
     /// Доступна, якщо під час виконання методу сталася помилка.
     /// Має значення null при успішному виконанні методу.
     /// </remarks>
-    [JsonProperty("error")]
+    [JsonPropertyName("error")]
     public JsonRpcError Error { get; init; }
 
     /// <summary>
@@ -46,7 +46,7 @@ public record JsonRpcResponse
     /// <remarks>
     /// Співпадає з ідентифікатором у відповідному запиті.
     /// </remarks>
-    [JsonProperty("id")]
+    [JsonPropertyName("id")]
     public string Id { get; init; }
 }
 
@@ -64,24 +64,24 @@ public record JsonRpcResponse<T>
     /// <summary>
     /// Версія протоколу JSON-RPC.
     /// </summary>
-    [JsonProperty("jsonrpc")]
+    [JsonPropertyName("jsonrpc")]
     public string JsonRpc { get; init; }
 
     /// <summary>
     /// Результат виконання методу вказаного типу.
     /// </summary>
-    [JsonProperty("result")]
+    [JsonPropertyName("result")]
     public T Result { get; init; }
 
     /// <summary>
     /// Інформація про помилку, якщо вона сталася.
     /// </summary>
-    [JsonProperty("error")]
+    [JsonPropertyName("error")]
     public JsonRpcError Error { get; init; }
 
     /// <summary>
     /// Ідентифікатор запиту, на який надається відповідь.
     /// </summary>
-    [JsonProperty("id")]
+    [JsonPropertyName("id")]
     public string Id { get; init; }
 }

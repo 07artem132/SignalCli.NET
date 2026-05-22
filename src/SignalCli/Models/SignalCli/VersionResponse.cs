@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace SignalCli.Models.SignalCli;
 
@@ -11,5 +11,5 @@ namespace SignalCli.Models.SignalCli;
 /// </remarks>
 /// <param name="Version">Рядок, що містить номер версії Signal CLI.</param>
 public record VersionResponse(
-    [property: JsonProperty("version")] string Version
+    [property: JsonPropertyName("version")] string Version
 );

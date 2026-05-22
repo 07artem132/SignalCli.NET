@@ -1,5 +1,6 @@
-﻿using JetBrains.Annotations;
-using Newtonsoft.Json;
+using System.Text.Json;
+using JetBrains.Annotations;
+using System.Text.Json.Serialization;
 
 namespace SignalCli.Models.Rpc;
 
@@ -11,19 +12,19 @@ namespace SignalCli.Models.Rpc;
 /// Підтримує передачу параметрів, ідентифікатора запиту та версії протоколу.
 /// </remarks>
 [PublicAPI]
-public record JsonRpcRequest(string Method, object Params, string Id)
+public record JsonRpcRequest(string Method, JsonElement Params, string Id)
 {
     /// <summary>
     /// Версія протоколу JSON-RPC.
     /// </summary>
     /// <value>Завжди "2.0" для JSON-RPC 2.0.</value>
-    [JsonProperty("jsonrpc")]
+    [JsonPropertyName("jsonrpc")]
     public string JsonRpc { get; init; } = "2.0";
 
     /// <summary>
     /// Назва методу, що викликається на сервері.
     /// </summary>
-    [JsonProperty("method")]
+    [JsonPropertyName("method")]
     public string Method { get; init; } = Method;
 
     /// <summary>
@@ -33,8 +34,8 @@ public record JsonRpcRequest(string Method, object Params, string Id)
     /// Може бути об'єктом, масивом або примітивним типом даних,
     /// залежно від вимог методу.
     /// </remarks>
-    [JsonProperty("params")]
-    public object Params { get; init; } = Params;
+    [JsonPropertyName("params")]
+    public JsonElement Params { get; init; } = Params;
 
     /// <summary>
     /// Ідентифікатор запиту для співставлення з відповіддю.
@@ -42,6 +43,6 @@ public record JsonRpcRequest(string Method, object Params, string Id)
     /// <remarks>
     /// Використовується клієнтом для ідентифікації відповіді на конкретний запит.
     /// </remarks>
-    [JsonProperty("id")]
+    [JsonPropertyName("id")]
     public string Id { get; init; } = Id;
 }

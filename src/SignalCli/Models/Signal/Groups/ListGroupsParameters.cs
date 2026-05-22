@@ -1,5 +1,5 @@
-﻿using JetBrains.Annotations;
-using Newtonsoft.Json;
+using JetBrains.Annotations;
+using System.Text.Json.Serialization;
 
 namespace SignalCli.Models.Signal.Groups;
 
@@ -12,5 +12,5 @@ namespace SignalCli.Models.Signal.Groups;
 /// <param name="Account">Ідентифікатор облікового запису (номер телефону).</param>
 [PublicAPI]
 public record ListGroupsParameters(
-    [property: JsonProperty("account", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("account")]
     string Account);

@@ -1,5 +1,4 @@
-﻿using System.Runtime.Serialization;
-using SignalCli.Models.Rpc;
+﻿using SignalCli.Models.Rpc;
 
 namespace SignalCli.Exceptions;
 
@@ -11,7 +10,6 @@ namespace SignalCli.Exceptions;
 /// виникають під час серіалізації/десеріалізації JSON-RPC повідомлень.
 /// Містить детальну інформацію про помилку в властивості <see cref="Error"/>.
 /// </remarks>
-[Serializable]
 public class JsonRpcException : Exception
 {
     /// <summary>
@@ -48,29 +46,5 @@ public class JsonRpcException : Exception
             Code = -32000,
             Message = message
         };
-    }
-
-    /// <summary>
-    /// Захищений конструктор для десеріалізації.
-    /// </summary>
-    /// <param name="info">Об'єкт, що містить серіалізовані дані про об'єкт винятку.</param>
-    /// <param name="context">Інформація про джерело або призначення серіалізації.</param>
-    /// <exception cref="SerializationException">Виникає при помилці десеріалізації.</exception>
-    protected JsonRpcException(SerializationInfo info, StreamingContext context)
-        : base(info, context)
-    {
-        Error = (JsonRpcError)info.GetValue(nameof(Error), typeof(JsonRpcError))!;
-    }
-    
-    /// <summary>
-    /// Отримує об'єкт, що містить дані, необхідні для серіалізації винятку.
-    /// </summary>
-    /// <param name="info">Об'єкт для заповнення даними серіалізації.</param>
-    /// <param name="context">Інформація про джерело або призначення серіалізації.</param>
-    /// <exception cref="ArgumentNullException">Виникає, якщо info дорівнює null.</exception>
-    public override void GetObjectData(SerializationInfo info, StreamingContext context)
-    {
-        base.GetObjectData(info, context);
-        info.AddValue(nameof(Error), Error);
     }
 }

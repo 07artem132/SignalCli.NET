@@ -49,8 +49,7 @@ internal sealed class JsonRpcClientHostedService : IHostedService, IJsonRpcClien
     /// <exception cref="ObjectDisposedException">Виникає, якщо об'єкт був утилізований.</exception>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (_disposed)
-            throw new ObjectDisposedException(nameof(JsonRpcClientHostedService));
+        ObjectDisposedException.ThrowIf(_disposed, this);
 
         _logger.LogInformation("JsonRpcClientHostedService починає роботу...");
 
@@ -80,8 +79,7 @@ internal sealed class JsonRpcClientHostedService : IHostedService, IJsonRpcClien
     /// <exception cref="ObjectDisposedException">Виникає, якщо об'єкт був утилізований.</exception>
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        if (_disposed)
-            throw new ObjectDisposedException(nameof(JsonRpcClientHostedService));
+        ObjectDisposedException.ThrowIf(_disposed, this);
 
         _logger.LogInformation("JsonRpcClientHostedService зупиняється...");
 

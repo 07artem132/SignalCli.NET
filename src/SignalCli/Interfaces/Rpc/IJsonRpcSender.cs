@@ -36,5 +36,5 @@ public interface IJsonRpcSender
         string method,
         TRequest parameters,
         CancellationToken cancellationToken = default
-    ) where TResponse : class;
+    ) where TResponse : notnull;
 }

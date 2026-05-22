@@ -1,5 +1,5 @@
-﻿using JetBrains.Annotations;
-using Newtonsoft.Json;
+using JetBrains.Annotations;
+using System.Text.Json.Serialization;
 
 namespace SignalCli.Models.Signal;
 
@@ -24,21 +24,21 @@ namespace SignalCli.Models.Signal;
 /// <param name="TypingMessage">Повідомлення про набір тексту.</param>
 [PublicAPI]
 public record JsonMessageEnvelope(
-    [property: JsonProperty("source")] string? Source,
-    [property: JsonProperty("sourceNumber")] string? SourceNumber,
-    [property: JsonProperty("sourceUuid")] string? SourceUuid,
-    [property: JsonProperty("sourceName")] string? SourceName,
-    [property: JsonProperty("sourceDevice")] int? SourceDevice,
-    [property: JsonProperty("timestamp")] long Timestamp,
-    [property: JsonProperty("serverReceivedTimestamp")] long ServerReceivedTimestamp,
-    [property: JsonProperty("serverDeliveredTimestamp")] long ServerDeliveredTimestamp,
-    [property: JsonProperty("dataMessage", NullValueHandling = NullValueHandling.Ignore)] JsonDataMessage? DataMessage,
-    [property: JsonProperty("editMessage", NullValueHandling = NullValueHandling.Ignore)] JsonEditMessage? EditMessage,
-    [property: JsonProperty("storyMessage", NullValueHandling = NullValueHandling.Ignore)] JsonStoryMessage? StoryMessage,
-    [property: JsonProperty("syncMessage", NullValueHandling = NullValueHandling.Ignore)] JsonSyncMessage? SyncMessage,
-    [property: JsonProperty("callMessage", NullValueHandling = NullValueHandling.Ignore)] JsonCallMessage? CallMessage,
-    [property: JsonProperty("receiptMessage", NullValueHandling = NullValueHandling.Ignore)] JsonReceiptMessage? ReceiptMessage,
-    [property: JsonProperty("typingMessage", NullValueHandling = NullValueHandling.Ignore)] JsonTypingMessage? TypingMessage
+    [property: JsonPropertyName("source")] string? Source,
+    [property: JsonPropertyName("sourceNumber")] string? SourceNumber,
+    [property: JsonPropertyName("sourceUuid")] string? SourceUuid,
+    [property: JsonPropertyName("sourceName")] string? SourceName,
+    [property: JsonPropertyName("sourceDevice")] int? SourceDevice,
+    [property: JsonPropertyName("timestamp")] long Timestamp,
+    [property: JsonPropertyName("serverReceivedTimestamp")] long ServerReceivedTimestamp,
+    [property: JsonPropertyName("serverDeliveredTimestamp")] long ServerDeliveredTimestamp,
+    [property: JsonPropertyName("dataMessage")] JsonDataMessage? DataMessage,
+    [property: JsonPropertyName("editMessage")] JsonEditMessage? EditMessage,
+    [property: JsonPropertyName("storyMessage")] JsonStoryMessage? StoryMessage,
+    [property: JsonPropertyName("syncMessage")] JsonSyncMessage? SyncMessage,
+    [property: JsonPropertyName("callMessage")] JsonCallMessage? CallMessage,
+    [property: JsonPropertyName("receiptMessage")] JsonReceiptMessage? ReceiptMessage,
+    [property: JsonPropertyName("typingMessage")] JsonTypingMessage? TypingMessage
 );
 
 #region DataMessage та вкладені типи
@@ -65,22 +65,22 @@ public record JsonMessageEnvelope(
 /// <param name="StoryContext">Контекст історії для повідомлення.</param>
 [PublicAPI]
 public record JsonDataMessage(
-    [property: JsonProperty("timestamp")] ulong Timestamp,
-    [property: JsonProperty("message")] string? Message,
-    [property: JsonProperty("expiresInSeconds")] int? ExpiresInSeconds,
-    [property: JsonProperty("viewOnce", NullValueHandling = NullValueHandling.Ignore)] bool? ViewOnce,
-    [property: JsonProperty("reaction", NullValueHandling = NullValueHandling.Ignore)] JsonReaction? Reaction,
-    [property: JsonProperty("quote", NullValueHandling = NullValueHandling.Ignore)] JsonQuote? Quote,
-    [property: JsonProperty("payment", NullValueHandling = NullValueHandling.Ignore)] JsonPayment? Payment,
-    [property: JsonProperty("mentions", NullValueHandling = NullValueHandling.Ignore)] List<JsonMention>? Mentions,
-    [property: JsonProperty("previews", NullValueHandling = NullValueHandling.Ignore)] List<JsonPreview>? Previews,
-    [property: JsonProperty("attachments", NullValueHandling = NullValueHandling.Ignore)] List<JsonAttachment>? Attachments,
-    [property: JsonProperty("sticker", NullValueHandling = NullValueHandling.Ignore)] JsonSticker? Sticker,
-    [property: JsonProperty("remoteDelete", NullValueHandling = NullValueHandling.Ignore)] JsonRemoteDelete? RemoteDelete,
-    [property: JsonProperty("contacts", NullValueHandling = NullValueHandling.Ignore)] List<JsonSharedContact>? Contacts,
-    [property: JsonProperty("textStyles", NullValueHandling = NullValueHandling.Ignore)] List<JsonTextStyle>? TextStyles,
-    [property: JsonProperty("groupInfo", NullValueHandling = NullValueHandling.Ignore)] JsonGroupInfo? GroupInfo,
-    [property: JsonProperty("storyContext", NullValueHandling = NullValueHandling.Ignore)] JsonStoryContext? StoryContext
+    [property: JsonPropertyName("timestamp")] ulong Timestamp,
+    [property: JsonPropertyName("message")] string? Message,
+    [property: JsonPropertyName("expiresInSeconds")] int? ExpiresInSeconds,
+    [property: JsonPropertyName("viewOnce")] bool? ViewOnce,
+    [property: JsonPropertyName("reaction")] JsonReaction? Reaction,
+    [property: JsonPropertyName("quote")] JsonQuote? Quote,
+    [property: JsonPropertyName("payment")] JsonPayment? Payment,
+    [property: JsonPropertyName("mentions")] List<JsonMention>? Mentions,
+    [property: JsonPropertyName("previews")] List<JsonPreview>? Previews,
+    [property: JsonPropertyName("attachments")] List<JsonAttachment>? Attachments,
+    [property: JsonPropertyName("sticker")] JsonSticker? Sticker,
+    [property: JsonPropertyName("remoteDelete")] JsonRemoteDelete? RemoteDelete,
+    [property: JsonPropertyName("contacts")] List<JsonSharedContact>? Contacts,
+    [property: JsonPropertyName("textStyles")] List<JsonTextStyle>? TextStyles,
+    [property: JsonPropertyName("groupInfo")] JsonGroupInfo? GroupInfo,
+    [property: JsonPropertyName("storyContext")] JsonStoryContext? StoryContext
 );
 
 /// <summary>
@@ -94,12 +94,12 @@ public record JsonDataMessage(
 /// <param name="IsRemove">Якщо true, реакція видаляється.</param>
 [PublicAPI]
 public record JsonReaction(
-    [property: JsonProperty("emoji")] string? Emoji,
-    [property: JsonProperty("targetAuthor")] string? TargetAuthor,
-    [property: JsonProperty("targetAuthorNumber")] string? TargetAuthorNumber,
-    [property: JsonProperty("targetAuthorUuid")] string? TargetAuthorUuid,
-    [property: JsonProperty("targetSentTimestamp")] long TargetSentTimestamp,
-    [property: JsonProperty("isRemove")] bool IsRemove
+    [property: JsonPropertyName("emoji")] string? Emoji,
+    [property: JsonPropertyName("targetAuthor")] string? TargetAuthor,
+    [property: JsonPropertyName("targetAuthorNumber")] string? TargetAuthorNumber,
+    [property: JsonPropertyName("targetAuthorUuid")] string? TargetAuthorUuid,
+    [property: JsonPropertyName("targetSentTimestamp")] long TargetSentTimestamp,
+    [property: JsonPropertyName("isRemove")] bool IsRemove
 );
 
 /// <summary>
@@ -113,12 +113,12 @@ public record JsonReaction(
 /// <param name="Attachments">Вкладення у цитованому повідомленні.</param>
 [PublicAPI]
 public record JsonQuote(
-    [property: JsonProperty("id")] long Id,
-    [property: JsonProperty("author")] string? Author,
-    [property: JsonProperty("authorNumber")] string? AuthorNumber,
-    [property: JsonProperty("authorUuid")] string? AuthorUuid,
-    [property: JsonProperty("text")] string? Text,
-    [property: JsonProperty("attachments", NullValueHandling = NullValueHandling.Ignore)] List<JsonAttachment>? Attachments
+    [property: JsonPropertyName("id")] long Id,
+    [property: JsonPropertyName("author")] string? Author,
+    [property: JsonPropertyName("authorNumber")] string? AuthorNumber,
+    [property: JsonPropertyName("authorUuid")] string? AuthorUuid,
+    [property: JsonPropertyName("text")] string? Text,
+    [property: JsonPropertyName("attachments")] List<JsonAttachment>? Attachments
 );
 
 /// <summary>
@@ -128,8 +128,8 @@ public record JsonQuote(
 /// <param name="Currency">Валюта платежу.</param>
 [PublicAPI]
 public record JsonPayment(
-    [property: JsonProperty("amount")] decimal Amount,
-    [property: JsonProperty("currency")] string? Currency
+    [property: JsonPropertyName("amount")] decimal Amount,
+    [property: JsonPropertyName("currency")] string? Currency
 );
 
 /// <summary>
@@ -138,7 +138,7 @@ public record JsonPayment(
 /// <param name="Id">Ідентифікатор згаданого користувача.</param>
 [PublicAPI]
 public record JsonMention(
-    [property: JsonProperty("id")] string? Id
+    [property: JsonPropertyName("id")] string? Id
 );
 
 /// <summary>
@@ -149,9 +149,9 @@ public record JsonMention(
 /// <param name="Description">Опис попереднього перегляду.</param>
 [PublicAPI]
 public record JsonPreview(
-    [property: JsonProperty("url")] string? Url,
-    [property: JsonProperty("title")] string? Title,
-    [property: JsonProperty("description")] string? Description
+    [property: JsonPropertyName("url")] string? Url,
+    [property: JsonPropertyName("title")] string? Title,
+    [property: JsonPropertyName("description")] string? Description
 );
 
 /// <summary>
@@ -167,14 +167,14 @@ public record JsonPreview(
 /// <param name="UploadTimestamp">Часова мітка завантаження вкладення.</param>
 [PublicAPI]
 public record JsonAttachment(
-    [property: JsonProperty("contentType")] string? ContentType,
-    [property: JsonProperty("filename")] string? Filename,
-    [property: JsonProperty("id")] string? Id,
-    [property: JsonProperty("size")] long Size,
-    [property: JsonProperty("width")] int? Width,
-    [property: JsonProperty("height")] int? Height,
-    [property: JsonProperty("caption")] string? Caption,
-    [property: JsonProperty("uploadTimestamp")] long? UploadTimestamp
+    [property: JsonPropertyName("contentType")] string? ContentType,
+    [property: JsonPropertyName("filename")] string? Filename,
+    [property: JsonPropertyName("id")] string? Id,
+    [property: JsonPropertyName("size")] long Size,
+    [property: JsonPropertyName("width")] int? Width,
+    [property: JsonPropertyName("height")] int? Height,
+    [property: JsonPropertyName("caption")] string? Caption,
+    [property: JsonPropertyName("uploadTimestamp")] long? UploadTimestamp
 );
 
 /// <summary>
@@ -184,8 +184,8 @@ public record JsonAttachment(
 /// <param name="StickerId">Ідентифікатор стікера в пакеті.</param>
 [PublicAPI]
 public record JsonSticker(
-    [property: JsonProperty("packId")] string? PackId,
-    [property: JsonProperty("stickerId")] int? StickerId
+    [property: JsonPropertyName("packId")] string? PackId,
+    [property: JsonPropertyName("stickerId")] int? StickerId
 );
 
 /// <summary>
@@ -194,7 +194,7 @@ public record JsonSticker(
 /// <param name="RemoteDeleteId">Ідентифікатор повідомлення для видалення.</param>
 [PublicAPI]
 public record JsonRemoteDelete(
-    [property: JsonProperty("remoteDeleteId")] string RemoteDeleteId
+    [property: JsonPropertyName("remoteDeleteId")] string RemoteDeleteId
 );
 
 /// <summary>
@@ -204,8 +204,8 @@ public record JsonRemoteDelete(
 /// <param name="PhoneNumber">Номер телефону контакту.</param>
 [PublicAPI]
 public record JsonSharedContact(
-    [property: JsonProperty("name")] string? Name,
-    [property: JsonProperty("phoneNumber")] string? PhoneNumber
+    [property: JsonPropertyName("name")] string? Name,
+    [property: JsonPropertyName("phoneNumber")] string? PhoneNumber
 );
 
 /// <summary>
@@ -216,9 +216,9 @@ public record JsonSharedContact(
 /// <param name="RangeEnd">Кінцева позиція стилю у тексті.</param>
 [PublicAPI]
 public record JsonTextStyle(
-    [property: JsonProperty("style")] string? Style,
-    [property: JsonProperty("rangeStart")] int RangeStart,
-    [property: JsonProperty("rangeEnd")] int RangeEnd
+    [property: JsonPropertyName("style")] string? Style,
+    [property: JsonPropertyName("rangeStart")] int RangeStart,
+    [property: JsonPropertyName("rangeEnd")] int RangeEnd
 );
 
 /// <summary>
@@ -230,10 +230,10 @@ public record JsonTextStyle(
 /// <param name="Type">Тип групової події.</param>
 [PublicAPI]
 public record JsonGroupInfo(
-    [property: JsonProperty("groupId")] string? GroupId,
-    [property: JsonProperty("groupName")] string? GroupName,
-    [property: JsonProperty("revision")] int Revision,
-    [property: JsonProperty("type")] string? Type
+    [property: JsonPropertyName("groupId")] string? GroupId,
+    [property: JsonPropertyName("groupName")] string? GroupName,
+    [property: JsonPropertyName("revision")] int Revision,
+    [property: JsonPropertyName("type")] string? Type
 );
 
 /// <summary>
@@ -242,7 +242,7 @@ public record JsonGroupInfo(
 /// <param name="ContextInfo">Інформація про контекст історії.</param>
 [PublicAPI]
 public record JsonStoryContext(
-    [property: JsonProperty("contextInfo")] string? ContextInfo
+    [property: JsonPropertyName("contextInfo")] string? ContextInfo
 );
 
 #endregion
@@ -256,8 +256,8 @@ public record JsonStoryContext(
 /// <param name="DataMessage">Нові дані повідомлення, які замінять старі.</param>
 [PublicAPI]
 public record JsonEditMessage(
-    [property: JsonProperty("targetSentTimestamp")] long TargetSentTimestamp,
-    [property: JsonProperty("dataMessage")] JsonDataMessage DataMessage
+    [property: JsonPropertyName("targetSentTimestamp")] long TargetSentTimestamp,
+    [property: JsonPropertyName("dataMessage")] JsonDataMessage DataMessage
 );
 
 #endregion
@@ -273,10 +273,10 @@ public record JsonEditMessage(
 /// <param name="TextAttachment">Текстове вкладення історії.</param>
 [PublicAPI]
 public record JsonStoryMessage(
-    [property: JsonProperty("allowsReplies")] bool AllowsReplies,
-    [property: JsonProperty("groupId", NullValueHandling = NullValueHandling.Ignore)] string? GroupId,
-    [property: JsonProperty("fileAttachment", NullValueHandling = NullValueHandling.Ignore)] JsonAttachment? FileAttachment,
-    [property: JsonProperty("textAttachment", NullValueHandling = NullValueHandling.Ignore)] TextAttachment? TextAttachment
+    [property: JsonPropertyName("allowsReplies")] bool AllowsReplies,
+    [property: JsonPropertyName("groupId")] string? GroupId,
+    [property: JsonPropertyName("fileAttachment")] JsonAttachment? FileAttachment,
+    [property: JsonPropertyName("textAttachment")] TextAttachment? TextAttachment
 );
 
 /// <summary>
@@ -291,13 +291,13 @@ public record JsonStoryMessage(
 /// <param name="BackgroundColor">Колір фону.</param>
 [PublicAPI]
 public record TextAttachment(
-    [property: JsonProperty("text")] string Text,
-    [property: JsonProperty("style", NullValueHandling = NullValueHandling.Ignore)] string? Style,
-    [property: JsonProperty("textForegroundColor", NullValueHandling = NullValueHandling.Ignore)] string? TextForegroundColor,
-    [property: JsonProperty("textBackgroundColor", NullValueHandling = NullValueHandling.Ignore)] string? TextBackgroundColor,
-    [property: JsonProperty("preview", NullValueHandling = NullValueHandling.Ignore)] JsonPreview? Preview,
-    [property: JsonProperty("backgroundGradient", NullValueHandling = NullValueHandling.Ignore)] Gradient? BackgroundGradient,
-    [property: JsonProperty("backgroundColor", NullValueHandling = NullValueHandling.Ignore)] string? BackgroundColor
+    [property: JsonPropertyName("text")] string Text,
+    [property: JsonPropertyName("style")] string? Style,
+    [property: JsonPropertyName("textForegroundColor")] string? TextForegroundColor,
+    [property: JsonPropertyName("textBackgroundColor")] string? TextBackgroundColor,
+    [property: JsonPropertyName("preview")] JsonPreview? Preview,
+    [property: JsonPropertyName("backgroundGradient")] Gradient? BackgroundGradient,
+    [property: JsonPropertyName("backgroundColor")] string? BackgroundColor
 );
 
 /// <summary>
@@ -310,11 +310,11 @@ public record TextAttachment(
 /// <param name="Angle">Кут нахилу градієнта.</param>
 [PublicAPI]
 public record Gradient(
-    [property: JsonProperty("startColor", NullValueHandling = NullValueHandling.Ignore)] string? StartColor,
-    [property: JsonProperty("endColor", NullValueHandling = NullValueHandling.Ignore)] string? EndColor,
-    [property: JsonProperty("colors")] List<string> Colors,
-    [property: JsonProperty("positions")] List<float> Positions,
-    [property: JsonProperty("angle", NullValueHandling = NullValueHandling.Ignore)] int? Angle
+    [property: JsonPropertyName("startColor")] string? StartColor,
+    [property: JsonPropertyName("endColor")] string? EndColor,
+    [property: JsonPropertyName("colors")] List<string> Colors,
+    [property: JsonPropertyName("positions")] List<float> Positions,
+    [property: JsonPropertyName("angle")] int? Angle
 );
 
 #endregion
@@ -332,12 +332,12 @@ public record Gradient(
 /// <param name="Type">Тип повідомлення синхронізації.</param>
 [PublicAPI]
 public record JsonSyncMessage(
-    [property: JsonProperty("sentMessage", NullValueHandling = NullValueHandling.Ignore)] JsonSyncDataMessage? SentMessage,
-    [property: JsonProperty("sentStoryMessage", NullValueHandling = NullValueHandling.Ignore)] JsonSyncStoryMessage? SentStoryMessage,
-    [property: JsonProperty("blockedNumbers", NullValueHandling = NullValueHandling.Ignore)] List<string>? BlockedNumbers,
-    [property: JsonProperty("blockedGroupIds", NullValueHandling = NullValueHandling.Ignore)] List<string>? BlockedGroupIds,
-    [property: JsonProperty("readMessages", NullValueHandling = NullValueHandling.Ignore)] List<JsonSyncReadMessage>? ReadMessages,
-    [property: JsonProperty("type", NullValueHandling = NullValueHandling.Ignore)] JsonSyncMessageType? Type
+    [property: JsonPropertyName("sentMessage")] JsonSyncDataMessage? SentMessage,
+    [property: JsonPropertyName("sentStoryMessage")] JsonSyncStoryMessage? SentStoryMessage,
+    [property: JsonPropertyName("blockedNumbers")] List<string>? BlockedNumbers,
+    [property: JsonPropertyName("blockedGroupIds")] List<string>? BlockedGroupIds,
+    [property: JsonPropertyName("readMessages")] List<JsonSyncReadMessage>? ReadMessages,
+    [property: JsonPropertyName("type")] JsonSyncMessageType? Type
 );
 
 /// <summary>
@@ -354,15 +354,15 @@ public record JsonSyncMessage(
 /// <param name="Attachments">Вкладення в повідомленні.</param>
 [PublicAPI]
 public record JsonSyncDataMessage(
-    [property: JsonProperty("destination")] string? Destination,
-    [property: JsonProperty("destinationNumber", NullValueHandling = NullValueHandling.Ignore)] string? DestinationNumber,
-    [property: JsonProperty("destinationUuid", NullValueHandling = NullValueHandling.Ignore)] string? DestinationUuid,
-    [property: JsonProperty("timestamp")] long Timestamp,
-    [property: JsonProperty("message")] string? Message,
-    [property: JsonProperty("expiresInSeconds")] int? ExpiresInSeconds,
-    [property: JsonProperty("viewOnce")] bool? ViewOnce,
-    [property: JsonProperty("quote", NullValueHandling = NullValueHandling.Ignore)] JsonQuote? Quote,
-    [property: JsonProperty("attachments", NullValueHandling = NullValueHandling.Ignore)] List<JsonAttachment>? Attachments
+    [property: JsonPropertyName("destination")] string? Destination,
+    [property: JsonPropertyName("destinationNumber")] string? DestinationNumber,
+    [property: JsonPropertyName("destinationUuid")] string? DestinationUuid,
+    [property: JsonPropertyName("timestamp")] long Timestamp,
+    [property: JsonPropertyName("message")] string? Message,
+    [property: JsonPropertyName("expiresInSeconds")] int? ExpiresInSeconds,
+    [property: JsonPropertyName("viewOnce")] bool? ViewOnce,
+    [property: JsonPropertyName("quote")] JsonQuote? Quote,
+    [property: JsonPropertyName("attachments")] List<JsonAttachment>? Attachments
 );
 
 /// <summary>
@@ -372,8 +372,8 @@ public record JsonSyncDataMessage(
 /// <param name="Timestamp">Часова мітка історії.</param>
 [PublicAPI]
 public record JsonSyncStoryMessage(
-    [property: JsonProperty("storyId", NullValueHandling = NullValueHandling.Ignore)] string? StoryId,
-    [property: JsonProperty("timestamp")] long Timestamp
+    [property: JsonPropertyName("storyId")] string? StoryId,
+    [property: JsonPropertyName("timestamp")] long Timestamp
 );
 
 /// <summary>
@@ -385,16 +385,17 @@ public record JsonSyncStoryMessage(
 /// <param name="Timestamp">Часова мітка повідомлення.</param>
 [PublicAPI]
 public record JsonSyncReadMessage(
-    [property: JsonProperty("sender")] string? Sender,
-    [property: JsonProperty("senderNumber")] string? SenderNumber,
-    [property: JsonProperty("senderUuid")] string? SenderUuid,
-    [property: JsonProperty("timestamp")] long Timestamp
+    [property: JsonPropertyName("sender")] string? Sender,
+    [property: JsonPropertyName("senderNumber")] string? SenderNumber,
+    [property: JsonPropertyName("senderUuid")] string? SenderUuid,
+    [property: JsonPropertyName("timestamp")] long Timestamp
 );
 
 /// <summary>
 /// Типи повідомлень синхронізації.
 /// </summary>
 [PublicAPI]
+[JsonConverter(typeof(JsonStringEnumConverter<JsonSyncMessageType>))]
 public enum JsonSyncMessageType
 {
     /// <summary>
@@ -427,11 +428,11 @@ public enum JsonSyncMessageType
 /// <param name="IceUpdateMessages">Повідомлення про оновлення ICE для виклику.</param>
 [PublicAPI]
 public record JsonCallMessage(
-    [property: JsonProperty("offerMessage", NullValueHandling = NullValueHandling.Ignore)] Offer? OfferMessage,
-    [property: JsonProperty("answerMessage", NullValueHandling = NullValueHandling.Ignore)] Answer? AnswerMessage,
-    [property: JsonProperty("busyMessage", NullValueHandling = NullValueHandling.Ignore)] Busy? BusyMessage,
-    [property: JsonProperty("hangupMessage", NullValueHandling = NullValueHandling.Ignore)] Hangup? HangupMessage,
-    [property: JsonProperty("iceUpdateMessages", NullValueHandling = NullValueHandling.Ignore)] List<IceUpdate>? IceUpdateMessages
+    [property: JsonPropertyName("offerMessage")] Offer? OfferMessage,
+    [property: JsonPropertyName("answerMessage")] Answer? AnswerMessage,
+    [property: JsonPropertyName("busyMessage")] Busy? BusyMessage,
+    [property: JsonPropertyName("hangupMessage")] Hangup? HangupMessage,
+    [property: JsonPropertyName("iceUpdateMessages")] List<IceUpdate>? IceUpdateMessages
 );
 
 /// <summary>
@@ -442,9 +443,9 @@ public record JsonCallMessage(
 /// <param name="Opaque">Непрозорі дані пропозиції виклику.</param>
 [PublicAPI]
 public record Offer(
-    [property: JsonProperty("id")] long Id,
-    [property: JsonProperty("type")] string Type,
-    [property: JsonProperty("opaque")] string Opaque
+    [property: JsonPropertyName("id")] long Id,
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("opaque")] string Opaque
 );
 
 /// <summary>
@@ -454,8 +455,8 @@ public record Offer(
 /// <param name="Opaque">Непрозорі дані відповіді на виклик.</param>
 [PublicAPI]
 public record Answer(
-    [property: JsonProperty("id")] long Id,
-    [property: JsonProperty("opaque")] string Opaque
+    [property: JsonPropertyName("id")] long Id,
+    [property: JsonPropertyName("opaque")] string Opaque
 );
 
 /// <summary>
@@ -464,7 +465,7 @@ public record Answer(
 /// <param name="Id">Ідентифікатор виклику.</param>
 [PublicAPI]
 public record Busy(
-    [property: JsonProperty("id")] long Id
+    [property: JsonPropertyName("id")] long Id
 );
 
 /// <summary>
@@ -475,9 +476,9 @@ public record Busy(
 /// <param name="DeviceId">Ідентифікатор пристрою.</param>
 [PublicAPI]
 public record Hangup(
-    [property: JsonProperty("id")] long Id,
-    [property: JsonProperty("type")] string Type,
-    [property: JsonProperty("deviceId")] int DeviceId
+    [property: JsonPropertyName("id")] long Id,
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("deviceId")] int DeviceId
 );
 
 /// <summary>
@@ -487,8 +488,8 @@ public record Hangup(
 /// <param name="Opaque">Непрозорі дані оновлення ICE.</param>
 [PublicAPI]
 public record IceUpdate(
-    [property: JsonProperty("id")] long Id,
-    [property: JsonProperty("opaque")] string Opaque
+    [property: JsonPropertyName("id")] long Id,
+    [property: JsonPropertyName("opaque")] string Opaque
 );
 
 #endregion
@@ -505,11 +506,11 @@ public record IceUpdate(
 /// <param name="Timestamps">Часові мітки повідомлень, до яких відноситься квитанція.</param>
 [PublicAPI]
 public record JsonReceiptMessage(
-    [property: JsonProperty("when")] long When,
-    [property: JsonProperty("isDelivery")] bool IsDelivery,
-    [property: JsonProperty("isRead")] bool IsRead,
-    [property: JsonProperty("isViewed")] bool IsViewed,
-    [property: JsonProperty("timestamps")] List<long> Timestamps
+    [property: JsonPropertyName("when")] long When,
+    [property: JsonPropertyName("isDelivery")] bool IsDelivery,
+    [property: JsonPropertyName("isRead")] bool IsRead,
+    [property: JsonPropertyName("isViewed")] bool IsViewed,
+    [property: JsonPropertyName("timestamps")] List<long> Timestamps
 );
 
 #endregion
@@ -524,9 +525,9 @@ public record JsonReceiptMessage(
 /// <param name="GroupId">Ідентифікатор групи, якщо набір тексту відбувається в групі.</param>
 [PublicAPI]
 public record JsonTypingMessage(
-    [property: JsonProperty("action")] string Action,
-    [property: JsonProperty("timestamp")] long Timestamp,
-    [property: JsonProperty("groupId", NullValueHandling = NullValueHandling.Ignore)] string? GroupId
+    [property: JsonPropertyName("action")] string Action,
+    [property: JsonPropertyName("timestamp")] long Timestamp,
+    [property: JsonPropertyName("groupId")] string? GroupId
 );
 
 #endregion

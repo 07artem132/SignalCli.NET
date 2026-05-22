@@ -27,7 +27,6 @@ internal class ProcessRunner : IProcessRunner
         var psi = new ProcessStartInfo
         {
             FileName = config.Executable,
-            Arguments = config.Arguments,
             UseShellExecute = false,
             CreateNoWindow = true,
             WorkingDirectory = string.IsNullOrWhiteSpace(config.WorkingDirectory)
@@ -39,6 +38,24 @@ internal class ProcessRunner : IProcessRunner
             RedirectStandardOutput = config.RedirectStandardOutput,
             RedirectStandardError = config.RedirectStandardError
         };
+
+        // .NET 10: ізоляція дочірнього процесу в окремій групі (лише Windows).
+        if (config.CreateNewProcessGroup && OperatingSystem.IsWindows())
+        {
+            psi.CreateNewProcessGroup = true;
+        }
+
+        // Віддаємо перевагу ArgumentList (безпечне екранування кожного аргументу).
+        // Рядок Arguments — лише запасний варіант для зворотної сумісності.
+        if (config.ArgumentList is { Count: > 0 })
+        {
+            foreach (var arg in config.ArgumentList)
+                psi.ArgumentList.Add(arg);
+        }
+        else if (!string.IsNullOrEmpty(config.Arguments))
+        {
+            psi.Arguments = config.Arguments;
+        }
 
         // Додаємо змінні середовища
         foreach (var kv in config.EnvironmentVariables)

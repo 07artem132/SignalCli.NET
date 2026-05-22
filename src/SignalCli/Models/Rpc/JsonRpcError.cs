@@ -1,5 +1,5 @@
-﻿using JetBrains.Annotations;
-using Newtonsoft.Json;
+using JetBrains.Annotations;
+using System.Text.Json.Serialization;
 
 namespace SignalCli.Models.Rpc;
 
@@ -12,18 +12,18 @@ public record JsonRpcError
     /// <summary>
     /// Код помилки.
     /// </summary>
-    [JsonProperty("code")]
+    [JsonPropertyName("code")]
     public int Code { get; init; }
 
     /// <summary>
     /// Повідомлення про помилку.
     /// </summary>
-    [JsonProperty("message")]
+    [JsonPropertyName("message")]
     public string Message { get; init; }
 
     /// <summary>
     /// Додаткові дані про помилку.
     /// </summary>
-    [JsonProperty("data")]
+    [JsonPropertyName("data")]
     public object Data { get; init; }
 }

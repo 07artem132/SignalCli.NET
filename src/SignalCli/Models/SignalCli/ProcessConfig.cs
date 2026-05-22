@@ -19,13 +19,33 @@ public class ProcessConfig
     public string? Executable { get; set; }
     
     /// <summary>
-    /// Аргументи командного рядка для процесу.
+    /// Аргументи командного рядка для процесу (єдиний рядок).
     /// </summary>
     /// <remarks>
-    /// Рядок з аргументами, які будуть передані виконуваному файлу.
+    /// Використовується лише як запасний варіант, якщо <see cref="ArgumentList"/> порожній.
+    /// Для безпечної передачі аргументів із пробілами/лапками віддавайте перевагу <see cref="ArgumentList"/>.
     /// </remarks>
     public string? Arguments { get; set; }
+
+    /// <summary>
+    /// Аргументи командного рядка як окремі елементи.
+    /// </summary>
+    /// <remarks>
+    /// Кожен елемент передається процесу окремо (через ProcessStartInfo.ArgumentList),
+    /// тож .NET сам екранує пробіли, лапки та інші спецсимволи — це усуває ризик
+    /// зламати чи інжектувати аргументи через шляхи з лапками.
+    /// </remarks>
+    public IReadOnlyList<string>? ArgumentList { get; set; }
     
+    /// <summary>
+    /// Запускати процес у новій групі процесів (Windows).
+    /// </summary>
+    /// <remarks>
+    /// .NET 10: ізолює дочірній процес від консольних сигналів батька (наприклад Ctrl+C),
+    /// тож завершенням signal-cli керує лише бібліотека (через "exit" або Kill).
+    /// </remarks>
+    public bool CreateNewProcessGroup { get; set; }
+
     /// <summary>
     /// Робоча директорія для процесу.
     /// </summary>

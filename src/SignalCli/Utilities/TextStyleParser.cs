@@ -36,94 +36,60 @@ internal class TextStyleParser
     /// </returns>
     public (string ParsedText, List<string> FormatStrings) Parse()
     {
-        char prevChar = '\0';
         while (_pos < _input.Length)
         {
             char c = _input[_pos];
             char next = _pos + 1 < _input.Length ? _input[_pos + 1] : '\0';
-            bool consumed = false;
+
+            // Екранування: \\, \*, \`, \|, \~ → виводимо літеральний символ.
+            // Обробляємо тут єдиним блоком, тож маркери, що йдуть за escape,
+            // ніколи не трактуються як форматування.
+            if (c == EscapeChar &&
+                (next == '*' || next == '`' || next == '|' || next == '~' || next == EscapeChar))
+            {
+                _output.Append(next);
+                _pos += 2;
+                continue;
+            }
 
             if (c == '*')
             {
                 if (next == '*')
                 {
+                    HandleToken(TokenType.Bold);
                     _pos += 2;
-                    if (prevChar == EscapeChar)
-                    {
-                        _output.Append("**");
-                    }
-                    else
-                    {
-                        HandleToken(TokenType.Bold);
-                    }
-                    consumed = true;
                 }
                 else
                 {
+                    HandleToken(TokenType.Italic);
                     _pos++;
-                    if (prevChar == EscapeChar)
-                    {
-                        _output.Append("*");
-                    }
-                    else
-                    {
-                        HandleToken(TokenType.Italic);
-                    }
-                    consumed = true;
                 }
-            }
-            else if (c == '|' && next == '|')
-            {
-                _pos += 2;
-                if (prevChar == EscapeChar)
-                {
-                    _output.Append("||");
-                }
-                else
-                {
-                    HandleToken(TokenType.Spoiler);
-                }
-                consumed = true;
-            }
-            else if (c == '~')
-            {
-                _pos++;
-                if (prevChar == EscapeChar)
-                {
-                    _output.Append("~");
-                }
-                else
-                {
-                    HandleToken(TokenType.Strikethrough);
-                }
-                consumed = true;
-            }
-            else if (c == '`')
-            {
-                _pos++;
-                if (prevChar == EscapeChar)
-                {
-                    _output.Append("`");
-                }
-                else
-                {
-                    HandleToken(TokenType.Monospace);
-                }
-                consumed = true;
-            }
-            else if (c == EscapeChar && (next == '*' || next == '`' || next == '|' || next == '~'))
-            {
-                _pos += 2;
-                _output.Append(next);
-                consumed = true;
+                continue;
             }
 
-            if (!consumed)
+            if (c == '|' && next == '|')
             {
-                _output.Append(c);
-                _pos++;
+                HandleToken(TokenType.Spoiler);
+                _pos += 2;
+                continue;
             }
-            prevChar = c;
+
+            if (c == '~')
+            {
+                HandleToken(TokenType.Strikethrough);
+                _pos++;
+                continue;
+            }
+
+            if (c == '`')
+            {
+                HandleToken(TokenType.Monospace);
+                _pos++;
+                continue;
+            }
+
+            _output.Append(c);
+            _pos++;
         }
         return (_output.ToString(), _formatStrings);
     }
@@ -139,7 +105,7 @@ internal class TextStyleParser
         {
             var startState = _tokens.Pop();
             int length = currentPos - startState.BeginPos;
-            _formatStrings.Add($"{startState.BeginPos}:{length}:{tokenType.ToString().ToUpper()}");
+            _formatStrings.Add($"{startState.BeginPos}:{length}:{tokenType.ToString().ToUpperInvariant()}");
         }
         else
         {

@@ -20,25 +20,27 @@ internal class SignalService : ISignalCliClient, IDisposable
     public async Task<TResponse> InvokeMethodAsync<TResponse, TRequest>(
         string method,
         TRequest parameters,
-        CancellationToken cancellationToken = default) where TResponse : class
+        CancellationToken cancellationToken = default) where TResponse : notnull
     {
         ObjectDisposedException.ThrowIf(_disposed, nameof(SignalService));
 
             try
             {
-                _logger.LogDebug("Виклик JSON-RPC методу: {Method}, params={@Params}", method, parameters);
+                // ПРИВАТНІСТЬ: не логуємо параметри/результат — вони містять тіла повідомлень,
+                // номери телефонів та вкладення. Логуємо лише назву методу.
+                _logger.LogDebug("Виклик JSON-RPC методу: {Method}", method);
 
                 var response = await _rpcClient.Client
                     .InvokeMethodAsync<TResponse, TRequest>(method, parameters, cancellationToken)
                     .ConfigureAwait(false);
 
-                if (response == null)
+                if (response is null)
                 {
                     _logger.LogError("Отримано нульову відповідь від JSON-RPC методу {Method}", method);
                     throw new InvalidOperationException("Отримано нульову відповідь від сервера");
                 }
 
-                _logger.LogDebug("Метод {Method} повернув результат: {@Result}", method, response);
+                _logger.LogDebug("Метод {Method} повернув результат успішно", method);
                 return response;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

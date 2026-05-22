@@ -17,6 +17,11 @@ namespace SignalCli.Services.Signal
         private readonly ILogger<SignalMessage> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         private bool _disposed;
 
+        // Якщо приблизний розмір вкладень після base64-кодування менший за цей поріг —
+        // передаємо їх інлайн (data URI), інакше зберігаємо у тимчасові файли та
+        // передаємо шляхи (signal-cli підтримує вкладення до ~100 МБ).
+        private const long MaxInlineEncodedAttachmentBytes = 15_000_000;
+
         private async Task<SendMessageResponse> SendUnifiedMessageAsync(
             string account,
             IEnumerable<IRecipient> recipients,
@@ -89,8 +94,9 @@ namespace SignalCli.Services.Signal
             var attachmentEntries = attachments as IAttachmentEntry[] ??
                                     (attachments ?? Array.Empty<IAttachmentEntry>()).ToArray();
 
-            var size = attachmentEntries.Select(x => x.Data.Length).Sum();
-            if (15000000 > (size / 3) * 4)
+            var rawSize = attachmentEntries.Sum(x => (long)x.Data.Length);
+            var encodedSize = (rawSize / 3) * 4; // приблизний розмір після base64
+            if (encodedSize < MaxInlineEncodedAttachmentBytes)
             {
                 foreach (var attach in attachmentEntries)
                 {
@@ -132,7 +138,7 @@ namespace SignalCli.Services.Signal
                 Message: message,
                 Attachments: processedAttachments.Count == 0 ? null : processedAttachments,
                 Mentions: mentions ?? null,
-                TextStyle: parsedTextStyles.Any() ? parsedTextStyles : (externalTextStyles ?? null),
+                TextStyle: parsedTextStyles.Count > 0 ? parsedTextStyles : (externalTextStyles ?? null),
                 QuoteTimestamp: quoteTimestamp,
                 QuoteAuthor: quoteAuthor,
                 QuoteMessage: quoteMessage,
@@ -300,7 +306,7 @@ namespace SignalCli.Services.Signal
         /// <summary>
         /// Перевіряє, що список отримувачів не порожній.
         /// </summary>
-        private void ValidateRecipients(IEnumerable<IRecipient> recipients, string paramName = "recipients")
+        private static void ValidateRecipients(IEnumerable<IRecipient> recipients, string paramName = "recipients")
         {
             if (recipients == null || !recipients.Any())
             {

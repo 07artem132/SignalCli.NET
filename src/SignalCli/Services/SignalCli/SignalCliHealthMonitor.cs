@@ -103,6 +103,8 @@ public sealed class SignalCliHealthMonitor : IHostedService, IDisposable
                 // Це нормальний сценарій при зупинці сервісу
                 break;
             }
+            // Навмисний широкий catch: межа циклу моніторингу — помилка однієї
+            // ітерації не повинна зупиняти весь монітор (логуємо й продовжуємо).
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Неочікувана помилка в циклі моніторингу");

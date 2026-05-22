@@ -1,4 +1,5 @@
-﻿using System.Reactive.Subjects;
+﻿using System.Reactive.Linq;
+using System.Reactive.Subjects;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Nito.AsyncEx;
@@ -25,14 +26,15 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
 
     // Поля для управління процесом
     private IProcess? _currentProcess;
-    private bool _disposed = false;
+    // Тримаємо посилання на пару потоків ВИКЛЮЧНО для звільнення ресурсу в CleanupProcess.
+    // Єдине джерело істини про стан/потоки — ProcessStateManager.
+    private StreamPair? _currentStreamPair;
+    private bool _disposed;
     private bool _stopping;
     private int _restartCount;
 
-    // Ці поля потрібні, щоб повідомляти підписників (WaitForReadyAsync) про готовність
-    private readonly BehaviorSubject<StreamPair?> _streamPairSubject;
-    private readonly List<TaskCompletionSource<bool>> _readyTcsList = new();
-    private readonly object _readyLock = new();
+    // Сигнал завершення для StreamPairChanged (щоб потік завершувався при Dispose сервісу).
+    private readonly Subject<bool> _disposeSignal = new();
 
     /// <summary>
     /// Створює новий екземпляр хостованого сервісу Signal CLI.
@@ -51,8 +53,6 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
         _stateManager = stateManager ?? throw new ArgumentNullException(nameof(stateManager));
         _config = config ?? throw new ArgumentNullException(nameof(config));
-
-        _streamPairSubject = new BehaviorSubject<StreamPair?>(null);
     }
 
     #region IHostedService
@@ -65,8 +65,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
     /// <exception cref="ObjectDisposedException">Виникає, якщо об'єкт був утилізований.</exception>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (_disposed)
-            throw new ObjectDisposedException(nameof(SignalCliHostedService));
+        ObjectDisposedException.ThrowIf(_disposed, this);
         cancellationToken.ThrowIfCancellationRequested();
 
         _logger.LogInformation("SignalCliHostedService запускається...");
@@ -80,7 +79,6 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         catch (Exception ex)
         {
             _logger.LogError(ex, "Помилка запуску SignalCliHostedService");
-            FailReady(ex);
             throw;
         }
     }
@@ -93,8 +91,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
     /// <exception cref="ObjectDisposedException">Виникає, якщо об'єкт був утилізований.</exception>
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        if (_disposed)
-            throw new ObjectDisposedException(nameof(SignalCliHostedService));
+        ObjectDisposedException.ThrowIf(_disposed, this);
         cancellationToken.ThrowIfCancellationRequested();
 
         _logger.LogInformation("SignalCliHostedService зупиняється...");
@@ -123,39 +120,27 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
     #region IStreamPairProvider
 
     /// <summary>
-    /// Поточна пара потоків для взаємодії з процесом.
+    /// Поточна пара потоків (похідна від ProcessStateManager — єдиного джерела істини).
     /// </summary>
-    public StreamPair? CurrentStreamPair { get; private set; }
+    public StreamPair? CurrentStreamPair => _stateManager.CurrentStreamPair;
 
     /// <summary>
-    /// Потік сповіщень про зміну пари потоків.
+    /// Потік сповіщень про зміну пари потоків (похідний від стану; завершується при Dispose).
     /// </summary>
-    public IObservable<StreamPair?> StreamPairChanged => _streamPairSubject;
+    public IObservable<StreamPair?> StreamPairChanged =>
+        _stateManager.StreamPairChanged.TakeUntil(_disposeSignal);
 
     /// <summary>
-    /// Асинхронно очікує, поки пара потоків стане доступною.
+    /// Асинхронно очікує, поки пара потоків стане доступною (делегує менеджеру стану).
     /// </summary>
     /// <param name="cancellationToken">Токен скасування операції.</param>
     /// <returns>Завдання, що представляє очікування готовності потоків.</returns>
     /// <exception cref="ObjectDisposedException">Виникає, якщо об'єкт був утилізований.</exception>
     public Task WaitForReadyAsync(CancellationToken cancellationToken = default)
     {
-        if (_disposed)
-            throw new ObjectDisposedException(nameof(SignalCliHostedService));
+        ObjectDisposedException.ThrowIf(_disposed, this);
 
-        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        lock (_readyLock)
-        {
-            if (CurrentStreamPair != null)
-            {
-                tcs.TrySetResult(true);
-            }
-            else
-            {
-                _readyTcsList.Add(tcs);
-            }
-        }
-        return tcs.Task.WaitAsync(cancellationToken);
+        return _stateManager.WaitForReadyAsync(cancellationToken);
     }
 
     #endregion
@@ -251,23 +236,19 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             var (proc, streams) = await _processRunner.StartProcessWithHandle(procConfig, cancellationToken).ConfigureAwait(false);
 
             _currentProcess = proc;
-            CurrentStreamPair = streams;
+            _currentStreamPair = streams;
 
             _currentProcess.Exited += OnProcessExited;
 
-            _stateManager.UpdateState(ProcessState.Running, CurrentStreamPair);
+            // ProcessStateManager — єдине джерело істини; з нього похідні
+            // CurrentStreamPair / StreamPairChanged / WaitForReadyAsync.
+            _stateManager.UpdateState(ProcessState.Running, streams);
             _logger.LogInformation("Процес Signal CLI запущено (PID={Pid})", _currentProcess.Id);
-
-            // Сповіщаємо, що сервіс став готовим
-            SucceedReady();
-            UpdateStreamPair(CurrentStreamPair);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Не вдалося запустити процес Signal CLI");
             _stateManager.UpdateState(ProcessState.Failed, error: ex);
-            FailReady(ex);
-            UpdateStreamPair(null);
             throw;
         }
     }
@@ -298,14 +279,15 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             if (_currentProcess != null && !_currentProcess.HasExited)
             {
                 // Спробуємо "exit"
-                if (CurrentStreamPair != null)
+                if (_currentStreamPair != null)
                 {
-                    await CurrentStreamPair.StandardInput.WriteLineAsync("exit").ConfigureAwait(false);
-                    await CurrentStreamPair.StandardInput.FlushAsync().ConfigureAwait(false);
+                    await _currentStreamPair.StandardInput.WriteLineAsync("exit").ConfigureAwait(false);
+                    await _currentStreamPair.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
                 }
 
-                // Чекаємо 2 секунди
-                await Task.Delay(2000, cancellationToken).ConfigureAwait(false);
+                // Чекаємо граційного завершення (інтервал з Config)
+                await Task.Delay(TimeSpan.FromSeconds(_config.StopTimeoutSeconds), cancellationToken)
+                    .ConfigureAwait(false);
 
                 if (!_currentProcess.HasExited)
                 {
@@ -326,8 +308,6 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         finally
         {
             CleanupProcess();
-            FailReady();
-            UpdateStreamPair(null);
             _stopping = false;
         }
     }
@@ -347,8 +327,8 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             catch { /* ігноруємо */ }
             _currentProcess = null;
         }
-        CurrentStreamPair?.Dispose();
-        CurrentStreamPair = null;
+        _currentStreamPair?.Dispose();
+        _currentStreamPair = null;
     }
 
     #endregion
@@ -370,8 +350,6 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         _stateManager.UpdateState(ProcessState.Failed);
 
         CleanupProcess();
-        FailReady();
-        UpdateStreamPair(null);
 
         if (_config.MaxRestartAttempts <= 0)
         {
@@ -403,58 +381,6 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
 
     #endregion
 
-    #region Методи сповіщення Ready/NotReady
-
-    /// <summary>
-    /// Сповіщає підписників про готовність сервісу.
-    /// </summary>
-    private void SucceedReady()
-    {
-        List<TaskCompletionSource<bool>> copy;
-        lock (_readyLock)
-        {
-            copy = new List<TaskCompletionSource<bool>>(_readyTcsList);
-            _readyTcsList.Clear();
-        }
-        foreach (var tcs in copy)
-        {
-            tcs.TrySetResult(true);
-        }
-    }
-
-    /// <summary>
-    /// Сповіщає підписників про неготовність сервісу (помилку).
-    /// </summary>
-    /// <param name="ex">Помилка, яка спричинила неготовність (опціонально).</param>
-    private void FailReady(Exception? ex = null)
-    {
-        List<TaskCompletionSource<bool>> copy;
-        lock (_readyLock)
-        {
-            copy = new List<TaskCompletionSource<bool>>(_readyTcsList);
-            _readyTcsList.Clear();
-        }
-        foreach (var tcs in copy)
-        {
-            tcs.TrySetException(ex ?? new InvalidOperationException("Сервіс не готовий"));
-        }
-    }
-
-    #endregion
-
-    #region StreamPair сповіщення
-
-    /// <summary>
-    /// Оновлює пару потоків та сповіщає підписників.
-    /// </summary>
-    /// <param name="pair">Нова пара потоків або null.</param>
-    private void UpdateStreamPair(StreamPair? pair)
-    {
-        _streamPairSubject.OnNext(pair);
-    }
-
-    #endregion
-
     #region IDisposable
 
     /// <summary>
@@ -464,6 +390,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
     {
         if (_disposed) return;
         _disposed = true;
+        GC.SuppressFinalize(this);
 
         _logger.LogInformation("Disposing SignalCliHostedService...");
 
@@ -482,9 +409,20 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         finally
         {
             CleanupProcess();
-            _streamPairSubject.OnCompleted();
-            _streamPairSubject.Dispose();
-            FailReady();
+
+            // Завершуємо потік StreamPairChanged для підписників цього сервісу.
+            _disposeSignal.OnNext(true);
+            _disposeSignal.OnCompleted();
+            _disposeSignal.Dispose();
+
+            // Переводимо стан у Failed з помилкою — це провалює всі очікуючі WaitForReadyAsync
+            // (єдине джерело істини — менеджер стану).
+            if (_stateManager.CurrentState is ProcessState.Running
+                or ProcessState.Starting or ProcessState.Stopping or ProcessState.NotStarted)
+            {
+                _stateManager.UpdateState(ProcessState.Failed,
+                    error: new InvalidOperationException("SignalCliHostedService утилізовано."));
+            }
         }
     }
 

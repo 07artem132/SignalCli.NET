@@ -1,5 +1,5 @@
-﻿using JetBrains.Annotations;
-using Newtonsoft.Json;
+using JetBrains.Annotations;
+using System.Text.Json.Serialization;
 
 namespace SignalCli.Models.Signal.Devices;
 
@@ -14,6 +14,6 @@ namespace SignalCli.Models.Signal.Devices;
 /// <param name="deviceName">Назва нового пристрою.</param>
 [PublicAPI]
 public sealed record FinishLinkParameters(
-    [property: JsonProperty("deviceLinkUri")]
+    [property: JsonPropertyName("deviceLinkUri")]
     string deviceLinkUri,
-    [property: JsonProperty("deviceName")] string deviceName);
+    [property: JsonPropertyName("deviceName")] string deviceName);

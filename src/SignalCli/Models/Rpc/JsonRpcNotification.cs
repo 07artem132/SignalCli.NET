@@ -1,6 +1,6 @@
-﻿using JetBrains.Annotations;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using System.Text.Json;
+using JetBrains.Annotations;
+using System.Text.Json.Serialization;
 
 namespace SignalCli.Models.Rpc;
 
@@ -14,20 +14,20 @@ public record JsonRpcNotificationRaw
     /// <summary>
     /// Версія протоколу JSON-RPC.
     /// </summary>
-    [JsonProperty("jsonrpc")]
+    [JsonPropertyName("jsonrpc")]
     public string JsonRpc { get; init; }
 
     /// <summary>
     /// Назва методу, по якому надійшло повідомлення.
     /// </summary>
-    [JsonProperty("method")]
+    [JsonPropertyName("method")]
     public string Method { get; init; }
 
     /// <summary>
-    /// Параметри повідомлення у форматі JToken.
+    /// Параметри повідомлення у форматі JsonElement.
     /// </summary>
-    [JsonProperty("params")]
-    public JToken Params { get; init; }
+    [JsonPropertyName("params")]
+    public JsonElement Params { get; init; }
 }
 
 /// <summary>
@@ -41,18 +41,18 @@ public record JsonRpcNotification<T>
     /// <summary>
     /// Версія протоколу JSON-RPC.
     /// </summary>
-    [JsonProperty("jsonrpc")]
+    [JsonPropertyName("jsonrpc")]
     public string JsonRpc { get; init; }
 
     /// <summary>
     /// Назва методу, по якому надійшло повідомлення.
     /// </summary>
-    [JsonProperty("method")]
+    [JsonPropertyName("method")]
     public string Method { get; init; }
 
     /// <summary>
     /// Типізовані параметри повідомлення.
     /// </summary>
-    [JsonProperty("params")]
+    [JsonPropertyName("params")]
     public T Params { get; init; }
 }
