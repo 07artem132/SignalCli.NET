@@ -1,0 +1,54 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <!-- Цільова платформа -->
+        <TargetFramework>net10.0</TargetFramework>
+        <!-- Щоб автоматично створювався NuGet‑пакет -->
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <!-- Версія та інформація про пакет -->
+        <PackageId>SignalCli.Runtime</PackageId>
+        <Authors>07artem132</Authors>
+        <Description>signal-cli Runtime NuGet Package</Description>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+        <Version>0.14.3.1</Version>
+        <AssemblyVersion>0.14.3.1</AssemblyVersion>
+        <FileVersion>0.14.3.1</FileVersion>
+    </PropertyGroup>
+
+    <!-- Цілі для завантаження та копіювання signal-cli у вихідну папку (за потреби).
+         Ціль пропускається, якщо runtime уже завантажено (щоб офлайн/повторні збірки
+         не потребували мережі). Самі скрипти теж роблять ранній вихід. -->
+    <Target Name="DownloadSignalCli" BeforeTargets="Build;Pack"
+            Condition="!Exists('$(BaseIntermediateOutputPath)signal-cli\bin')">
+        <Message Text="🚀 Завантаження signal-cli..." Importance="High" />
+        <Exec Condition="'$(OS)' == 'Windows_NT'"
+              Command="powershell -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)download-signal-cli.ps1&quot; -OutDir &quot;$(BaseIntermediateOutputPath)signal-cli&quot;" />
+        <Exec Condition="'$(OS)' != 'Windows_NT'"
+              Command="bash &quot;$(MSBuildThisFileDirectory)download-signal-cli.sh&quot; &quot;$(BaseIntermediateOutputPath)signal-cli&quot;" />
+    </Target>
+
+    <Target Name="CopySignalCliToBin" AfterTargets="DownloadSignalCli">
+        <ItemGroup>
+            <SignalCliBinFiles Include="$(BaseIntermediateOutputPath)signal-cli\**\*" />
+        </ItemGroup>
+        <Copy SourceFiles="@(SignalCliBinFiles)"
+              DestinationFiles="@(SignalCliBinFiles->'$(OutputPath)signal-cli\%(RecursiveDir)%(Filename)%(Extension)')"
+              SkipUnchangedFiles="true" />
+    </Target>
+
+    <ItemGroup>
+        <!-- Копіюємо ВСІ файли з розпакованої директорії (BaseIntermediateOutputPath\signal-cli) до пакета -->
+        <!-- buildTransitive\... означає, що ці файли будуть розташовані в папці buildTransitive усередині пакета -->
+        <!-- Завдяки цьому вони не підключаються як контент напряму і не будуть "Linked" у споживачів -->
+        <None Include="$(BaseIntermediateOutputPath)signal-cli\**\*"
+              Pack="true"
+              PackagePath="buildTransitive\signal-cli\%(RecursiveDir)%(Filename)%(Extension)" />
+
+        <!-- Додаємо окремий .targets-файл, що займатиметься копіюванням у вихідну директорію на боці споживача -->
+        <None Include="SignalCli.targets"
+              Pack="true"
+              PackagePath="buildTransitive/SignalCli.Runtime.targets" />
+    </ItemGroup>
+
+</Project>

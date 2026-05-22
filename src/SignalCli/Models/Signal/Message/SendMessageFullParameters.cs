@@ -1,5 +1,5 @@
-﻿using JetBrains.Annotations;
-using Newtonsoft.Json;
+using JetBrains.Annotations;
+using System.Text.Json.Serialization;
 
 namespace SignalCli.Models.Signal.Message;
 
@@ -36,53 +36,53 @@ namespace SignalCli.Models.Signal.Message;
 /// <param name="EditTimestamp">Часова мітка повідомлення, яке редагується.</param>
 [PublicAPI]
 public sealed record SendMessageFullParameters(
-    [property: JsonProperty("account", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("account")]
     string Account,
 
-    [property: JsonProperty("recipient", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("recipient")]
     IEnumerable<string> Recipients,
 
-    [property: JsonProperty("group-id", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("group-id")]
     IEnumerable<string>? GroupIds,
-    [property: JsonProperty("note-to-self", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("note-to-self")]
     bool NoteToSelf,
-    [property: JsonProperty("endSession", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("endSession")]
     bool EndSession,
-    [property: JsonProperty("message", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("message")]
     string Message,
 
-    [property: JsonProperty("attachment", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("attachment")]
     IEnumerable<string>? Attachments,
-    [property: JsonProperty("mentions", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("mentions")]
     IEnumerable<string>? Mentions,
-    [property: JsonProperty("text-style", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("text-style")]
     IEnumerable<string>? TextStyle,
-    [property: JsonProperty("quote-timestamp", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("quote-timestamp")]
     ulong? QuoteTimestamp,
-    [property: JsonProperty("quote-author", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("quote-author")]
     string? QuoteAuthor,
-    [property: JsonProperty("quote-message", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("quote-message")]
     string? QuoteMessage,
-    [property: JsonProperty("quote-mention", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("quote-mention")]
     IEnumerable<string>? QuoteMention,
-    [property: JsonProperty("quote-text-style", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("quote-text-style")]
     IEnumerable<string>? QuoteTextStyle,
-    [property: JsonProperty("quote-attachment", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("quote-attachment")]
     IEnumerable<string>? QuoteAttachment,
-    [property: JsonProperty("preview_url", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("preview_url")]
     string? PreviewUrl,
-    [property: JsonProperty("preview_title", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("preview_title")]
     string? PreviewTitle,
-    [property: JsonProperty("preview_description", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("preview_description")]
     string? PreviewDescription,
-    [property: JsonProperty("preview_image", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("preview_image")]
     string? PreviewImage,
-    [property: JsonProperty("sticker", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("sticker")]
     string? Sticker,
-    [property: JsonProperty("storyTimestamp", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("storyTimestamp")]
     ulong? StoryTimestamp,
-    [property: JsonProperty("storyAuthor", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("storyAuthor")]
     string? StoryAuthor,
-    [property: JsonProperty("editTimestamp", NullValueHandling = NullValueHandling.Ignore)]
+    [property: JsonPropertyName("editTimestamp")]
     ulong? EditTimestamp
 );

@@ -2,16 +2,15 @@
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Serialization;
 using SignalCli.Exceptions;
 using SignalCli.Interfaces.Rpc;
 using SignalCli.Interfaces.SignalCli;
 using SignalCli.Models.Rpc;
 using SignalCli.Models.Signal.Events;
 using SignalCli.Models.SignalCli;
+using SignalCli.Serialization;
 using SignalCli.Utilities;
 
 namespace SignalCli.Services.Rpc;
@@ -88,11 +87,14 @@ internal class JsonRpcClient : IJsonRpcClient
                 while (await reader.ReadLineAsync().ConfigureAwait(false) is { } line)
                 {
                     if (_disposed) break;
-                    _logger.LogDebug("Отримано рядок від signal-cli: {Line}", line);
+                    // ПРИВАТНІСТЬ: сирий рядок містить вміст повідомлень/вкладення — лише Trace.
+                    _logger.LogTrace("Отримано рядок від signal-cli: {Line}", line);
 
                     ProcessMessage(line);
                 }
             }
+            // Навмисний широкий catch: межа фонового циклу читання stdout —
+            // одна помилка не повинна зупиняти читач (логуємо й завершуємо читання).
             catch (Exception ex) when (!_disposed)
             {
                 _logger.LogError(ex, "Помилка читання з виходу процесу");
@@ -103,7 +105,7 @@ internal class JsonRpcClient : IJsonRpcClient
             string? line;
             while ((line = await pair.StandardError.ReadLineAsync().ConfigureAwait(false)) != null)
             {
-                _logger.LogDebug("STDERR> {Line}", line);
+                _logger.LogTrace("STDERR> {Line}", line);
                 // Можливо, також ProcessMessage(line) або хоча б лог.
             }
         });
@@ -117,14 +119,18 @@ internal class JsonRpcClient : IJsonRpcClient
     {
         try
         {
-            var jsonObject = JObject.Parse(jsonLine);
+            using var doc = JsonDocument.Parse(jsonLine,
+                new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip });
+            var rootElement = doc.RootElement;
 
-            if (jsonObject.TryGetValue("id", out var idToken))
+            if (rootElement.TryGetProperty("id", out var idToken))
             {
-                var id = idToken.ToString();
+                var id = idToken.ValueKind == JsonValueKind.String
+                    ? idToken.GetString()
+                    : idToken.GetRawText();
                 if (!string.IsNullOrEmpty(id) && _pendingRequests.TryRemove(id, out var tcs))
                 {
-                    var response = jsonObject.ToObject<JsonRpcResponse>();
+                    var response = rootElement.Deserialize<JsonRpcResponse>(SignalJson.Options);
                     if (!tcs.TrySetResult(response))
                     {
                         _logger.LogWarning("Не вдалося встановити результат");
@@ -133,19 +139,19 @@ internal class JsonRpcClient : IJsonRpcClient
                     return;
                 }
             }
-            else if (jsonObject.TryGetValue("method", out _))
+            else if (rootElement.TryGetProperty("method", out _))
             {
-                var notificationRaw = JsonConvert.DeserializeObject<JsonRpcNotificationRaw>(jsonLine);
+                var notificationRaw = rootElement.Deserialize<JsonRpcNotificationRaw>(SignalJson.Options);
                 if (notificationRaw != null)
                 {
-                    // Логуємо
-                    _logger.LogInformation("Отримано повідомлення: Method={Method}, RawParams={Json}",
-                        notificationRaw.Method,
-                        notificationRaw.Params.ToString());
+                    // ПРИВАТНІСТЬ: RawParams містить вміст повідомлення — не логуємо його.
+                    // На рівні Debug — лише метод; повний JSON доступний лише на Trace.
+                    _logger.LogDebug("Отримано повідомлення: Method={Method}", notificationRaw.Method);
+                    _logger.LogTrace("RawParams={Json}", notificationRaw.Params.GetRawText());
 
-                    // Далі приймаємо рішення, як «до-десеріалізувати» Params
-                    // Наприклад:
-                    var subscriptionEventArgs = notificationRaw.Params.ToObject<SubscriptionEventArgs>();
+                    // Далі «до-десеріалізуємо» Params у типізований об'єкт
+                    var subscriptionEventArgs =
+                        notificationRaw.Params.Deserialize<SubscriptionEventArgs>(SignalJson.Options);
                     if (subscriptionEventArgs == null) return;
                     var typedNotification = new JsonRpcNotification<SubscriptionEventArgs>
                     {
@@ -159,12 +165,14 @@ internal class JsonRpcClient : IJsonRpcClient
                 }
             }
 
-            _logger.LogWarning("Невідоме повідомлення: {json}", jsonLine);
+            _logger.LogWarning("Невідоме повідомлення: {Json}", jsonLine);
         }
-        catch (JsonReaderException ex)
+        catch (JsonException ex)
         {
             _logger.LogError(ex, "Помилка розбору JSON: {Line}", jsonLine);
         }
+        // Навмисний широкий catch: одне некоректне повідомлення не повинно
+        // зривати обробку наступних (логуємо й продовжуємо).
         catch (Exception ex)
         {
             _logger.LogError(ex, "Неочікувана помилка обробки JSON-рядка: {Line}", jsonLine);
@@ -188,14 +196,19 @@ internal class JsonRpcClient : IJsonRpcClient
         string method,
         TRequest parameters,
         CancellationToken cancellationToken = default)
-        where TResponse : class
+        where TResponse : notnull
     {
-        if (_disposed)
-            throw new ObjectDisposedException(nameof(JsonRpcClient));
+        ObjectDisposedException.ThrowIf(_disposed, this);
 
-        var requestId = _requestIdCounter.Increment().ToString();
-        var request = new JsonRpcRequest(Method: method,
-            Params: parameters ?? throw new ArgumentNullException(nameof(parameters)), Id: requestId);
+        if (parameters is null)
+            throw new ArgumentNullException(nameof(parameters));
+
+        var requestId = _requestIdCounter.Increment().ToString(System.Globalization.CultureInfo.InvariantCulture);
+        // ВАЖЛИВО: серіалізуємо параметри за КОНКРЕТНИМ типом TRequest у JsonElement.
+        // Інакше STJ серіалізує властивість Params (тип object) як "{}" і всі параметри
+        // запиту втрачаються (на відміну від Newtonsoft, який брав runtime-тип).
+        var paramsElement = JsonSerializer.SerializeToElement(parameters, SignalJson.Options);
+        var request = new JsonRpcRequest(Method: method, Params: paramsElement, Id: requestId);
 
         var tcs = new TaskCompletionSource<JsonRpcResponse?>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pendingRequests[requestId] = tcs;
@@ -212,10 +225,11 @@ internal class JsonRpcClient : IJsonRpcClient
                 if (response.Error != null)
                     throw new JsonRpcException(response.Error);
 
-                var typedResult = response.Result.ToObject<TResponse>();
+                var typedResult = response.Result.Deserialize<TResponse>(SignalJson.Options);
+                if (typedResult is null)
+                    throw new InvalidOperationException($"Не вдалося перетворити JSON-результат на {typeof(TResponse).Name}");
 
-                return typedResult ??
-                       throw new InvalidOperationException($"Не вдалося перетворити JSON-результат на {typeof(TResponse).Name}");
+                return typedResult;
             }
         }
         finally
@@ -238,19 +252,20 @@ internal class JsonRpcClient : IJsonRpcClient
             var pair = _streamProvider.CurrentStreamPair
                        ?? throw new InvalidOperationException("Немає активної пари потоків");
 
-            // Серіалізація запиту в JSON з використанням Newtonsoft.Json
-            var json = JsonConvert.SerializeObject(req, new JsonSerializerSettings
-            {
-                ContractResolver = new DefaultContractResolver(),
-                Formatting = Formatting.None
-            });
-            if (json.Length > 20000000) // максимально дозволено 20000000 бібліотекою Jackson
+            // Серіалізація запиту в JSON з використанням System.Text.Json
+            var json = JsonSerializer.Serialize(req, SignalJson.Options);
+            // signal-cli парсить вхідний JSON через Jackson, у якого
+            // StreamReadConstraints.maxStringLength за замовчуванням = 20 000 000 символів.
+            // Тому великі вкладення передаються через temp-файли (див. SignalMessage),
+            // а тут — остання перевірка довжини всього рядка запиту.
+            if (json.Length > 20_000_000)
                 throw new InvalidOperationException("JSON параметри мають бути коротшими за 20000000 символів");
             // Відправка JSON у стандартний ввід
             await pair.StandardInput.WriteLineAsync(json).ConfigureAwait(false);
             await pair.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
 
-            _logger.LogDebug("Відправлено JSON-RPC запит: {Json}", json);
+            // ПРИВАТНІСТЬ: json містить тіло повідомлення/вкладення — лише Trace.
+            _logger.LogTrace("Відправлено JSON-RPC запит: {Json}", json);
         }
     }
 

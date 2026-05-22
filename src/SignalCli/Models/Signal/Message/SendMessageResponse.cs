@@ -1,5 +1,5 @@
-﻿using JetBrains.Annotations;
-using Newtonsoft.Json;
+using JetBrains.Annotations;
+using System.Text.Json.Serialization;
 
 namespace SignalCli.Models.Signal.Message;
 
@@ -13,8 +13,8 @@ namespace SignalCli.Models.Signal.Message;
 /// <param name="TimeStamp">Часова мітка відправлення повідомлення.</param>
 [PublicAPI]
 public sealed record SendMessageResponse(
-    [property: JsonProperty("results")] List<SendMessageResult>? Results,
-    [property: JsonProperty("timestamp")] long TimeStamp);
+    [property: JsonPropertyName("results")] List<SendMessageResult>? Results,
+    [property: JsonPropertyName("timestamp")] long TimeStamp);
 
 /// <summary>
 /// Адреса отримувача повідомлення.
@@ -26,8 +26,8 @@ public sealed record SendMessageResponse(
 /// <param name="Number">Номер телефону отримувача.</param>
 [PublicAPI]
 public sealed record RecipientAddress(
-    [property: JsonProperty("uuid")] string Uuid,
-    [property: JsonProperty("number")] string Number
+    [property: JsonPropertyName("uuid")] string Uuid,
+    [property: JsonPropertyName("number")] string Number
 );
 
 /// <summary>
@@ -40,5 +40,5 @@ public sealed record RecipientAddress(
 /// <param name="Type">Тип результату (наприклад, "SUCCESS", "ERROR").</param>
 [PublicAPI]
 public sealed record SendMessageResult(
-    [property: JsonProperty("recipientAddress")] RecipientAddress RecipientAddress,
-    [property: JsonProperty("type")] string Type);
+    [property: JsonPropertyName("recipientAddress")] RecipientAddress RecipientAddress,
+    [property: JsonPropertyName("type")] string Type);

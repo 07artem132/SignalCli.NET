@@ -181,9 +181,10 @@ public class SignalCliHostedServiceStreamPairTests : SignalCliHostedServiceTests
             () => service.StartAsync(CancellationToken.None));
 
         // Assert
-        Assert.Equal(2, streamPairs.Count);
-        Assert.Null(streamPairs[0]); // Начальное состояние
-        Assert.Null(streamPairs[1]); // После неудачного старта
+        // Після уніфікації стан-машина не дублює послідовні null (DistinctUntilChanged):
+        // лишається лише початковий null, і жодного non-null при невдалому старті.
+        Assert.NotEmpty(streamPairs);
+        Assert.All(streamPairs, Assert.Null);
     }
 
     [Fact]

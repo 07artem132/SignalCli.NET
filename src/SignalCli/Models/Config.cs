@@ -48,6 +48,12 @@ public class Config
     public int RestartDelaySeconds { get; set; } = 5;
 
     /// <summary>
+    /// Час очікування граційного завершення signal-cli (після команди "exit"),
+    /// перш ніж процес буде завершено примусово (у секундах).
+    /// </summary>
+    public int StopTimeoutSeconds { get; set; } = 2;
+
+    /// <summary>
     /// Головна директорія програми.
     /// </summary>
     /// <remarks>
@@ -110,16 +116,26 @@ public class Config
                 break;
         }
 
-        var args = $" -classpath \"{classpath}\" org.asamk.signal.Main {logLevelArg} " +
-                  $"--log-file=\"{LogFileCli}\" " +
-                  $"--config=\"{StoragePathCli}\" " +
-                  $"jsonRpc {receiveModeArg}";
+        // Кожен аргумент — окремий елемент: ProcessStartInfo.ArgumentList сам екранує
+        // пробіли та лапки, тож шляхи з лапками не можуть зламати/інжектувати аргументи.
+        var argumentList = new List<string>
+        {
+            "-classpath", classpath,
+            "org.asamk.signal.Main"
+        };
+        if (!string.IsNullOrEmpty(logLevelArg))
+            argumentList.Add(logLevelArg);
+        argumentList.Add($"--log-file={LogFileCli}");
+        argumentList.Add($"--config={StoragePathCli}");
+        argumentList.Add("jsonRpc");
+        argumentList.Add(receiveModeArg);
 
         return new ProcessConfig
         {
             Executable = JavaExecutable,
-            Arguments = args,
+            ArgumentList = argumentList,
             WorkingDirectory = AppHome,
+            CreateNewProcessGroup = true,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -136,7 +152,7 @@ public class Config
     {
         var libPath = Path.Combine(AppHome, LibDirectory);
         var jarFiles = Directory.GetFiles(libPath, "*.jar");
-        if (!jarFiles.Any())
+        if (jarFiles.Length == 0)
         {
             throw new FileNotFoundException($"No JAR files found in {libPath}");
         }
@@ -162,32 +178,73 @@ public class Config
     }
 
     /// <summary>
-    /// Знаходить шлях до виконуваного файлу Java в системі.
+    /// Знаходить шлях до виконуваного файлу Java в системі
+    /// (Windows, Linux та macOS).
     /// </summary>
     /// <returns>Шлях до виконуваного файлу Java.</returns>
-    /// <exception cref="Exception">Виникає, якщо не вдалося знайти Java.</exception>
+    /// <exception cref="InvalidOperationException">Виникає, якщо не вдалося знайти Java.</exception>
     private static string ResolveJavaPath()
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            var javaHome = Environment.GetEnvironmentVariable("JAVA_HOME");
-            if (!string.IsNullOrEmpty(javaHome))
-            {
-                var javaPath = Path.Combine(javaHome, "bin", "java.exe");
-                if (File.Exists(javaPath))
-                    return javaPath;
-            }
+        var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        var executable = isWindows ? "java.exe" : DefaultJavaPath; // "java"
 
+        // 1) JAVA_HOME/bin/java[.exe]
+        var javaHome = Environment.GetEnvironmentVariable("JAVA_HOME");
+        if (!string.IsNullOrEmpty(javaHome))
+        {
+            var javaPath = Path.Combine(javaHome, "bin", executable);
+            if (File.Exists(javaPath))
+                return javaPath;
+        }
+
+        // 2) Windows: типовий шлях Oracle javapath
+        if (isWindows)
+        {
             var oracleJavaPath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
                 "Common Files", "Oracle", "Java", "javapath", "java.exe"
             );
             if (File.Exists(oracleJavaPath))
-            {
                 return oracleJavaPath;
+        }
+
+        // 3) Пошук у PATH
+        var onPath = ResolveOnPath(executable);
+        if (onPath != null)
+            return onPath;
+
+        throw new InvalidOperationException(
+            $"Не вдалося знайти Java для платформи {RuntimeInformation.OSDescription}. " +
+            "Встановіть JDK 21+ і задайте JAVA_HOME, додайте java до PATH, " +
+            "або вкажіть шлях явно через Config.JavaExecutable.");
+    }
+
+    /// <summary>
+    /// Шукає виконуваний файл у каталогах змінної середовища PATH.
+    /// </summary>
+    /// <param name="executable">Назва виконуваного файлу (наприклад, "java" або "java.exe").</param>
+    /// <returns>Повний шлях, якщо знайдено; інакше null.</returns>
+    internal static string? ResolveOnPath(string executable)
+    {
+        var pathVar = Environment.GetEnvironmentVariable("PATH");
+        if (string.IsNullOrEmpty(pathVar))
+            return null;
+
+        var separator = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ';' : ':';
+        foreach (var dir in pathVar.Split(separator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            try
+            {
+                var candidate = Path.Combine(dir.Trim(), executable);
+                if (File.Exists(candidate))
+                    return candidate;
+            }
+            catch
+            {
+                // Ігноруємо некоректні елементи PATH
             }
         }
 
-        throw new Exception("Не вдалося знайти Java. Перевірте наявність змінної середовища JAVA_HOME.");
+        return null;
     }
 }

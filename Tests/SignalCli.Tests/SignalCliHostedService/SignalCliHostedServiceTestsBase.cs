@@ -79,6 +79,7 @@ public abstract class SignalCliHostedServiceTestsBase : IDisposable
             JavaExecutable = "java",
             MaxRestartAttempts = 2,
             RestartDelaySeconds = 0,
+            StopTimeoutSeconds = 0,
             HealthCheckIntervalSeconds = 1,
             HealthCheckTimeoutSeconds = 1
         };

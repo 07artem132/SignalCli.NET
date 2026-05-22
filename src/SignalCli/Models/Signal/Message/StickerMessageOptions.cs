@@ -19,7 +19,7 @@ public record StickerMessageOptions
         {
             if (string.IsNullOrEmpty(account))
                 throw new ArgumentException("Account обязателен.", nameof(account));
-            if (recipients == null || !recipients.Any())
+            if (recipients == null || recipients.Count == 0)
                 throw new ArgumentException("Recipients обязателен.", nameof(recipients));
             if (string.IsNullOrEmpty(sticker))
                 throw new ArgumentException("Sticker обязателен.", nameof(sticker));

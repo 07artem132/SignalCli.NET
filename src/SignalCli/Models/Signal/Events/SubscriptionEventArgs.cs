@@ -1,5 +1,5 @@
-﻿using JetBrains.Annotations;
-using Newtonsoft.Json;
+using JetBrains.Annotations;
+using System.Text.Json.Serialization;
 
 namespace SignalCli.Models.Signal.Events;
 
@@ -15,5 +15,5 @@ namespace SignalCli.Models.Signal.Events;
 [method: JsonConstructor]
 [PublicAPI]
 public record SubscriptionEventArgs(
-    [property: JsonProperty("subscription")] int Subscription,
-    [property: JsonProperty("result")] SignalEventArgs Result);
+    [property: JsonPropertyName("subscription")] int Subscription,
+    [property: JsonPropertyName("result")] SignalEventArgs Result);

@@ -88,17 +88,12 @@ public class SignalCliHostedServiceLifecycleTests : SignalCliHostedServiceTestsB
         // Получаем базовый поток из StreamWriter для последующей проверки
         var memStream = (MemoryStream)streamPair!.StandardInput.BaseStream;
 
-        // Сохраняем текущую позицию в потоке
-        var initialPosition = memStream.Position;
-
         // Act
-        var stopTask = service.StopAsync(CancellationToken.None);
-    
-        // Читаем содержимое до того, как потоки будут закрыты
-        memStream.Position = initialPosition;
-        var streamContent = new StreamReader(memStream).ReadToEnd();
-    
-        await stopTask;
+        await service.StopAsync(CancellationToken.None);
+
+        // MemoryStream.ToArray() працює навіть після закриття потоку — детермінована
+        // перевірка без гонки з утилізацією (на відміну від читання живого потоку).
+        var streamContent = System.Text.Encoding.UTF8.GetString(memStream.ToArray());
 
         // Assert
         Assert.Equal(ProcessState.Stopped, StateManager.CurrentState);

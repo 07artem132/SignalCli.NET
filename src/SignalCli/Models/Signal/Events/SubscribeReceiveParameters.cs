@@ -1,5 +1,5 @@
-﻿using JetBrains.Annotations;
-using Newtonsoft.Json;
+using JetBrains.Annotations;
+using System.Text.Json.Serialization;
 
 namespace SignalCli.Models.Signal.Events;
 
@@ -13,4 +13,4 @@ namespace SignalCli.Models.Signal.Events;
 /// <param name="Account">Ідентифікатор облікового запису (номер телефону).</param>
 [PublicAPI]
 public sealed record SubscribeReceiveParameters(
-    [property: JsonProperty("account")] string Account);
+    [property: JsonPropertyName("account")] string Account);

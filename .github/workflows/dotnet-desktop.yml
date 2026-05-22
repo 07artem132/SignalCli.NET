@@ -1,0 +1,234 @@
+name: .NET Core Desktop
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+    
+# Необхідні дозволи для GitHub Actions
+permissions:
+  contents: write  # Змінено з read на write для можливості коміту в репозиторій
+  issues: read
+  checks: write
+  pull-requests: write
+  
+# Глобальні змінні для .NET 9.0
+env:
+  DOTNET_NOLOGO: true                     # Вимкнути логотип .NET
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true # Пропустити досвід першого запуску
+  DOTNET_CLI_TELEMETRY_OPTOUT: true       # Вимкнути телеметрію
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        configuration: [Debug, Release]
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      Solution_Name: SignalCli.sln
+      Test_Project_Path: Tests/SignalCli.Tests/SignalCli.Tests.csproj
+      Main_Project_Path: src/SignalCli/SignalCli.csproj
+      NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    # Встановлення .NET 9.0
+    - name: Install .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.0.x
+        
+    # Кешування пакетів NuGet
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.NUGET_PACKAGES }}
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+
+    # Відновлення залежностей
+    - name: Restore dependencies
+      run: dotnet restore ${{ env.Solution_Name }}
+      
+    # Збірка проєкту
+    - name: Build
+      run: dotnet build ${{ env.Solution_Name }} --configuration ${{ matrix.configuration }} --no-restore -p:WarningsAsErrors=false
+      
+    # Запуск тестів зі збереженням результатів
+    - name: Test
+      run: dotnet test ${{ env.Test_Project_Path }} --configuration ${{ matrix.configuration }} --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx"
+      continue-on-error: ${{ matrix.configuration == 'Debug' }}
+      
+    # Публікація результатів тестів
+    - name: Publish Test Results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: Test Results (${{ matrix.os }}-${{ matrix.configuration }})
+        path: "**/TestResults/*.trx"
+
+    # Публікація результатів тестів як GitHub Action Checks (тільки для Linux)
+    - name: Publish Test Results as GitHub Action Checks
+      if: always() && runner.os == 'Linux'
+      uses: EnricoMi/publish-unit-test-result-action@v2
+      with:
+        files: "**/TestResults/*.trx"
+        github_token: ${{ github.token }}
+        
+    # Альтернативна публікація результатів тестів для Windows
+    - name: Publish Test Results as GitHub Action Checks (Windows)
+      if: always() && runner.os == 'Windows'
+      uses: dorny/test-reporter@v1
+      with:
+        name: Test Results (Windows)
+        path: "**/TestResults/*.trx"
+        reporter: dotnet-trx
+        
+    # Генерація звітів про покриття коду (тільки для Debug конфігурації на ubuntu)
+    - name: Generate code coverage
+      if: matrix.configuration == 'Debug' && matrix.os == 'ubuntu-latest'
+      run: |
+        dotnet tool install --global dotnet-coverage
+        dotnet tool install --global dotnet-reportgenerator-globaltool
+        
+        # Створюємо файл налаштувань для виключення SignalCli.Models з аналізу
+        cat > coverage.runsettings << EOF
+        <?xml version="1.0" encoding="utf-8" ?>
+        <RunSettings>
+          <DataCollectionRunSettings>
+            <DataCollectors>
+              <DataCollector friendlyName="Code Coverage" uri="datacollector://Microsoft/CodeCoverage/2.0">
+                <Configuration>
+                  <CodeCoverage>
+                    <ModulePaths>
+                      <Include>
+                        <ModulePath>.*SignalCli\.dll$</ModulePath>
+                      </Include>
+                    </ModulePaths>
+                    <Functions>
+                      <Exclude>
+                        <Function>.*SignalCli\.Models\..*</Function>
+                      </Exclude>
+                    </Functions>
+                  </CodeCoverage>
+                </Configuration>
+              </DataCollector>
+            </DataCollectors>
+          </DataCollectionRunSettings>
+        </RunSettings>
+        EOF
+        
+        # Запускаємо тести з покриттям, використовуючи налаштування для виключення
+        dotnet-coverage collect --settings coverage.runsettings --output-format cobertura --output coverage.xml -- dotnet test ${{ env.Test_Project_Path }}
+        
+        # Генеруємо звіт з використанням ReportGenerator з фільтрами для виключення моделей
+        reportgenerator "-reports:coverage.xml" "-targetdir:coverage-report" "-reporttypes:Html;Cobertura;JsonSummary;Badges" "-assemblyfilters:+SignalCli;-SignalCli.Tests" "-classfilters:-SignalCli.Models.*"
+        
+        # Перевіряємо згенеровані файли
+        ls -la coverage-report
+        
+    # Створюємо директорію для бейджів
+    - name: Create badges directory
+      if: matrix.configuration == 'Debug' && matrix.os == 'ubuntu-latest'
+      run: mkdir -p .github/badges
+      
+    # Копіюємо бейджі в директорію .github/badges
+    - name: Copy badges to .github/badges directory
+      if: matrix.configuration == 'Debug' && matrix.os == 'ubuntu-latest'
+      run: |
+        cp coverage-report/badge_linecoverage.svg .github/badges/lines.svg
+        cp coverage-report/badge_methodcoverage.svg .github/badges/methods.svg
+        cp coverage-report/badge_branchcoverage.svg .github/badges/branches.svg
+        
+    # Оновлюємо README.md з бейджами
+    - name: Update README with coverage badges
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.configuration == 'Debug' && matrix.os == 'ubuntu-latest'
+      run: |
+        if [ -f "README.md" ]; then
+          # Перевіряємо, чи є вже бейджі в README
+          if grep -q "!\[.*Coverage\]" README.md || grep -q "!\[.*Lines\]" README.md || grep -q "!\[.*Methods\]" README.md || grep -q "!\[.*Branches\]" README.md; then
+            # Видаляємо існуючі бейджі
+            sed -i "/!\[.*Coverage\]/d" README.md
+            sed -i "/!\[.*Lines\]/d" README.md
+            sed -i "/!\[.*Methods\]/d" README.md
+            sed -i "/!\[.*Branches\]/d" README.md
+            
+            # Знаходимо перший порожній рядок
+            FIRST_EMPTY_LINE=$(grep -n "^$" README.md | head -1 | cut -d: -f1)
+            
+            # Вставляємо нові бейджі
+            sed -i "${FIRST_EMPTY_LINE}i![Lines](.github/badges/lines.svg) ![Methods](.github/badges/methods.svg) ![Branches](.github/badges/branches.svg)" README.md
+          else
+            # Додаємо бейджі після першого рядка
+            FIRST_LINE=$(head -n 1 README.md)
+            echo "$FIRST_LINE" > README.md.new
+            echo "" >> README.md.new
+            echo "![Lines](.github/badges/lines.svg) ![Methods](.github/badges/methods.svg) ![Branches](.github/badges/branches.svg)" >> README.md.new
+            echo "" >> README.md.new
+            tail -n +2 README.md >> README.md.new
+            mv README.md.new README.md
+          fi
+        else
+          # Створюємо новий README.md з бейджами
+          echo "# SignalCli.NET" > README.md
+          echo "" >> README.md
+          echo "![Lines](.github/badges/lines.svg) ![Methods](.github/badges/methods.svg) ![Branches](.github/badges/branches.svg)" >> README.md
+          echo "" >> README.md
+          echo "A .NET wrapper for Signal CLI." >> README.md
+        fi
+        
+    # Коміт змін у README.md та бейджів
+    - name: Commit README and badges changes
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.configuration == 'Debug' && matrix.os == 'ubuntu-latest'
+      uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        commit_message: "chore: update code coverage badges [skip ci]"
+        file_pattern: "README.md .github/badges/*.svg"
+        commit_user_name: "GitHub Actions"
+        commit_user_email: "actions@github.com"
+        commit_author: "GitHub Actions <actions@github.com>"
+        
+    # Додавання коментаря з покриттям коду до PR
+    - name: Create Coverage Summary
+      if: github.event_name == 'pull_request' && matrix.configuration == 'Debug' && matrix.os == 'ubuntu-latest'
+      run: |
+        echo "### Результати покриття коду" > coverage-summary.md
+        echo "" >> coverage-summary.md
+        echo "![Lines](.github/badges/lines.svg) ![Methods](.github/badges/methods.svg) ![Branches](.github/badges/branches.svg)" >> coverage-summary.md
+        echo "" >> coverage-summary.md
+        echo "Повний звіт доступний як артефакт збірки." >> coverage-summary.md
+        
+    # Додавання коментаря з покриттям коду до PR
+    - name: Add Coverage PR Comment
+      if: github.event_name == 'pull_request' && matrix.configuration == 'Debug' && matrix.os == 'ubuntu-latest'
+      uses: marocchino/sticky-pull-request-comment@v2
+      with:
+        recreate: true
+        path: coverage-summary.md
+        
+    # Публікація звіту про покриття коду
+    - name: Upload coverage report
+      if: matrix.configuration == 'Debug' && matrix.os == 'ubuntu-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: Coverage Report
+        path: coverage-report
+        
+    # Пакування NuGet (тільки для Release конфігурації на ubuntu)
+    - name: Package
+      if: matrix.configuration == 'Release' && matrix.os == 'ubuntu-latest'
+      run: dotnet pack ${{ env.Main_Project_Path }} --configuration ${{ matrix.configuration }} --no-build --output nupkgs -p:PackageVersion=1.0.${{ github.run_number }}
+      
+    # Завантаження артефактів збірки
+    - name: Upload build artifacts
+      if: matrix.configuration == 'Release' && matrix.os == 'ubuntu-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: NuGet Package
+        path: nupkgs

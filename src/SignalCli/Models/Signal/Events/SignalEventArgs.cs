@@ -1,5 +1,5 @@
-﻿using JetBrains.Annotations;
-using Newtonsoft.Json;
+using JetBrains.Annotations;
+using System.Text.Json.Serialization;
 
 namespace SignalCli.Models.Signal.Events;
 
@@ -15,5 +15,5 @@ namespace SignalCli.Models.Signal.Events;
 [method: JsonConstructor]
 [PublicAPI]
 public record SignalEventArgs(
-    [property: JsonProperty("account")] string Account,
-    [property: JsonProperty("envelope")] JsonMessageEnvelope? Envelope);
+    [property: JsonPropertyName("account")] string Account,
+    [property: JsonPropertyName("envelope")] JsonMessageEnvelope? Envelope);

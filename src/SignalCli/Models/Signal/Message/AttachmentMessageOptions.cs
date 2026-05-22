@@ -25,9 +25,9 @@ namespace SignalCli.Models.Signal.Message;
             {
                 if (string.IsNullOrEmpty(account))
                     throw new ArgumentException("Account обязателен.", nameof(account));
-                if (recipients == null || !recipients.Any())
+                if (recipients == null || recipients.Count == 0)
                     throw new ArgumentException("Recipients обязателен.", nameof(recipients));
-                if (attachments == null || !attachments.Any())
+                if (attachments == null || attachments.Count == 0)
                     throw new ArgumentException("Attachments обязателен.", nameof(attachments));
                     
                 _options = new AttachmentMessageOptions

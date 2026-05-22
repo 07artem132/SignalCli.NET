@@ -1,0 +1,121 @@
+root = true
+
+[*]
+charset = utf-8
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+end_of_line = crlf
+
+[*.{json,yml,yaml}]
+indent_size = 2
+
+[*.cs]
+# --- Usings ---
+csharp_using_directive_placement = outside_namespace:warning
+dotnet_sort_system_directives_first = true
+
+# --- Namespaces ---
+csharp_style_namespace_declarations = file_scoped:suggestion
+
+# --- var ---
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_for_built_in_types = false:suggestion
+csharp_style_var_elsewhere = false:suggestion
+
+# --- Modern language features ---
+csharp_style_expression_bodied_methods = when_on_single_line:suggestion
+csharp_style_prefer_primary_constructors = true:suggestion
+csharp_style_prefer_collection_expression = true:suggestion
+csharp_prefer_simple_using_statement = true:suggestion
+csharp_style_prefer_pattern_matching = true:suggestion
+dotnet_style_prefer_conditional_expression_over_return = true:suggestion
+dotnet_style_null_propagation = true:suggestion
+dotnet_style_coalesce_expression = true:suggestion
+
+# --- Braces / clarity ---
+csharp_prefer_braces = true:suggestion
+
+# --- this. qualification ---
+dotnet_style_qualification_for_field = false:suggestion
+dotnet_style_qualification_for_property = false:suggestion
+
+# =========================================================
+# Naming rules
+# =========================================================
+
+# Symbols
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_static_fields.applicable_kinds = field
+dotnet_naming_symbols.private_static_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_static_fields.required_modifiers = static
+dotnet_naming_symbols.interfaces.applicable_kinds = interface
+dotnet_naming_symbols.types.applicable_kinds = class,struct,enum,delegate
+dotnet_naming_symbols.members.applicable_kinds = property,method,event
+dotnet_naming_symbols.members.applicable_accessibilities = public,internal,protected,protected_internal
+
+# Styles
+dotnet_naming_style.underscore_camel.required_prefix = _
+dotnet_naming_style.underscore_camel.capitalization = camel_case
+dotnet_naming_style.s_camel.required_prefix = s_
+dotnet_naming_style.s_camel.capitalization = camel_case
+dotnet_naming_style.i_pascal.required_prefix = I
+dotnet_naming_style.i_pascal.capitalization = pascal_case
+dotnet_naming_style.pascal.capitalization = pascal_case
+
+# Rules
+dotnet_naming_rule.private_fields_underscore.symbols = private_fields
+dotnet_naming_rule.private_fields_underscore.style = underscore_camel
+dotnet_naming_rule.private_fields_underscore.severity = suggestion
+
+dotnet_naming_rule.private_static_s.symbols = private_static_fields
+dotnet_naming_rule.private_static_s.style = s_camel
+dotnet_naming_rule.private_static_s.severity = silent
+
+dotnet_naming_rule.interfaces_i.symbols = interfaces
+dotnet_naming_rule.interfaces_i.style = i_pascal
+dotnet_naming_rule.interfaces_i.severity = warning
+
+dotnet_naming_rule.types_pascal.symbols = types
+dotnet_naming_rule.types_pascal.style = pascal
+dotnet_naming_rule.types_pascal.severity = suggestion
+
+dotnet_naming_rule.members_pascal.symbols = members
+dotnet_naming_rule.members_pascal.style = pascal
+dotnet_naming_rule.members_pascal.severity = suggestion
+
+# =========================================================
+# Analyzer severity triage (justified)
+# =========================================================
+
+# Logging-performance rules: LoggerMessage source-gen delegates are a perf
+# optimization for high-throughput hot paths; overkill for a wrapper library's
+# diagnostic logging. Opt-in, not mandated here.
+dotnet_diagnostic.CA1848.severity = none
+dotnet_diagnostic.CA1873.severity = none
+# *EventArgs types are deliberate event payloads carried through observables.
+dotnet_diagnostic.CA1711.severity = none
+
+# STJ DTOs: non-nullable members are populated by the deserializer / config
+# delegate. Making every one `required` is a larger public-API change (own task),
+# so keep these as suggestions rather than warnings for now.
+# Protocol enum members (e.g. CONTACTS_SYNC) must mirror signal-cli wire names.
+[**/Models/**.cs]
+dotnet_diagnostic.CS8618.severity = suggestion
+dotnet_diagnostic.CA1707.severity = none
+
+# Test code: design/nullability rules add noise without value in test fixtures.
+[Tests/**/*.cs]
+dotnet_diagnostic.CA1707.severity = none   # Method_Condition_Expected (xUnit)
+dotnet_diagnostic.CA1051.severity = none   # protected readonly fields in test bases
+dotnet_diagnostic.CA2201.severity = none   # throwing Exception in test mocks
+dotnet_diagnostic.CA1001.severity = none   # disposables owned by fixtures
+dotnet_diagnostic.CA1816.severity = none
+dotnet_diagnostic.CA1852.severity = none
+dotnet_diagnostic.CA1861.severity = none
+dotnet_diagnostic.CA1727.severity = none
+dotnet_diagnostic.CS8620.severity = none   # Moq ILogger Func<,,> nullability
+dotnet_diagnostic.CS8618.severity = none
+dotnet_diagnostic.CS8602.severity = none

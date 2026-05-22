@@ -33,7 +33,7 @@ internal class SignalGroups(
             }
 
             _logger.LogInformation(
-                "Список груп отримано успішно. Групи={listGroups}",
+                "Список груп отримано успішно. Групи={Groups}",
                 string.Join(", ", response)
             );
 

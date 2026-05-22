@@ -1,0 +1,14 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <!-- Ціль, що виконується на боці споживаючого проекту після збірки -->
+    <Target Name="CopySignalCliFromPackage" AfterTargets="Build">
+        <ItemGroup>
+            <!-- MSBuildThisFileDirectory = місце, де лежить цей .targets у пакеті,
+                 тож у папці signal-cli ми шукаємо всі файли -->
+            <_SignalCliFiles Include="$(MSBuildThisFileDirectory)signal-cli\**\*"/>
+        </ItemGroup>
+
+        <Copy SourceFiles="@(_SignalCliFiles)"
+              DestinationFiles="@(_SignalCliFiles->'$(TargetDir)signal-cli\%(RecursiveDir)%(Filename)%(Extension)')"
+              SkipUnchangedFiles="true"/>
+    </Target>
+</Project>

@@ -44,12 +44,9 @@ internal class ProcessWrapper : IProcess
         return _process.Start();
     }
 
-    public async Task WaitForExitAsync(CancellationToken cancellationToken = default)
+    public Task WaitForExitAsync(CancellationToken cancellationToken = default)
     {
-        while (!_process.HasExited)
-        {
-            await Task.Delay(100, cancellationToken).ConfigureAwait(false);
-        }
+        return _process.WaitForExitAsync(cancellationToken);
     }
 
     public void Kill(bool entireProcessTree)

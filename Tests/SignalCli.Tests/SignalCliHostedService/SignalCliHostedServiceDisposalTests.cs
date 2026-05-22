@@ -181,7 +181,9 @@ public class SignalCliHostedServiceDisposalTests : SignalCliHostedServiceTestsBa
             new InvalidOperationException("Process start was interrupted"));
 
         // Assert
-        await Assert.ThrowsAsync<ObjectDisposedException>(() => startTask);
+        // Після уніфікації помилка старту проростає як є (InvalidOperationException),
+        // а не маскується ObjectDisposedException від OnNext на утилізованому Subject.
+        await Assert.ThrowsAsync<InvalidOperationException>(() => startTask);
         Assert.Null(GetPrivateField<IProcess>(service, "_currentProcess"));
         Assert.Equal(ProcessState.Failed, StateManager.CurrentState);
     }

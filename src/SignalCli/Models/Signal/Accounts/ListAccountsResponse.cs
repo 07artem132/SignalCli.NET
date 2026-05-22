@@ -1,5 +1,5 @@
-﻿using JetBrains.Annotations;
-using Newtonsoft.Json;
+using JetBrains.Annotations;
+using System.Text.Json.Serialization;
 
 namespace SignalCli.Models.Signal.Accounts;
 
@@ -10,7 +10,8 @@ namespace SignalCli.Models.Signal.Accounts;
 /// Наслідує List&lt;Account&gt; і містить колекцію зареєстрованих облікових
 /// записів у локальному сховищі Signal CLI.
 /// </remarks>
-[PublicAPI,JsonArray]
+// STJ серіалізує типи, похідні від List<T>, як JSON-масив без додаткових атрибутів.
+[PublicAPI]
 public class ListAccountsResponse : List<Account>;
 
 /// <summary>

@@ -1,5 +1,5 @@
-﻿using JetBrains.Annotations;
-using Newtonsoft.Json;
+using JetBrains.Annotations;
+using System.Text.Json.Serialization;
 
 namespace SignalCli.Models.Signal.Events;
 
@@ -13,4 +13,4 @@ namespace SignalCli.Models.Signal.Events;
 /// <param name="Id">Ідентифікатор підписки, отриманий при subscribeReceive.</param>
 [PublicAPI]
 public sealed record UnsubscribeReceiveParameters(
-    [property: JsonProperty("id")] int Id);
+    [property: JsonPropertyName("id")] int Id);

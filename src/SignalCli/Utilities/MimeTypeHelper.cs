@@ -34,7 +34,7 @@ internal static class MimeTypeHelper
     /// <param name="data">Байтовий масив даних файлу.</param>
     /// <param name="fileName">Опціональне ім'я файлу для визначення MIME-типу за розширенням.</param>
     /// <returns>MIME-тип у вигляді рядка.</returns>
-    public static string GetMimeType(byte[] data, string fileName = null)
+    public static string GetMimeType(byte[] data, string? fileName = null)
     {
         if (data == null || data.Length < 4)
             return "application/octet-stream";
@@ -91,7 +91,7 @@ internal static class MimeTypeHelper
         {
             string ext = Path.GetExtension(fileName);
             if (!string.IsNullOrEmpty(ext) &&
-                ExtensionMimeTypes.TryGetValue(ext, out string mime))
+                ExtensionMimeTypes.TryGetValue(ext, out string? mime))
             {
                 return mime;
             }
@@ -107,10 +107,9 @@ internal static class MimeTypeHelper
     /// <param name="stream">Потік з даними файлу.</param>
     /// <param name="fileName">Опціональне ім'я файлу для визначення MIME-типу за розширенням.</param>
     /// <returns>MIME-тип у вигляді рядка.</returns>
-    public static string GetMimeType(Stream stream, string fileName = null)
+    public static string GetMimeType(Stream stream, string? fileName = null)
     {
-        if (stream == null)
-            throw new ArgumentNullException(nameof(stream));
+        ArgumentNullException.ThrowIfNull(stream);
 
         byte[] buffer = new byte[8];
         int bytesRead = stream.Read(buffer, 0, buffer.Length);

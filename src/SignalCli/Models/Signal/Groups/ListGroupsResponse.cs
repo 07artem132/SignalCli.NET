@@ -1,5 +1,5 @@
-﻿using JetBrains.Annotations;
-using Newtonsoft.Json;
+using JetBrains.Annotations;
+using System.Text.Json.Serialization;
 
 namespace SignalCli.Models.Signal.Groups;
 
@@ -36,28 +36,28 @@ public class ListGroupsResponse() : List<Group>;
 /// <param name="GroupInviteLink">Посилання для запрошення в групу.</param>
 [PublicAPI]
 public record Group(
-    [property: JsonProperty("id")] string Id,
-    [property: JsonProperty("name")] string? Name,
-    [property: JsonProperty("description")]
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("name")] string? Name,
+    [property: JsonPropertyName("description")]
     string? Description,
-    [property: JsonProperty("isMember")] bool IsMember,
-    [property: JsonProperty("isBlocked")] bool IsBlocked,
-    [property: JsonProperty("messageExpirationTime")]
+    [property: JsonPropertyName("isMember")] bool IsMember,
+    [property: JsonPropertyName("isBlocked")] bool IsBlocked,
+    [property: JsonPropertyName("messageExpirationTime")]
     int MessageExpirationTime,
-    [property: JsonProperty("members")] List<Member> Members,
-    [property: JsonProperty("pendingMembers")]
+    [property: JsonPropertyName("members")] List<Member> Members,
+    [property: JsonPropertyName("pendingMembers")]
     List<Member> PendingMembers,
-    [property: JsonProperty("requestingMembers")]
+    [property: JsonPropertyName("requestingMembers")]
     List<Member> RequestingMembers,
-    [property: JsonProperty("admins")] List<Member> Admins,
-    [property: JsonProperty("banned")] List<Member> Banned,
-    [property: JsonProperty("permissionAddMember")]
+    [property: JsonPropertyName("admins")] List<Member> Admins,
+    [property: JsonPropertyName("banned")] List<Member> Banned,
+    [property: JsonPropertyName("permissionAddMember")]
     string PermissionAddMember,
-    [property: JsonProperty("permissionEditDetails")]
+    [property: JsonPropertyName("permissionEditDetails")]
     string PermissionEditDetails,
-    [property: JsonProperty("permissionSendMessage")]
+    [property: JsonPropertyName("permissionSendMessage")]
     string PermissionSendMessage,
-    [property: JsonProperty("groupInviteLink")]
+    [property: JsonPropertyName("groupInviteLink")]
     string? GroupInviteLink
 );
 
@@ -71,6 +71,6 @@ public record Group(
 /// <param name="Uuid">Унікальний ідентифікатор користувача.</param>
 [PublicAPI]
 public record Member(
-    [property: JsonProperty("number")] string? Number,
-    [property: JsonProperty("uuid")] string Uuid
+    [property: JsonPropertyName("number")] string? Number,
+    [property: JsonPropertyName("uuid")] string Uuid
 );

@@ -1,7 +1,7 @@
 ﻿using System.Reactive.Subjects;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Newtonsoft.Json.Linq;
+using System.Text.Json;
 using SignalCli.Exceptions;
 using SignalCli.Interfaces.SignalCli;
 using SignalCli.Models.Rpc;
@@ -216,7 +216,7 @@ public class JsonRpcClientTests
         PushStreamPair(inputWriter, outputReader, errorReader);
 
         // Act — отправляем запрос
-        _ = client.InvokeMethodAsync<JToken, object>("myMethod", new { Hello = "world" });
+        _ = client.InvokeMethodAsync<JsonElement, object>("myMethod", new { Hello = "world" });
 
         // Дадим чуть времени, чтобы SendRequestAsync успел записать
         await Task.Delay(50);
@@ -230,10 +230,10 @@ public class JsonRpcClientTests
         Assert.Contains(@"""method"":""myMethod""", written);
         Assert.Contains(@"""Hello"":""world""", written);
 
-        // Проверим, что в логах есть "Sent JSON-RPC request"
+        // Сирий JSON-запит логуємо лише на Trace (приватність: містить тіло повідомлення).
         _loggerMock.Verify(
             x => x.Log(
-                LogLevel.Debug,
+                LogLevel.Trace,
                 It.IsAny<EventId>(),
                 It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("Відправлено JSON-RPC запит")),
                 It.IsAny<Exception>(),

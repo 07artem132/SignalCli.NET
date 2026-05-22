@@ -1,9 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net9.0</TargetFramework>
+        <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <!-- Бібліотека тепер warning-clean: фіксуємо це, щоб регресії не поверталися. -->
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
         <!-- Налаштування документації -->
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <DocumentationFile>$(OutputPath)$(AssemblyName).xml</DocumentationFile>
@@ -13,7 +15,7 @@
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <Authors>07artem132</Authors>
         <PackageId>SignalCli.NET</PackageId>
-        <Version>1.0.3</Version>
+        <Version>2.0.0</Version>
         <PackageProjectUrl>https://github.com/mil-development/SignalCli.NET</PackageProjectUrl>
         <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
         <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
@@ -22,8 +24,8 @@
         <Description>SignalCli.NET — .NET-обгортка для signal-cli, яка забезпечує зручний та зрозумілий API для інтеграції месенджера Signal у ваші .NET-застосунки.</Description>
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-        <AssemblyVersion>1.0.3</AssemblyVersion>
-        <FileVersion>1.0.3</FileVersion>
+        <AssemblyVersion>2.0.0</AssemblyVersion>
+        <FileVersion>2.0.0</FileVersion>
     </PropertyGroup>
     <ItemGroup>
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
@@ -37,9 +39,8 @@
 
     <ItemGroup>
         <PackageReference Include="JetBrains.Annotations" Version="2024.3.0"/>
-        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.3"/>
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.3"/>
-        <PackageReference Include="Newtonsoft.Json" Version="13.0.1"/>
+        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0"/>
         <PackageReference Include="Nito.AsyncEx" Version="5.1.2"/>
         <PackageReference Include="System.Reactive" Version="6.0.1"/>
     </ItemGroup>

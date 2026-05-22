@@ -1,0 +1,36 @@
+# Changelog
+
+Формат заснований на [Keep a Changelog](https://keepachangelog.com/),
+проєкт дотримується [семантичного версіонування](https://semver.org/lang/uk/).
+
+## [2.0.0] — неопубліковано
+
+### ⚠️ Несумісні зміни (BREAKING)
+- **Цільова платформа `net9.0` → `net10.0` (LTS).** Споживачам потрібен .NET 10 SDK/рантайм.
+- **Прибрано залежність `Newtonsoft.Json`** — серіалізація повністю на `System.Text.Json`
+  (з source-generated контекстом). Моделі тепер використовують `[JsonPropertyName]`.
+- `JsonRpcRequest.Params` і `JsonRpcResponse.Result` тепер `System.Text.Json.JsonElement`
+  (раніше `Newtonsoft.Json.Linq.JToken`).
+- Узагальнене обмеження `InvokeMethodAsync<TResponse, TRequest>` змінено з `where TResponse : class`
+  на `where TResponse : notnull` (тепер підтримує value-типи, напр. `JsonElement`).
+
+### ✨ Додано
+- signal-cli оновлено до **v0.14.3** із перевіркою цілісності завантаження (SHA-256).
+- Граційне завершення signal-cli: ізоляція в окремій групі процесів (Windows, .NET 10)
+  + конфігурований таймаут `Config.StopTimeoutSeconds` перед примусовим завершенням.
+- Кросплатформний пошук Java (Windows/Linux/macOS): `JAVA_HOME` → `PATH`.
+- `CLAUDE.md`, `.editorconfig` та аналізатори для якості коду; бібліотека warning-clean
+  (`TreatWarningsAsErrors`).
+
+### 🐛 Виправлено
+- **Приватність:** тіла повідомлень, номери та вкладення більше не логуються вище за `Trace`.
+- **Втрата подій:** одне повідомлення з текстом + вкладенням тепер піднімає всі відповідні
+  реактивні події (раніше — лише першу).
+- **Path traversal** у тимчасових файлах вкладень (`AttachmentEntry`).
+- **Безпека аргументів процесу:** перехід на `ProcessStartInfo.ArgumentList`.
+- Локаленезалежні назви стилів тексту (`ToUpperInvariant`).
+- Уніфіковано стан процесу: `ProcessStateManager` — єдине джерело істини.
+
+### 🔧 Інше
+- `Newtonsoft.Json` 13.0.1 → видалено; `Microsoft.Extensions.*` → 10.0.0.
+- `ProcessWrapper` використовує `Process.WaitForExitAsync`.

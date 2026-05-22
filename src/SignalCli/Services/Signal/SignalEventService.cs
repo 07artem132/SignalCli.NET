@@ -1,7 +1,7 @@
 ﻿using System.Reactive.Subjects;
+using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json.Linq;
 using SignalCli.Interfaces.Rpc;
 using SignalCli.Interfaces.Signal;
 using SignalCli.Interfaces.SignalCli;
@@ -64,12 +64,12 @@ internal class SignalEventService(
         }
 
         var responseToken = await _signalCliClient
-            .InvokeMethodAsync<JToken, SubscribeReceiveParameters>(
+            .InvokeMethodAsync<JsonElement, SubscribeReceiveParameters>(
                 "subscribeReceive",
                 new SubscribeReceiveParameters(account),
                 cancellationToken).ConfigureAwait(false);
 
-        int subscriptionId = responseToken.Value<int>();
+        int subscriptionId = responseToken.GetInt32();
 
         lock (_accountSubscriptions)
         {
@@ -114,7 +114,7 @@ internal class SignalEventService(
             _accountSubscriptions.Remove(account);
         }
 
-        _logger.LogInformation("Відписка успішна: Обліковий запис={acc}, ІдПідписки={sid}", account, subscriptionId);
+        _logger.LogInformation("Відписка успішна: Обліковий запис={Account}, ІдПідписки={SubscriptionId}", account, subscriptionId);
 
         return resp;
     }
@@ -201,10 +201,14 @@ internal class SignalEventService(
                 return;
             }
 
-            // Якщо отримано подію, що містить дані повідомлення
+            // Якщо отримано подію, що містить дані повідомлення.
+            // Одне повідомлення може одночасно містити кілька payload'ів
+            // (наприклад, текст-підпис + вкладення), тому перевіряємо їх НЕЗАЛЕЖНО,
+            // без раннього return, щоб піднялися всі відповідні події.
             if (jsonEnvelope.DataMessage is not null)
             {
                 var data = jsonEnvelope.DataMessage;
+                var emitted = false;
                 // Якщо задано текст повідомлення, формуємо подію текстового повідомлення
                 if (!string.IsNullOrEmpty(data.Message))
                 {
@@ -221,7 +225,7 @@ internal class SignalEventService(
                         jsonEnvelope.ServerReceivedTimestamp,
                         jsonEnvelope.ServerDeliveredTimestamp);
                     _textMessages.OnNext(textEvent);
-                    return;
+                    emitted = true;
                 }
 
                 // Якщо задано реакцію, передаємо повний об'єкт реакції
@@ -241,7 +245,7 @@ internal class SignalEventService(
                         jsonEnvelope.ServerDeliveredTimestamp);
 
                     _reaction.OnNext(reactionEvent);
-                    return;
+                    emitted = true;
                 }
 
                 // Якщо задано стікер, передаємо його дані
@@ -260,7 +264,7 @@ internal class SignalEventService(
                         jsonEnvelope.ServerReceivedTimestamp,
                         jsonEnvelope.ServerDeliveredTimestamp);
                     _sticker.OnNext(stickerEvent);
-                    return;
+                    emitted = true;
                 }
 
                 // Якщо задано вкладення, передаємо повний список вкладень
@@ -279,15 +283,18 @@ internal class SignalEventService(
                         jsonEnvelope.ServerReceivedTimestamp,
                         jsonEnvelope.ServerDeliveredTimestamp);
                     _attachments.OnNext(attachmentEvent);
-                    return;
+                    emitted = true;
                 }
 
-                _logger.LogDebug("Невідомий тип DataMessage, пропускаємо...");
+                if (!emitted)
+                    _logger.LogDebug("Невідомий тип DataMessage, пропускаємо...");
                 return;
             }
 
             _logger.LogDebug("Невідомий тип події, пропускаємо...");
         }
+        // Навмисний широкий catch: межа диспетчера сповіщень — одне погане
+        // сповіщення не повинно зривати потік подій (логуємо й продовжуємо).
         catch (Exception ex)
         {
             _logger.LogError(ex, "Помилка при обробці вхідного сповіщення від Signal");

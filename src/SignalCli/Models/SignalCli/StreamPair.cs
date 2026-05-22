@@ -50,5 +50,6 @@ public class StreamPair : IDisposable
         StandardInput.Dispose();
         StandardOutput.Dispose();
         StandardError.Dispose();
+        GC.SuppressFinalize(this);
     }
 }
