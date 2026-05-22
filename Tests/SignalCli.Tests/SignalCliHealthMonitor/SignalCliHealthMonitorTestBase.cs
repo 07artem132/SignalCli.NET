@@ -1,0 +1,178 @@
+﻿using Microsoft.Extensions.Logging;
+using Moq;
+using SignalCli.Interfaces.Rpc;
+using SignalCli.Interfaces.SignalCli;
+using SignalCli.Models;
+using SignalCli.Models.SignalCli;
+using SignalCli.Services.SignalCli;
+
+namespace SignalCli.Tests.SignalCliHealthMonitor;
+
+public abstract class SignalCliHealthMonitorTestBase : IDisposable
+{
+    // Моки для HealthMonitor
+    protected readonly Mock<ILogger<Services.SignalCli.SignalCliHealthMonitor>> LoggerMonitorMock;
+    private readonly Mock<IJsonRpcClientProvider> _clientProviderMock;
+    protected readonly Mock<IJsonRpcClient> JsonRpcClientMock;
+
+    // Для HostedService
+    private readonly Mock<ILogger<Services.SignalCli.SignalCliHostedService>> _loggerServiceMock;
+    protected readonly Mock<IProcessRunner> ProcessRunnerMock;
+    protected readonly ProcessStateManager StateManager;
+    protected readonly Config ServiceConfig;
+
+    //todo:
+    //❌ Тест Dispose (включая повторный вызов)
+    //❌ Проверка поведения при разных CancellationToken (при пинге)
+    //❌ Тест на таймаут пинга
+    //❌ Тест на обработку неожиданных исключений в MonitorLoop
+
+    protected SignalCliHealthMonitorTestBase()
+    {
+        // 1. Логгер для HealthMonitor
+        LoggerMonitorMock = new Mock<ILogger<Services.SignalCli.SignalCliHealthMonitor>>();
+
+        // 2. Моки для JSON-RPC
+        JsonRpcClientMock = new Mock<IJsonRpcClient>();
+        // По умолчанию успешный "Ping"
+        JsonRpcClientMock
+            .Setup(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
+                It.IsAny<string>(),
+                It.IsAny<VersionParameters>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new VersionResponse("test-version"));
+
+        _clientProviderMock = new Mock<IJsonRpcClientProvider>();
+        _clientProviderMock
+            .Setup(p => p.Client)
+            .Returns(JsonRpcClientMock.Object);
+
+        // 3. Моки для HostedService
+        _loggerServiceMock = new Mock<ILogger<Services.SignalCli.SignalCliHostedService>>();
+        ProcessRunnerMock = new Mock<IProcessRunner>();
+
+        // Настраиваем возвращение мок-процесса и стримов при запуске
+        ProcessRunnerMock
+            .Setup(r => r.StartProcessWithHandle(It.IsAny<ProcessConfig>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() =>
+            {
+                var pMock = new Mock<IProcess>();
+                pMock.Setup(p => p.Start(It.IsAny<CancellationToken>())).Returns(true);
+
+                var stdIn = new StreamWriter(new MemoryStream());
+                var stdOut = new StreamReader(new MemoryStream());
+                var stdErr = new StreamReader(new MemoryStream());
+
+                pMock.Setup(p => p.StandardInput).Returns(stdIn);
+                pMock.Setup(p => p.StandardOutput).Returns(stdOut);
+                pMock.Setup(p => p.StandardError).Returns(stdErr);
+
+                var streams = new StreamPair(stdIn, stdOut, stdErr);
+                return (pMock.Object, streams);
+            });
+
+        var loggerSmMock = new Mock<ILogger<ProcessStateManager>>();
+        StateManager = new ProcessStateManager(loggerSmMock.Object);
+
+        // 4. Конфиг для SignalCliHostedService
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+
+        ServiceConfig = new Config
+        {
+            AppHome = tempDir,
+            LibDirectory = "lib",
+            JavaExecutable = "java",
+            MaxRestartAttempts = 2,
+            RestartDelaySeconds = 0, // Ускоряем тесты
+            HealthCheckIntervalSeconds = 0,
+            HealthCheckTimeoutSeconds = 1
+        };
+
+        // Создаём структуру директорий для тестов
+        var libDir = Path.Combine(tempDir, "lib");
+        Directory.CreateDirectory(libDir);
+        var fakeJarPath = Path.Combine(libDir, "test.jar");
+        File.WriteAllText(fakeJarPath, "fake jar content");
+    }
+
+    // Вспомогательные методы для создания тестируемых объектов
+    protected Services.SignalCli.SignalCliHostedService CreateHostedService()
+    {
+        return new Services.SignalCli.SignalCliHostedService(
+            _loggerServiceMock.Object,
+            ProcessRunnerMock.Object,
+            StateManager,
+            ServiceConfig
+        );
+    }
+
+    protected Services.SignalCli.SignalCliHealthMonitor CreateMonitor(Services.SignalCli.SignalCliHostedService hostedService)
+    {
+        return new Services.SignalCli.SignalCliHealthMonitor(
+            LoggerMonitorMock.Object,
+            _clientProviderMock.Object,
+            hostedService,
+            ServiceConfig
+        );
+    }
+
+    // Вспомогательные методы для проверки логов
+    protected void VerifyInfoLog(string messageContains, Times? times = null)
+    {
+        times ??= Times.Once();
+
+        LoggerMonitorMock.Verify(
+            x => x.Log(
+                LogLevel.Information,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString().Contains(messageContains)),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+            times.Value);
+    }
+
+    protected void VerifyWarningLog(string messageContains, Times? times = null)
+    {
+        times ??= Times.Once();
+
+        LoggerMonitorMock.Verify(
+            x => x.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString().Contains(messageContains)),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+            times.Value);
+    }
+
+    protected void VerifyErrorLog(string messageContains, Times? times = null)
+    {
+        times ??= Times.Once();
+
+        LoggerMonitorMock.Verify(
+            x => x.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString().Contains(messageContains)),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+            times.Value);
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            // Очищаем временную директорию
+            if (Directory.Exists(ServiceConfig.AppHome))
+            {
+                Directory.Delete(ServiceConfig.AppHome, recursive: true);
+            }
+        }
+        catch
+        {
+            // Игнорируем ошибки при очистке
+        }
+    }
+}

@@ -1,0 +1,235 @@
+﻿using System.Diagnostics;
+using Microsoft.Extensions.Logging;
+using Moq;
+using SignalCli.Interfaces.SignalCli;
+using SignalCli.Models.SignalCli;
+
+namespace SignalCli.Tests.SignalCliHostedService;
+
+[Trait("Category", "HostedService")]
+[Collection("HostedService")]
+public class SignalCliHostedServiceIntegrationTests : SignalCliHostedServiceTestsBase
+{
+    [Fact]
+    [Trait("Category", "StateManagement")]
+    public async Task ProcessState_ShouldEmitCorrectSequenceOfStates()
+    {
+        // Arrange
+        var service = CreateService();
+        var states = new List<ProcessState>();
+        using var subscription = StateManager.ProcessState
+            .Subscribe(info => states.Add(info.State));
+
+        // Act
+        await service.StartAsync(CancellationToken.None);
+        await service.StopAsync(CancellationToken.None);
+
+        // Assert
+        var expectedStates = new[]
+        {
+            ProcessState.NotStarted, // Начальное
+            ProcessState.Starting, // При старте
+            ProcessState.Running, // После успешного старта
+            ProcessState.Stopping, // При остановке
+            ProcessState.Stopped // После остановки
+        };
+
+        Assert.Equal(expectedStates, states);
+
+        // Дополнительно проверяем логи для каждого состояния
+        VerifyLog(LogLevel.Information, "SignalCliHostedService запускається...");
+        VerifyLog(LogLevel.Information, "SignalCliHostedService успішно запущено.");
+        VerifyLog(LogLevel.Information, "SignalCliHostedService зупиняється...");
+        VerifyLog(LogLevel.Information, "SignalCliHostedService зупинено.");
+    }
+
+    [Fact]
+    [Trait("Category", "StateManagement")]
+    public async Task ProcessState_WhenStartFails_ShouldTransitionToFailed()
+    {
+        // Arrange
+        var service = CreateService();
+        var states = new List<ProcessState>();
+        using var subscription = StateManager.ProcessState
+            .Subscribe(info => states.Add(info.State));
+
+        ProcessRunnerMock
+            .Setup(r => r.StartProcessWithHandle(It.IsAny<ProcessConfig>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("Start failed"));
+
+        // Act
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.StartAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Equal(
+            new[] { ProcessState.NotStarted, ProcessState.Starting, ProcessState.Failed },
+            states);
+    }
+
+    [Fact]
+    [Trait("Category", "StateManagement")]
+    public async Task ProcessState_OnProcessExit_ShouldTransitionThroughFailedState()
+    {
+        // Arrange
+        var service = CreateService();
+        var states = new List<ProcessState>();
+        using var subscription = StateManager.ProcessState
+            .Subscribe(info => states.Add(info.State));
+
+        await service.StartAsync(CancellationToken.None);
+        var process = GetPrivateField<IProcess>(service, "_currentProcess");
+        var processMock = Mock.Get(process!);
+
+        // Очищаем текущий список состояний
+        states.Clear();
+
+        // Act
+        processMock.Setup(p => p.HasExited).Returns(true);
+        processMock.Raise(p => p.Exited += null, EventArgs.Empty);
+
+        await Task.Delay(100); // Даем время на обработку события и автоперезапуск
+
+        // Assert
+        // Проверяем, что прошли через Failed перед автоперезапуском
+        Assert.Contains(ProcessState.Failed, states);
+        Assert.Equal(ProcessState.Running, states.Last());
+    }
+
+    [Fact]
+    [Trait("Category", "Configuration")]
+    public async Task ProcessRunner_ShouldReceiveCorrectEnvironmentVariables()
+    {
+        // Arrange
+        Config.EnvironmentVariables.Add("JAVA_HOME", "");
+        Config.EnvironmentVariables.Add("PATH", "");
+        var service = CreateService();
+
+        ProcessConfig? capturedConfig = null;
+        ProcessRunnerMock
+            .Setup(r => r.StartProcessWithHandle(It.IsAny<ProcessConfig>(), It.IsAny<CancellationToken>()))
+            .Callback<ProcessConfig, CancellationToken>((config, _) => capturedConfig = config)
+            .ReturnsAsync(() =>
+            {
+                var pMock = new Mock<IProcess>();
+                pMock.Setup(p => p.Start(It.IsAny<CancellationToken>())).Returns(true);
+                return (pMock.Object, new StreamPair(
+                    new StreamWriter(new MemoryStream()),
+                    new StreamReader(new MemoryStream()),
+                    new StreamReader(new MemoryStream())));
+            });
+
+        // Act
+        await service.StartAsync(CancellationToken.None);
+        // Assert
+        Assert.NotNull(capturedConfig);
+        Assert.Contains(
+            capturedConfig.EnvironmentVariables,
+            kv => kv.Key == "JAVA_HOME" || kv.Key == "PATH");
+    }
+
+    [Theory]
+    [InlineData(1)] // 1 секунда
+    [InlineData(2)] // 2 секунды
+    public async Task ForceRestart_ShouldHandleVariousRestartDelays(int delaySeconds)
+    {
+        // Arrange
+        Config.RestartDelaySeconds = delaySeconds;
+        var service = CreateService();
+        await service.StartAsync(CancellationToken.None);
+
+        // Act
+        var sw = Stopwatch.StartNew();
+        await service.ForceRestartAsync(CancellationToken.None);
+        sw.Stop();
+
+        // Assert
+        if (delaySeconds <= 0)
+        {
+            Assert.True(sw.ElapsedMilliseconds < 100,
+                $"Restart took {sw.ElapsedMilliseconds}ms for delay {delaySeconds}s");
+        }
+        else
+        {
+            Assert.True(sw.ElapsedMilliseconds >= delaySeconds * 1000,
+                $"Restart took {sw.ElapsedMilliseconds}ms for delay {delaySeconds}s");
+        }
+    }
+
+    [Theory]
+    [InlineData(0)] // Без попыток (отключено)
+    [InlineData(1)] // Одна попытка
+    [InlineData(3)] // Несколько попыток
+    public async Task OnProcessExit_ShouldRespectMaxRestartAttempts(int maxAttempts)
+    {
+        // Arrange
+        Config.MaxRestartAttempts = maxAttempts;
+
+        var processStartedTcs = new TaskCompletionSource<bool>();
+        var allRestartsFinishedTcs = new TaskCompletionSource<bool>();
+
+        var attempts = 0;
+
+        ProcessRunnerMock
+            .Setup(r => r.StartProcessWithHandle(It.IsAny<ProcessConfig>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() =>
+            {
+                attempts++;
+                var pMock = new Mock<IProcess>();
+                pMock.Setup(p => p.Start(It.IsAny<CancellationToken>())).Returns(true);
+                pMock.Setup(p => p.HasExited).Returns(true);
+
+                var streams = new StreamPair(
+                    new StreamWriter(new MemoryStream()),
+                    new StreamReader(new MemoryStream()),
+                    new StreamReader(new MemoryStream()));
+
+                // Сигнализируем о создании процесса
+                processStartedTcs.TrySetResult(true);
+
+                // Эмулируем асинхронное завершение процесса
+                Task.Run(async () =>
+                {
+                    await Task.Delay(10); // Минимальная задержка
+                    pMock.Raise(p => p.Exited += null, EventArgs.Empty);
+
+                    // Если это последняя попытка перезапуска, сигнализируем о завершении
+                    if (attempts >= (maxAttempts == 0 ? 1 : maxAttempts + 1))
+                    {
+                        // Даем время для завершения всех внутренних обработчиков
+                        await Task.Delay(50);
+                        allRestartsFinishedTcs.TrySetResult(true);
+                    }
+                });
+
+                return (pMock.Object, streams);
+            });
+
+        var service = CreateService();
+
+        // Act
+        await service.StartAsync(CancellationToken.None);
+
+        // Ожидаем запуск первого процесса
+        await processStartedTcs.Task;
+
+        // Ожидаем завершения всех перезапусков с таймаутом
+        await Task.WhenAny(allRestartsFinishedTcs.Task, Task.Delay(5000));
+
+        // Assert
+        // +1 к maxAttempts потому что первый старт не считается за попытку
+        var expectedAttempts = maxAttempts == 0 ? 1 : maxAttempts + 1;
+        Assert.Equal(expectedAttempts, attempts);
+
+        if (maxAttempts == 0)
+        {
+            Assert.Equal(ProcessState.Failed, StateManager.CurrentState);
+            VerifyLog(LogLevel.Warning, "Автоперезапуск вимкнено");
+        }
+        else
+        {
+            VerifyLog(LogLevel.Error,
+                $"Досягнуто максимальну кількість перезапусків ({maxAttempts}). Більше не перезапускатимемо");
+        }
+    }
+}

@@ -1,0 +1,228 @@
+﻿using Microsoft.Extensions.Logging;
+using Moq;
+using SignalCli.Interfaces.SignalCli;
+using SignalCli.Models.SignalCli;
+
+namespace SignalCli.Tests.SignalCliHostedService;
+
+[Trait("Category", "HostedService")]
+[Collection("HostedService")]
+public class SignalCliHostedServiceRestartTests : SignalCliHostedServiceTestsBase
+{
+    [Fact]
+    [Trait("Category", "ProcessRestart")]
+    public async Task ForceRestartAsync_WhenRunning_ShouldStopAndRestartProcess()
+    {
+        // Arrange
+        var service = CreateService();
+        await service.StartAsync(CancellationToken.None);
+        var initialProcessId = GetPrivateField<IProcess>(service, "_currentProcess")?.Id;
+
+        // Следим за порядком изменения состояний
+        var stateChanges = new List<ProcessState>();
+        using var stateSubscription = StateManager.ProcessState
+            .Subscribe(info => stateChanges.Add(info.State));
+        
+        // Act
+        await service.ForceRestartAsync(CancellationToken.None);
+
+        // Assert
+        var newProcessId = GetPrivateField<IProcess>(service, "_currentProcess")?.Id;
+        Assert.NotEqual(initialProcessId, newProcessId);
+        Assert.Equal(ProcessState.Running, StateManager.CurrentState);
+        
+        // Проверяем последовательность состояний
+        Assert.Contains(ProcessState.Stopping, stateChanges);
+        Assert.Contains(ProcessState.Starting, stateChanges);
+        Assert.Equal(ProcessState.Running, stateChanges.Last());
+
+        // Проверяем что процесс был запущен два раза
+        ProcessRunnerMock.Verify(
+            r => r.StartProcessWithHandle(It.IsAny<ProcessConfig>(), It.IsAny<CancellationToken>()),
+            Times.Exactly(2));
+    }
+
+    [Fact]
+    [Trait("Category", "ProcessRestart")]
+    public async Task ForceRestartAsync_WhenExceedingMaxAttempts_ShouldNotRestart()
+    {
+        // Arrange
+        Config.MaxRestartAttempts = 1;
+        var service = CreateService();
+        await service.StartAsync(CancellationToken.None);
+        var initialProcessId = GetPrivateField<IProcess>(service, "_currentProcess")?.Id;
+
+        // Act
+        // Первая попытка (разрешена)
+        await service.ForceRestartAsync(CancellationToken.None);
+        var firstRestartProcessId = GetPrivateField<IProcess>(service, "_currentProcess")?.Id;
+        
+        ProcessStartCallCount = 0;
+        // Вторая попытка (превышает лимит)
+        await service.ForceRestartAsync(CancellationToken.None);
+        var secondRestartProcessId = GetPrivateField<IProcess>(service, "_currentProcess")?.Id;
+
+        // Assert
+        Assert.NotEqual(initialProcessId, firstRestartProcessId);
+        Assert.Equal(firstRestartProcessId, secondRestartProcessId); // Второй перезапуск не произошел
+        Assert.Equal(0, ProcessStartCallCount);
+        VerifyLog(LogLevel.Error, $"ForceRestartAsync: перевищено MaxRestartAttempts ({Config.MaxRestartAttempts}). Скасування перезапуску");
+    }
+
+    [Fact]
+    [Trait("Category", "ProcessRestart")]
+    public async Task OnProcessExited_WhenUnexpected_ShouldAutoRestart()
+    {
+        // Arrange
+        var service = CreateService();
+        await service.StartAsync(CancellationToken.None);
+        var initialProcess = GetPrivateField<IProcess>(service, "_currentProcess");
+        var initialProcessMock = Mock.Get(initialProcess!);
+        
+        var stateChanges = new List<ProcessState>();
+        using var stateSubscription = StateManager.ProcessState
+            .Subscribe(info => stateChanges.Add(info.State));
+        
+        // Act
+        initialProcessMock.Setup(p => p.HasExited).Returns(true);
+        initialProcessMock.Raise(p => p.Exited += null, EventArgs.Empty);
+        
+        // Ждем автоперезапуска
+        await Task.Delay(100);
+
+        // Assert
+        Assert.Equal(ProcessState.Running, StateManager.CurrentState);
+        ProcessRunnerMock.Verify(
+            r => r.StartProcessWithHandle(It.IsAny<ProcessConfig>(), It.IsAny<CancellationToken>()),
+            Times.Exactly(2));
+            
+        Assert.Contains(ProcessState.Failed, stateChanges);
+        Assert.Contains(ProcessState.Starting, stateChanges);
+        Assert.Equal(ProcessState.Running, stateChanges.Last());
+        
+        // Проверяем, что это новый процесс
+        var newProcess = GetPrivateField<IProcess>(service, "_currentProcess");
+        Assert.NotNull(newProcess);
+        Assert.NotSame(initialProcess, newProcess);
+    }
+
+    [Fact]
+    [Trait("Category", "ProcessRestart")]
+    public async Task OnProcessExited_WhenAutoRestartDisabled_ShouldRemainFailed()
+    {
+        // Arrange
+        Config.MaxRestartAttempts = 0;
+        var service = CreateService();
+        await service.StartAsync(CancellationToken.None);
+        var process = GetPrivateField<IProcess>(service, "_currentProcess");
+        var processMock = Mock.Get(process!);
+        
+        // Act
+        processMock.Setup(p => p.HasExited).Returns(true);
+        processMock.Raise(p => p.Exited += null, EventArgs.Empty);
+        
+        await Task.Delay(100);
+
+        // Assert
+        Assert.Equal(ProcessState.Failed, StateManager.CurrentState);
+        ProcessRunnerMock.Verify(
+            r => r.StartProcessWithHandle(It.IsAny<ProcessConfig>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        VerifyLog(LogLevel.Warning, "Автоперезапуск вимкнено (MaxRestartAttempts=0).");
+    }
+
+    [Fact]
+    [Trait("Category", "ProcessRestart")]
+    public async Task OnProcessExited_DuringShutdown_ShouldNotAutoRestart()
+    {
+        // Arrange
+        var service = CreateService();
+        await service.StartAsync(CancellationToken.None);
+        var process = GetPrivateField<IProcess>(service, "_currentProcess");
+        var processMock = Mock.Get(process!);
+        
+        // Начинаем остановку
+        var stopTask = service.StopAsync(CancellationToken.None);
+        
+        // Симулируем завершение процесса во время остановки
+        processMock.Setup(p => p.HasExited).Returns(true);
+        processMock.Raise(p => p.Exited += null, EventArgs.Empty);
+        
+        await stopTask;
+
+        // Assert
+        Assert.Equal(ProcessState.Stopped, StateManager.CurrentState);
+        ProcessRunnerMock.Verify(
+            r => r.StartProcessWithHandle(It.IsAny<ProcessConfig>(), It.IsAny<CancellationToken>()),
+            Times.Once); // Только первоначальный запуск
+    }
+
+    [Fact]
+    [Trait("Category", "ProcessRestart")]
+    public async Task ForceRestartAsync_ShouldRespectRestartDelay()
+    {
+        // Arrange
+        Config.RestartDelaySeconds = 1;
+        var service = CreateService();
+        await service.StartAsync(CancellationToken.None);
+        
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        // Act
+        await service.ForceRestartAsync(CancellationToken.None);
+        sw.Stop();
+
+        // Assert
+        Assert.True(sw.ElapsedMilliseconds >= 1000, 
+            "Restart should respect RestartDelaySeconds configuration");
+    }
+
+    [Fact]
+    [Trait("Category", "ProcessRestart")]
+    public async Task ForceRestartAsync_WhenCancelled_ShouldThrowOperationCanceledException()
+    {
+        // Arrange
+        var service = CreateService();
+        await service.StartAsync(CancellationToken.None);
+        
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        // Act & Assert
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => service.ForceRestartAsync(cts.Token));
+    }
+
+    [Fact]
+    [Trait("Category", "ProcessRestart")]
+    public async Task OnProcessExited_ShouldResetRestartCountOnSuccessfulStart()
+    {
+        // Arrange
+        Config.MaxRestartAttempts = 2;
+        var service = CreateService();
+        await service.StartAsync(CancellationToken.None);
+        
+        // Симулируем один успешный перезапуск
+        var process1 = GetPrivateField<IProcess>(service, "_currentProcess");
+        var processMock1 = Mock.Get(process1!);
+        processMock1.Setup(p => p.HasExited).Returns(true);
+        processMock1.Raise(p => p.Exited += null, EventArgs.Empty);
+        
+        await Task.Delay(100); // Ждем перезапуска
+        Assert.Equal(ProcessState.Running, StateManager.CurrentState);
+        
+        // Второй перезапуск должен быть возможен, так как счетчик сбросился
+        var process2 = GetPrivateField<IProcess>(service, "_currentProcess");
+        var processMock2 = Mock.Get(process2!);
+        processMock2.Setup(p => p.HasExited).Returns(true);
+        processMock2.Raise(p => p.Exited += null, EventArgs.Empty);
+        
+        await Task.Delay(100);
+
+        // Assert
+        Assert.Equal(ProcessState.Running, StateManager.CurrentState);
+        ProcessRunnerMock.Verify(
+            r => r.StartProcessWithHandle(It.IsAny<ProcessConfig>(), It.IsAny<CancellationToken>()),
+            Times.Exactly(3)); // Начальный + 2 перезапуска
+    }
+}
