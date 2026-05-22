@@ -44,6 +44,15 @@ jobs:
       - name: Pack SignalCli.Runtime.Native
         run: dotnet pack src/SignalCli.runtime.native/SignalCli.runtime.native.csproj -c Release --no-build -o "${{ github.workspace }}/nupkgs"
 
+      # Bundled-JRE варіанти (Java в системі НЕ потрібна). JRE завантажується на
+      # ubuntu-runner під час Pack (BeforeTargets="Build;Pack"); архіви Windows/macOS
+      # тягнуться й розпаковуються незалежно від ОС раннера.
+      - name: Pack SignalCli.Runtime.Jre.win-x64
+        run: dotnet pack src/SignalCli.runtime.jre.win-x64/SignalCli.runtime.jre.win-x64.csproj -c Release --no-build -o "${{ github.workspace }}/nupkgs"
+
+      - name: Pack SignalCli.Runtime.Jre.osx-arm64
+        run: dotnet pack src/SignalCli.runtime.jre.osx-arm64/SignalCli.runtime.jre.osx-arm64.csproj -c Release --no-build -o "${{ github.workspace }}/nupkgs"
+
       - name: Push to GitHub Packages
         run: >
           dotnet nuget push "${{ github.workspace }}/nupkgs/*.nupkg"

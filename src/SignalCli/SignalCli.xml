@@ -38,22 +38,6 @@
             та вказаним повідомленням.
             </remarks>
         </member>
-        <member name="M:SignalCli.Exceptions.JsonRpcException.#ctor(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)">
-            <summary>
-            Захищений конструктор для десеріалізації.
-            </summary>
-            <param name="info">Об'єкт, що містить серіалізовані дані про об'єкт винятку.</param>
-            <param name="context">Інформація про джерело або призначення серіалізації.</param>
-            <exception cref="T:System.Runtime.Serialization.SerializationException">Виникає при помилці десеріалізації.</exception>
-        </member>
-        <member name="M:SignalCli.Exceptions.JsonRpcException.GetObjectData(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)">
-            <summary>
-            Отримує об'єкт, що містить дані, необхідні для серіалізації винятку.
-            </summary>
-            <param name="info">Об'єкт для заповнення даними серіалізації.</param>
-            <param name="context">Інформація про джерело або призначення серіалізації.</param>
-            <exception cref="T:System.ArgumentNullException">Виникає, якщо info дорівнює null.</exception>
-        </member>
         <member name="T:SignalCli.Extensions.ServiceCollectionExtensions">
             <summary>
             Розширення для IServiceCollection, що дозволяють зареєструвати всі необхідні сервіси для роботи з Signal CLI.
@@ -713,6 +697,12 @@
             включаючи шляхи до файлів, параметри логування та автоперезапуску.
             </remarks>
         </member>
+        <member name="F:SignalCli.Models.Config.DefaultBundledJreDirectory">
+            <summary>
+            Піддиректорія (відносно вихідної папки застосунку), куди пакети
+            SignalCli.Runtime.Jre.* розпаковують вбудований JRE.
+            </summary>
+        </member>
         <member name="P:SignalCli.Models.Config.UseManualReceiveMode">
             <summary>
             Режим отримання повідомлень.
@@ -745,6 +735,12 @@
             Затримка перед перезапуском процесу (у секундах).
             </summary>
         </member>
+        <member name="P:SignalCli.Models.Config.StopTimeoutSeconds">
+            <summary>
+            Час очікування граційного завершення signal-cli (після команди "exit"),
+            перш ніж процес буде завершено примусово (у секундах).
+            </summary>
+        </member>
         <member name="P:SignalCli.Models.Config.AppHome">
             <summary>
             Головна директорія програми.
@@ -772,6 +768,16 @@
             <summary>
             Шлях до виконуваного файлу Java.
             </summary>
+        </member>
+        <member name="P:SignalCli.Models.Config.SignalCliExecutable">
+            <summary>
+            Шлях до нативного (GraalVM) виконуваного файлу signal-cli.
+            </summary>
+            <remarks>
+            Якщо задано, бібліотека запускає цей бінарник напряму і <b>Java не потрібна</b>
+            (режим native). Інакше використовується JVM-режим через <see cref="P:SignalCli.Models.Config.JavaExecutable"/>
+            та classpath із JAR-файлів. Нативні білди signal-cli офіційно доступні лише для Linux x64.
+            </remarks>
         </member>
         <member name="P:SignalCli.Models.Config.LibDirectory">
             <summary>
@@ -803,12 +809,33 @@
             </summary>
             <returns>Об'єкт конфігурації з параметрами за замовчуванням.</returns>
         </member>
+        <member name="M:SignalCli.Models.Config.TryResolveJavaPath">
+            <summary>
+            Намагається знайти Java; повертає порожній рядок, якщо її немає (без винятку).
+            </summary>
+        </member>
         <member name="M:SignalCli.Models.Config.ResolveJavaPath">
             <summary>
-            Знаходить шлях до виконуваного файлу Java в системі.
+            Знаходить шлях до виконуваного файлу Java в системі
+            (Windows, Linux та macOS).
             </summary>
             <returns>Шлях до виконуваного файлу Java.</returns>
-            <exception cref="T:System.Exception">Виникає, якщо не вдалося знайти Java.</exception>
+            <exception cref="T:System.InvalidOperationException">Виникає, якщо не вдалося знайти Java.</exception>
+        </member>
+        <member name="M:SignalCli.Models.Config.ResolveBundledJava(System.String)">
+            <summary>
+            Шукає вбудований JRE, який пакети SignalCli.Runtime.Jre.* розпаковують
+            у піддиректорію <c>jre/</c> вихідної папки застосунку.
+            </summary>
+            <param name="baseDirectory">Вихідна (базова) директорія застосунку.</param>
+            <returns>Повний шлях до <c>jre/bin/java[.exe]</c>, якщо знайдено; інакше null.</returns>
+        </member>
+        <member name="M:SignalCli.Models.Config.ResolveOnPath(System.String)">
+            <summary>
+            Шукає виконуваний файл у каталогах змінної середовища PATH.
+            </summary>
+            <param name="executable">Назва виконуваного файлу (наприклад, "java" або "java.exe").</param>
+            <returns>Повний шлях, якщо знайдено; інакше null.</returns>
         </member>
         <member name="T:SignalCli.Models.Rpc.JsonRpcError">
             <summary>
@@ -848,7 +875,7 @@
         </member>
         <member name="P:SignalCli.Models.Rpc.JsonRpcNotificationRaw.Params">
             <summary>
-            Параметри повідомлення у форматі JToken.
+            Параметри повідомлення у форматі JsonElement.
             </summary>
         </member>
         <member name="T:SignalCli.Models.Rpc.JsonRpcNotification`1">
@@ -882,7 +909,7 @@
             Підтримує передачу параметрів, ідентифікатора запиту та версії протоколу.
             </remarks>
         </member>
-        <member name="M:SignalCli.Models.Rpc.JsonRpcRequest.#ctor(System.String,System.Object,System.String)">
+        <member name="M:SignalCli.Models.Rpc.JsonRpcRequest.#ctor(System.String,System.Text.Json.JsonElement,System.String)">
             <summary>
             Запит JSON-RPC відповідно до специфікації 2.0.
             </summary>
@@ -1045,10 +1072,30 @@
         </member>
         <member name="P:SignalCli.Models.SignalCli.ProcessConfig.Arguments">
             <summary>
-            Аргументи командного рядка для процесу.
+            Аргументи командного рядка для процесу (єдиний рядок).
             </summary>
             <remarks>
-            Рядок з аргументами, які будуть передані виконуваному файлу.
+            Використовується лише як запасний варіант, якщо <see cref="P:SignalCli.Models.SignalCli.ProcessConfig.ArgumentList"/> порожній.
+            Для безпечної передачі аргументів із пробілами/лапками віддавайте перевагу <see cref="P:SignalCli.Models.SignalCli.ProcessConfig.ArgumentList"/>.
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.SignalCli.ProcessConfig.ArgumentList">
+            <summary>
+            Аргументи командного рядка як окремі елементи.
+            </summary>
+            <remarks>
+            Кожен елемент передається процесу окремо (через ProcessStartInfo.ArgumentList),
+            тож .NET сам екранує пробіли, лапки та інші спецсимволи — це усуває ризик
+            зламати чи інжектувати аргументи через шляхи з лапками.
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.SignalCli.ProcessConfig.CreateNewProcessGroup">
+            <summary>
+            Запускати процес у новій групі процесів (Windows).
+            </summary>
+            <remarks>
+            .NET 10: ізолює дочірній процес від консольних сигналів батька (наприклад Ctrl+C),
+            тож завершенням signal-cli керує лише бібліотека (через "exit" або Kill).
             </remarks>
         </member>
         <member name="P:SignalCli.Models.SignalCli.ProcessConfig.WorkingDirectory">
@@ -1156,7 +1203,7 @@
             </summary>
             <remarks>
             Об'єднує поточний стан процесу, потоки для взаємодії та інформацію про помилку.
-            Використовується для повідомлення про зміни стану процесу через <see cref="!:ProcessStateManager"/>.
+            Використовується для повідомлення про зміни стану процесу через ProcessStateManager.
             </remarks>
         </member>
         <member name="P:SignalCli.Models.SignalCli.ProcessStateInfo.State">
@@ -3334,6 +3381,493 @@
             </summary>
             <value>Ідентифікатор користувача для адресації повідомлень.</value>
         </member>
+        <member name="T:SignalCli.Serialization.SignalJson">
+            <summary>
+            Спільні налаштування System.Text.Json для протоколу signal-cli JSON-RPC.
+            </summary>
+            <remarks>
+            Newtonsoft за замовчуванням робив case-insensitive біндинг — відтворюємо це.
+            Null-значення не пишемо (signal-cli очікує відсутні поля, а не null).
+            Рядкові enum обробляються через атрибут [JsonConverter] на самих enum.
+            </remarks>
+        </member>
+        <member name="F:SignalCli.Serialization.SignalJson.Options">
+            <summary>
+            Єдиний екземпляр налаштувань серіалізації (потокобезпечний після створення).
+            </summary>
+        </member>
+        <member name="T:SignalCli.Serialization.SignalJsonContext">
+            <summary>
+            Source-generated контекст серіалізації для всіх типів протоколу signal-cli.
+            Метадані генеруються на етапі компіляції (швидший старт, менше памʼяті, trim-safe).
+            Вкладені типи (наприклад усі Json*-типи з Envelope) генератор підхоплює автоматично.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.Boolean">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.NullableBoolean">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.Decimal">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.Single">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonRpcError">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonRpcNotificationSubscriptionEventArgs">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonRpcNotificationRaw">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonRpcRequest">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonRpcResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.Account">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListAccountsParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListAccountsResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.SyncAccountsParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.SyncAccountsResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.Answer">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.Busy">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.FinishLinkParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.FinishLinkResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.StartLinkParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.StartLinkResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.SignalEventArgs">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.SubscribeReceiveParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.SubscribeReceiveResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.SubscriptionEventArgs">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.UnsubscribeReceiveParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.UnsubscribeReceiveResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.Gradient">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.Group">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListGroupsParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListGroupsResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.Member">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.Hangup">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.IceUpdate">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonAttachment">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonCallMessage">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonDataMessage">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonEditMessage">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonGroupInfo">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonMention">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonMessageEnvelope">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonPayment">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonPreview">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonQuote">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonReaction">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonReceiptMessage">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonRemoteDelete">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonSharedContact">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonSticker">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonStoryContext">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonStoryMessage">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonSyncDataMessage">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonSyncMessage">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonSyncMessageType">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.NullableJsonSyncMessageType">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonSyncReadMessage">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonSyncStoryMessage">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonTextStyle">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonTypingMessage">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.RecipientAddress">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.SendMessageFullParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.SendMessageResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.SendMessageResult">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.Offer">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.TextAttachment">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.VersionParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.VersionResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.IEnumerableString">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListSingle">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListMember">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListIceUpdate">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListJsonAttachment">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListJsonMention">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListJsonPreview">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListJsonSharedContact">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListJsonSyncReadMessage">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListJsonTextStyle">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListSendMessageResult">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListInt64">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListString">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonElement">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.Int32">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.NullableInt32">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.Int64">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.NullableInt64">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.Object">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.String">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.UInt64">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.NullableUInt64">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.Default">
+            <summary>
+            The default <see cref="T:System.Text.Json.Serialization.JsonSerializerContext"/> associated with a default <see cref="T:System.Text.Json.JsonSerializerOptions"/> instance.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.GeneratedSerializerOptions">
+            <summary>
+            The source-generated options associated with this context.
+            </summary>
+        </member>
+        <member name="M:SignalCli.Serialization.SignalJsonContext.#ctor">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Serialization.SignalJsonContext.#ctor(System.Text.Json.JsonSerializerOptions)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Serialization.SignalJsonContext.GetTypeInfo(System.Type)">
+            <inheritdoc/>
+        </member>
+        <member name="P:SignalCli.Services.FileSystem.AttachmentEntry.SafeFileName">
+            <summary>
+            Безпечне ім'я файлу без компонентів шляху (захист від path traversal).
+            Відкидає каталоги та послідовності "../"; за порожнього результату — "attachment".
+            </summary>
+        </member>
         <member name="T:SignalCli.Services.Rpc.JsonRpcClient">
             <summary>
             Реалізація IJsonRpcClient — відправка запитів, отримання повідомлень.
@@ -3463,6 +3997,29 @@
             Реалізація інтерфейсу IProcessFactory, що створює екземпляри IProcess.
             </summary>
         </member>
+        <member name="T:SignalCli.Services.SignalCli.ProcessStateManager">
+            <summary>
+            Єдине джерело істини про стан процесу Signal CLI. Зберігає стан, пару потоків і
+            помилку; з нього похідні: <see cref="P:SignalCli.Services.SignalCli.ProcessStateManager.CurrentStreamPair"/>, <see cref="P:SignalCli.Services.SignalCli.ProcessStateManager.StreamPairChanged"/>
+            та <see cref="M:SignalCli.Services.SignalCli.ProcessStateManager.WaitForReadyAsync(System.Threading.CancellationToken)"/> (раніше це дублювалося окремими механізмами в hosted-сервісі).
+            </summary>
+        </member>
+        <member name="P:SignalCli.Services.SignalCli.ProcessStateManager.CurrentStreamPair">
+            <summary>
+            Поточна пара потоків (похідна від стану).
+            </summary>
+        </member>
+        <member name="P:SignalCli.Services.SignalCli.ProcessStateManager.StreamPairChanged">
+            <summary>
+            Потік змін пари потоків (похідний від стану; послідовні однакові значення згортаються).
+            </summary>
+        </member>
+        <member name="M:SignalCli.Services.SignalCli.ProcessStateManager.WaitForReadyAsync(System.Threading.CancellationToken)">
+            <summary>
+            Очікує, поки процес стане готовим (Running). Кидає виняток, якщо процес перейшов у Failed.
+            </summary>
+            <param name="cancellationToken">Токен скасування очікування.</param>
+        </member>
         <member name="T:SignalCli.Services.SignalCli.ProcessWrapper">
             <summary>
             Обгортка для системного процесу, що реалізує інтерфейс IProcess.
@@ -3559,17 +4116,17 @@
         </member>
         <member name="P:SignalCli.Services.SignalCli.SignalCliHostedService.CurrentStreamPair">
             <summary>
-            Поточна пара потоків для взаємодії з процесом.
+            Поточна пара потоків (похідна від ProcessStateManager — єдиного джерела істини).
             </summary>
         </member>
         <member name="P:SignalCli.Services.SignalCli.SignalCliHostedService.StreamPairChanged">
             <summary>
-            Потік сповіщень про зміну пари потоків.
+            Потік сповіщень про зміну пари потоків (похідний від стану; завершується при Dispose).
             </summary>
         </member>
         <member name="M:SignalCli.Services.SignalCli.SignalCliHostedService.WaitForReadyAsync(System.Threading.CancellationToken)">
             <summary>
-            Асинхронно очікує, поки пара потоків стане доступною.
+            Асинхронно очікує, поки пара потоків стане доступною (делегує менеджеру стану).
             </summary>
             <param name="cancellationToken">Токен скасування операції.</param>
             <returns>Завдання, що представляє очікування готовності потоків.</returns>
@@ -3607,23 +4164,6 @@
             </summary>
             <param name="sender">Джерело події.</param>
             <param name="e">Аргументи події.</param>
-        </member>
-        <member name="M:SignalCli.Services.SignalCli.SignalCliHostedService.SucceedReady">
-            <summary>
-            Сповіщає підписників про готовність сервісу.
-            </summary>
-        </member>
-        <member name="M:SignalCli.Services.SignalCli.SignalCliHostedService.FailReady(System.Exception)">
-            <summary>
-            Сповіщає підписників про неготовність сервісу (помилку).
-            </summary>
-            <param name="ex">Помилка, яка спричинила неготовність (опціонально).</param>
-        </member>
-        <member name="M:SignalCli.Services.SignalCli.SignalCliHostedService.UpdateStreamPair(SignalCli.Models.SignalCli.StreamPair)">
-            <summary>
-            Оновлює пару потоків та сповіщає підписників.
-            </summary>
-            <param name="pair">Нова пара потоків або null.</param>
         </member>
         <member name="M:SignalCli.Services.SignalCli.SignalCliHostedService.Dispose">
             <summary>

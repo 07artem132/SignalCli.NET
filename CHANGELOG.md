@@ -20,6 +20,15 @@
   бандлить офіційний native-білд (Linux x64, SHA-256-перевірений). `Config.CreateDefault()`
   більше не вимагає Java — її відсутність не кидає виняток на етапі реєстрації.
   *(Офіційних native-білдів для Windows/macOS немає — там потрібна Java.)*
+- **Bundled-JRE варіанти без системної Java (Windows/macOS):** нові пакети
+  **`SignalCli.Runtime.Jre.win-x64`** та **`SignalCli.Runtime.Jre.osx-arm64`** містять
+  вбудований Eclipse Temurin 25 JRE (SHA-256-перевірений) разом із signal-cli. Це
+  drop-in заміна `SignalCli.Runtime`: достатньо підключити пакет — `Config.JavaExecutable`
+  автоматично резолвиться у `jre/bin/java[.exe]` (новий метод `Config.ResolveBundledJava`),
+  системна Java не потрібна. Перевірено наскрізно на Windows (signal-cli стартує під
+  вбудованим JRE, JSON-RPC працює).
+- **Важливо:** signal-cli 0.14.3 скомпільовано під **Java 25** (class-file version 69.0),
+  тож JVM-режим тепер потребує **JDK/JRE 25+** (раніше в документації значилось 21+).
 - signal-cli оновлено до **v0.14.3** із перевіркою цілісності завантаження (SHA-256).
 - Граційне завершення signal-cli: ізоляція в окремій групі процесів (Windows, .NET 10)
   + конфігурований таймаут `Config.StopTimeoutSeconds` перед примусовим завершенням.

@@ -3,7 +3,7 @@
 
 [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](http://www.gnu.org/licenses/gpl-3.0.html)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/download/dotnet/10.0)
-[![Java](https://img.shields.io/badge/JDK-21+-007396)](https://www.oracle.com/java/technologies/javase-downloads.html)
+[![Java](https://img.shields.io/badge/JDK-25+-007396)](https://www.oracle.com/java/technologies/javase-downloads.html)
 [![Build Status](https://github.com/07artem132/SignalCli.NET/actions/workflows/dotnet-desktop.yml/badge.svg)](https://github.com/07artem132/SignalCli.NET/actions/workflows/dotnet-desktop.yml)
 
 **Обгортка для signal-cli на базі .NET з підтримкою реактивного програмування**
@@ -44,7 +44,7 @@
 ## 🔧 Вимоги
 
 - **.NET 10.0 (LTS)** або новіше — [Завантажити](https://dotnet.microsoft.com/download/dotnet/10.0)
-- **JDK 21+** — [Завантажити](https://www.oracle.com/java/technologies/javase-downloads.html) — *не потрібна в native-режимі (Linux x64), див. нижче*
+- **JDK 25+** — [Завантажити](https://www.oracle.com/java/technologies/javase-downloads.html) — *signal-cli 0.14.3 потребує саме Java 25+; не потрібна в native-режимі (Linux x64) або з bundled-JRE пакетами (Windows/macOS), див. нижче*
 - **signal-cli v0.14.3+** — [Завантажити](https://github.com/AsamK/signal-cli/releases)
 
 ## 📦 Встановлення
@@ -84,8 +84,38 @@ services.AddSignalCli(config =>
     config.SignalCliExecutable = Path.Combine(AppContext.BaseDirectory, "signal-cli-native", "signal-cli");
 });
 ```
-> Якщо `SignalCliExecutable` задано — бібліотека запускає бінарник напряму. Інакше використовується JVM-режим (`SignalCli.Runtime` + JDK 21+).
-> Для **Windows/macOS** офіційного native-білда немає → там потрібна Java (JVM-режим).
+> Якщо `SignalCliExecutable` задано — бібліотека запускає бінарник напряму. Інакше використовується JVM-режим (`SignalCli.Runtime` + JDK 25+).
+> Для **Windows/macOS** офіційного native-білда немає → використовуйте bundled-JRE пакети нижче (або системну Java).
+
+### 🚫☕ Без системної Java (bundled-JRE, Windows/macOS)
+
+Для платформ, де нативного білда немає, є пакети з **вбудованим Eclipse Temurin 25 JRE** —
+самодостатні, **системна Java не потрібна**. Це drop-in заміна `SignalCli.Runtime`:
+
+| Платформа | Пакет |
+|-----------|-------|
+| Windows x64 | `SignalCli.Runtime.Jre.win-x64` |
+| macOS arm64 (Apple Silicon) | `SignalCli.Runtime.Jre.osx-arm64` |
+
+```bash
+ dotnet add package SignalCli.NET
+ dotnet add package SignalCli.Runtime.Jre.win-x64   # або .osx-arm64
+```
+
+```csharp
+services.AddSignalCli(config =>
+{
+    config.AppHome = AppContext.BaseDirectory;
+    config.LibDirectory = "signal-cli/lib";
+    config.StoragePathCli = Path.Combine(AppContext.BaseDirectory, "SignalCliStorageData");
+    // config.JavaExecutable НЕ задаємо — він автоматично резолвиться у jre/bin/java[.exe]
+});
+```
+
+> Пакет кладе у вихідну папку `jre/` (вбудований JRE) та `signal-cli/` (jar-файли).
+> `Config.CreateDefault()` спершу шукає вбудований JRE у `jre/bin/java[.exe]` і лише потім — системну Java.
+> ⚠️ Пакети великі (~150 МБ): містять і JRE, і signal-cli.
+
 > ⚠️ **Зверніть увагу**  
 > Без додавання джерела з GitHub цей пакет не буде доступний.
 
