@@ -16,6 +16,12 @@ public class Config
     private const string DefaultLibDirectory = "SignalCli/lib";
 
     /// <summary>
+    /// Піддиректорія (відносно вихідної папки застосунку), куди пакети
+    /// SignalCli.Runtime.Jre.* розпаковують вбудований JRE.
+    /// </summary>
+    private const string DefaultBundledJreDirectory = "jre";
+
+    /// <summary>
     /// Режим отримання повідомлень.
     /// </summary>
     /// <value>
@@ -227,6 +233,11 @@ public class Config
         var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
         var executable = isWindows ? "java.exe" : DefaultJavaPath; // "java"
 
+        // 0) Вбудований JRE із пакета SignalCli.Runtime.Jre.* (Java не потрібна в системі).
+        var bundled = ResolveBundledJava(AppDomain.CurrentDomain.BaseDirectory);
+        if (bundled != null)
+            return bundled;
+
         // 1) JAVA_HOME/bin/java[.exe]
         var javaHome = Environment.GetEnvironmentVariable("JAVA_HOME");
         if (!string.IsNullOrEmpty(javaHome))
@@ -254,8 +265,28 @@ public class Config
 
         throw new InvalidOperationException(
             $"Не вдалося знайти Java для платформи {RuntimeInformation.OSDescription}. " +
-            "Встановіть JDK 21+ і задайте JAVA_HOME, додайте java до PATH, " +
-            "або вкажіть шлях явно через Config.JavaExecutable.");
+            "Встановіть JDK 25+ і задайте JAVA_HOME, додайте java до PATH, " +
+            "вкажіть шлях явно через Config.JavaExecutable, або підключіть пакет " +
+            "SignalCli.Runtime.Jre.* зі вбудованим JRE (Java в системі не потрібна).");
+    }
+
+    /// <summary>
+    /// Шукає вбудований JRE, який пакети SignalCli.Runtime.Jre.* розпаковують
+    /// у піддиректорію <c>jre/</c> вихідної папки застосунку.
+    /// </summary>
+    /// <param name="baseDirectory">Вихідна (базова) директорія застосунку.</param>
+    /// <returns>Повний шлях до <c>jre/bin/java[.exe]</c>, якщо знайдено; інакше null.</returns>
+    internal static string? ResolveBundledJava(string baseDirectory)
+    {
+        if (string.IsNullOrEmpty(baseDirectory))
+            return null;
+
+        var executable = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? "java.exe"
+            : DefaultJavaPath; // "java"
+
+        var candidate = Path.Combine(baseDirectory, DefaultBundledJreDirectory, "bin", executable);
+        return File.Exists(candidate) ? candidate : null;
     }
 
     /// <summary>

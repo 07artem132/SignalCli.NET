@@ -1,0 +1,25 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <!-- Extracts the bundled JRE and signal-cli into the consumer's output.
+         SignalCli.NET auto-discovers <output>/jre/bin/java[.exe] as the Java
+         executable, so no system Java installation is required.
+
+         The payloads are shipped as .zip and extracted with the built-in Unzip task
+         (no external tools), because NuGet corrupts extension-less files (e.g. the
+         JRE's "lib/modules") when they are packed as individual files. -->
+    <Target Name="ExtractSignalCliJreFromPackage" AfterTargets="Build">
+        <Unzip SourceFiles="$(MSBuildThisFileDirectory)jre.zip"
+               DestinationFolder="$(TargetDir)jre"
+               OverwriteReadOnlyFiles="true"
+               Condition="!Exists('$(TargetDir)jre/bin/java.exe') and !Exists('$(TargetDir)jre/bin/java')" />
+
+        <Unzip SourceFiles="$(MSBuildThisFileDirectory)signal-cli.zip"
+               DestinationFolder="$(TargetDir)signal-cli"
+               OverwriteReadOnlyFiles="true"
+               Condition="!Exists('$(TargetDir)signal-cli/lib')" />
+
+        <!-- Restore the exec bit on non-Windows (zip does not preserve unix perms).
+             Harmless on Windows; required for the macOS JRE launcher. -->
+        <Exec Condition="'$(OS)' != 'Windows_NT' and Exists('$(TargetDir)jre/bin/java')"
+              Command="chmod -R +x &quot;$(TargetDir)jre/bin&quot;" />
+    </Target>
+</Project>

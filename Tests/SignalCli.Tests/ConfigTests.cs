@@ -1,9 +1,56 @@
-﻿using SignalCli.Models;
+﻿using System.Runtime.InteropServices;
+using SignalCli.Models;
 
 namespace SignalCli.Tests;
 
 public class ConfigTests
 {
+    private static string BundledJavaExecutableName =>
+        RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "java.exe" : "java";
+
+    [Fact]
+    public void ResolveBundledJava_ReturnsPath_WhenBundledJrePresent()
+    {
+        var baseDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var binDir = Path.Combine(baseDir, "jre", "bin");
+        Directory.CreateDirectory(binDir);
+        var javaPath = Path.Combine(binDir, BundledJavaExecutableName);
+        File.WriteAllText(javaPath, "fake java");
+        try
+        {
+            var resolved = Config.ResolveBundledJava(baseDir);
+
+            Assert.Equal(javaPath, resolved);
+        }
+        finally
+        {
+            Directory.Delete(baseDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveBundledJava_ReturnsNull_WhenNoBundledJre()
+    {
+        var baseDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(baseDir);
+        try
+        {
+            Assert.Null(Config.ResolveBundledJava(baseDir));
+        }
+        finally
+        {
+            Directory.Delete(baseDir, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(null)]
+    public void ResolveBundledJava_ReturnsNull_ForEmptyBaseDirectory(string? baseDir)
+    {
+        Assert.Null(Config.ResolveBundledJava(baseDir!));
+    }
+
     [Fact]
     public void ToProcessConfig_ThrowsFileNotFoundException_IfNoJarFiles()
     {
@@ -85,7 +132,7 @@ public class ConfigTests
         Assert.DoesNotContain("-classpath", pc.ArgumentList!);
         Assert.DoesNotContain("org.asamk.signal.Main", pc.ArgumentList!);
         Assert.Contains("jsonRpc", pc.ArgumentList!);
-        Assert.Contains(pc.ArgumentList!, a => a.StartsWith("--receive-mode="));
+        Assert.Contains(pc.ArgumentList!, a => a.StartsWith("--receive-mode=", StringComparison.Ordinal));
     }
 
     [Fact]

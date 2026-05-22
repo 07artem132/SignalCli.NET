@@ -1,0 +1,78 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <!-- Files-only package: no assembly, no auto-pack on build. -->
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+        <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+        <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+        <NoWarn>$(NoWarn);NU5128</NoWarn>
+
+        <PackageId>SignalCli.Runtime.Jre.win-x64</PackageId>
+        <Authors>07artem132</Authors>
+        <Description>signal-cli 0.14.3 runtime bundled with an Eclipse Temurin 25 JRE for Windows x64 — NO system Java required. Drop-in replacement for SignalCli.Runtime; Config.JavaExecutable is auto-discovered from the bundled jre/. Bundles the GPLv3 signal-cli and a GPLv2-with-Classpath-Exception JRE.</Description>
+        <PackageProjectUrl>https://github.com/07artem132/SignalCli.NET</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/07artem132/SignalCli.NET</RepositoryUrl>
+        <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
+        <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+        <Version>0.14.3.1</Version>
+        <AssemblyVersion>0.14.3.1</AssemblyVersion>
+        <FileVersion>0.14.3.1</FileVersion>
+
+        <!-- Bundled JRE coordinates (Eclipse Temurin). signal-cli 0.14.3's Main is
+             compiled to class-file version 69.0, which requires a Java 25 runtime. -->
+        <JreFeature>25</JreFeature>
+        <JreVersion>25.0.3+9</JreVersion>
+        <JreOs>windows</JreOs>
+        <JreArch>x64</JreArch>
+        <JreSha256>a183e7280220ad5f6fe94ecbf025a5f10fc5797a0b18c600ed8f813c8158c530</JreSha256>
+
+        <!-- Absolute paths: native tar/unzip mis-handle relative -C paths when the
+             build directory contains non-ASCII characters. The JRE and signal-cli are
+             packed as single .zip files because NuGet treats an extension-less
+             PackagePath (e.g. the JRE's "lib/modules") as a directory and corrupts the
+             layout. The consumer .targets extracts them with the built-in Unzip task. -->
+        <JreOutDir>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'jre'))</JreOutDir>
+        <SignalCliOutDir>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'signal-cli'))</SignalCliOutDir>
+        <JreZip>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'jre.zip'))</JreZip>
+        <SignalCliZip>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'signal-cli.zip'))</SignalCliZip>
+    </PropertyGroup>
+
+    <!-- 1) Download + verify + normalize the bundled JRE into obj/jre. -->
+    <Target Name="DownloadJre" BeforeTargets="Build;Pack"
+            Condition="!Exists('$(BaseIntermediateOutputPath)jre/bin/java.exe') and !Exists('$(BaseIntermediateOutputPath)jre/bin/java')">
+        <Message Text="Downloading bundled JRE (Temurin $(JreVersion), $(JreOs)/$(JreArch))..." Importance="High" />
+        <Exec Condition="'$(OS)' == 'Windows_NT'"
+              Command="powershell -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)../build/download-jre.ps1&quot; -OutDir &quot;$(JreOutDir)&quot; -Feature $(JreFeature) -Version $(JreVersion) -Os $(JreOs) -Arch $(JreArch) -Sha256 $(JreSha256)" />
+        <Exec Condition="'$(OS)' != 'Windows_NT'"
+              Command="bash &quot;$(MSBuildThisFileDirectory)../build/download-jre.sh&quot; &quot;$(JreOutDir)&quot; $(JreFeature) $(JreVersion) $(JreOs) $(JreArch) $(JreSha256)" />
+    </Target>
+
+    <!-- 2) Download + verify the signal-cli distribution (jars) into obj/signal-cli.
+         Reuses the shared scripts/SHA pin from the SignalCli.Runtime package. -->
+    <Target Name="DownloadSignalCli" BeforeTargets="Build;Pack"
+            Condition="!Exists('$(BaseIntermediateOutputPath)signal-cli/lib')">
+        <Message Text="Downloading signal-cli (jars)..." Importance="High" />
+        <Exec Condition="'$(OS)' == 'Windows_NT'"
+              Command="powershell -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)../SignalCli.runtime/download-signal-cli.ps1&quot; -OutDir &quot;$(SignalCliOutDir)&quot;" />
+        <Exec Condition="'$(OS)' != 'Windows_NT'"
+              Command="bash &quot;$(MSBuildThisFileDirectory)../SignalCli.runtime/download-signal-cli.sh&quot; &quot;$(SignalCliOutDir)&quot;" />
+    </Target>
+
+    <!-- 3) Zip the payloads so they pack as single files with a real extension. -->
+    <Target Name="ZipPayloads" BeforeTargets="Build;Pack" DependsOnTargets="DownloadJre;DownloadSignalCli">
+        <ZipDirectory SourceDirectory="$(JreOutDir)" DestinationFile="$(JreZip)" Overwrite="true"
+                      Condition="!Exists('$(JreZip)')" />
+        <ZipDirectory SourceDirectory="$(SignalCliOutDir)" DestinationFile="$(SignalCliZip)" Overwrite="true"
+                      Condition="!Exists('$(SignalCliZip)')" />
+    </Target>
+
+    <ItemGroup>
+        <None Include="$(JreZip)" Pack="true" PackagePath="buildTransitive/jre.zip" />
+        <None Include="$(SignalCliZip)" Pack="true" PackagePath="buildTransitive/signal-cli.zip" />
+        <!-- Auto-imported on the consumer side (name must match the PackageId). -->
+        <None Include="SignalCli.Jre.targets" Pack="true"
+              PackagePath="buildTransitive/SignalCli.Runtime.Jre.win-x64.targets" />
+    </ItemGroup>
+
+</Project>

@@ -7,7 +7,7 @@ Guidance for AI coding agents (Claude Code, Copilot, etc.) working in this repos
 **SignalCli.NET** — a .NET wrapper around [`signal-cli`](https://github.com/AsamK/signal-cli) (a Java app) that exposes a typed, reactive API for the Signal messenger. The library launches and supervises `signal-cli` in JSON-RPC mode over stdin/stdout, correlates requests/responses, and surfaces incoming events through `System.Reactive` observables.
 
 - Target framework: **net9.0** (migration to **net10.0 LTS** is planned — see `openspec/changes/modernize-architecture`).
-- Requires **JDK 21+** and **signal-cli 0.14.3** (downloaded by the `SignalCli.Runtime` package at build time).
+- Requires **JDK 25+** (signal-cli 0.14.3's `Main` is class-file version 69.0 = Java 25) and **signal-cli 0.14.3** (downloaded by the `SignalCli.Runtime` package at build time). Java is **not** required with the native package (`SignalCli.Runtime.Native`, Linux x64) or the bundled-JRE packages (`SignalCli.Runtime.Jre.win-x64`, `SignalCli.Runtime.Jre.osx-arm64`).
 
 ## Build & test
 
@@ -51,7 +51,8 @@ Patterns in use: Dependency Injection, Hosted Services, Factory, Adapter/Wrapper
 4. **Event dispatch:** in `SignalEventService`, a `DataMessage` is a *presence-based union*; emit every applicable observable (text + attachment can both fire). Do not reintroduce early `return` between payload checks.
 5. **Text styles:** use `ToUpperInvariant()` for style names (locale-independent).
 6. **Serialization:** currently `Newtonsoft.Json`; migration to `System.Text.Json` is planned (`openspec/changes/modernize-architecture`). If you add models, keep `[JsonProperty]` consistent until the STJ step.
-7. **Download scripts:** `src/SignalCli.runtime/download-signal-cli.*` verify the signal-cli archive SHA-256 before extraction. If you change the pinned signal-cli version, update the hash in **both** scripts. The PowerShell script **must be saved as UTF-8 with BOM** (Windows PowerShell 5.1 mis-parses Cyrillic/emoji without it).
+7. **Download scripts:** `src/SignalCli.runtime/download-signal-cli.*` and `src/build/download-jre.*` verify the archive SHA-256 before extraction. If you change a pinned version, update the hash in **both** the `.ps1` and `.sh`. These PowerShell scripts are deliberately **ASCII-only** (no Cyrillic/emoji) so they parse under Windows PowerShell 5.1 **without** needing a UTF-8 BOM — keep them ASCII. They also invoke the Windows system `tar` (`%SystemRoot%\System32\tar.exe`) explicitly and stage extraction through an ASCII temp dir, because Git's GNU `tar` mis-reads `C:\…` paths and bsdtar fails on non-ASCII target paths.
+8. **Bundled-JRE packages** (`SignalCli.Runtime.Jre.win-x64`, `SignalCli.Runtime.Jre.osx-arm64`): bundle a SHA-256-pinned Eclipse Temurin **25** JRE + signal-cli. The JRE and jars are packed as **single `.zip` files** and extracted by the consumer `.targets` via MSBuild's built-in `<Unzip>` — **do not** pack the JRE as individual files: NuGet treats an extension-less `PackagePath` (e.g. the JRE's `lib/modules`) as a *directory* and corrupts the layout, which crashes the JVM at bootstrap. `Config.ResolveBundledJava` auto-discovers `<output>/jre/bin/java[.exe]`, so consumers need no system Java and should **not** set `Config.JavaExecutable`.
 
 ## Planning (OpenSpec)
 

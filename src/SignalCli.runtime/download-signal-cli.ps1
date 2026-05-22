@@ -1,75 +1,75 @@
-﻿param (
+<#
+.SYNOPSIS
+  Downloads, verifies (SHA-256) and extracts the signal-cli distribution into <OutDir>.
+
+  Intentionally ASCII-only: Windows PowerShell 5.1 mis-parses non-ASCII .ps1 files
+  saved without a UTF-8 BOM, so we avoid non-ASCII characters entirely.
+
+  Extraction is staged through an ASCII temp directory and then copied into <OutDir>,
+  because the bundled Windows tar (bsdtar) fails to extract directly into paths that
+  contain non-ASCII characters (e.g. a localized user-profile or folder name).
+#>
+param (
     [string]$OutDir = "signal-cli"
 )
+
+$ErrorActionPreference = 'Stop'
 
 $SignalCliBin = Join-Path $OutDir "bin\signal-cli.bat"
 
 if (Test-Path $SignalCliBin) {
-    Write-Host "✅ signal-cli вже існує в $OutDir, завантаження не потрібне."
+    Write-Host "signal-cli already present in $OutDir, skipping download."
     exit 0
 }
 
 $Version = "0.14.3"
 $Filename = "signal-cli-$Version.tar.gz"
 $Url = "https://github.com/AsamK/signal-cli/releases/download/v$Version/$Filename"
-# SHA-256 офіційного релізного архіву (звірено із завантаженням з GitHub Releases).
+# SHA-256 of the official release archive (verified against GitHub Releases).
 $ExpectedSha256 = "60a0a51312d07ed0cd6f4d5080b2ffe6ee838ea99f92297f2803e24af1826c6f"
 
-Write-Host "📥 Завантаження $Filename ..."
-$temp = Join-Path $env:TEMP "signal-cli-tmp"
+# Use a fresh ASCII temp directory for download + extraction.
+$temp = Join-Path ([System.IO.Path]::GetTempPath()) ("signal-cli-" + [System.Guid]::NewGuid().ToString())
 $archive = Join-Path $temp $Filename
+$staging = Join-Path $temp "extract"
 
 try {
-    New-Item -ItemType Directory -Force -Path $temp | Out-Null
-} catch {
-    Write-Error "❌ Не вдалося створити тимчасову директорію `${temp}`: $_"
-    exit 1
-}
+    New-Item -ItemType Directory -Force -Path $staging | Out-Null
 
-try {
-    # Прискорює завантаження великого файлу та уникає прогрес-бару в CI
-    $ProgressPreference = "SilentlyContinue"
-    Invoke-WebRequest -Uri $Url -OutFile $archive -ErrorAction Stop
-} catch {
-    Write-Error "❌ Помилка під час завантаження `${Url}`: $_"
-    exit 2
-}
+    Write-Host "Downloading $Filename ..."
+    $ProgressPreference = "SilentlyContinue"   # faster large download, no progress bar in CI
+    Invoke-WebRequest -Uri $Url -OutFile $archive
 
-Write-Host "🔐 Перевірка цілісності (SHA-256) ..."
-try {
+    Write-Host "Verifying SHA-256 ..."
     $actualSha256 = (Get-FileHash -Path $archive -Algorithm SHA256).Hash
-} catch {
-    Write-Error "❌ Не вдалося обчислити SHA-256 для `${archive}`: $_"
-    exit 5
-}
+    if ($actualSha256 -ine $ExpectedSha256) {
+        throw "SHA-256 mismatch! expected $ExpectedSha256 but got $actualSha256"
+    }
+    Write-Host "SHA-256 OK."
 
-if ($actualSha256 -ine $ExpectedSha256) {
-    Remove-Item -Path $archive -Force -ErrorAction SilentlyContinue
-    Write-Error "❌ Невідповідність SHA-256! Очікувано $ExpectedSha256, отримано $actualSha256. Завантаження перервано."
-    exit 6
-}
-Write-Host "✅ SHA-256 збігається."
+    Write-Host "Extracting ..."
+    # Use the Windows system tar (bsdtar) explicitly: a "tar" on PATH may be Git's
+    # GNU tar, which treats the "C:\..." archive path as a remote host and fails.
+    $tarExe = Join-Path $env:SystemRoot 'System32\tar.exe'
+    if (-not (Test-Path $tarExe)) { $tarExe = 'tar' }
+    # bsdtar may emit non-fatal warnings (e.g. about symlinks); validate success by
+    # checking for the launcher below instead of relying on the exit code/stderr.
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & $tarExe -xf $archive -C "$staging" --strip-components=1 2>$null
+    $ErrorActionPreference = $prevEap
 
-Write-Host "📦 Розпаковка до $OutDir ..."
-try {
+    $stagedBin = Join-Path $staging "bin\signal-cli.bat"
+    if (-not (Test-Path $stagedBin)) {
+        throw "Extraction failed: $stagedBin not found"
+    }
+
+    Write-Host "Installing into $OutDir ..."
     New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
-} catch {
-    Write-Error "❌ Не вдалося створити директорію `${OutDir}`: $_"
-    exit 3
+    Copy-Item -Path (Join-Path $staging '*') -Destination $OutDir -Recurse -Force
+
+    Write-Host "Done. signal-cli v$Version installed to $OutDir"
 }
-
-# tar (bsdtar у Windows) може писати у stderr нефатальні попередження
-# (наприклад про symlink-и), тому не покладаємось на код виходу,
-# а перевіряємо результат за наявністю виконуваного файлу нижче.
-tar -xf $archive -C "$OutDir" --strip-components=1 2>$null
-
-if (-not (Test-Path $SignalCliBin)) {
-    Write-Error "❌ Розпакування не вдалося: не знайдено $SignalCliBin"
-    exit 4
+finally {
+    Remove-Item -Path $temp -Recurse -Force -ErrorAction SilentlyContinue
 }
-
-# Прибираємо тимчасовий архів
-Remove-Item -Path $archive -Force -ErrorAction SilentlyContinue
-
-Write-Host "✅ Готово! signal-cli v$Version встановлено у $OutDir"
-exit 0
