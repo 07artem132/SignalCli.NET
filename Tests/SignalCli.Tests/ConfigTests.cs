@@ -53,14 +53,51 @@ public class ConfigTests
 
         // 5) Вызываем ToProcessConfig и убеждаемся, что не бросает исключения
         var processConfig = config.ToProcessConfig();
-    
-        // 6) Проверяем, что processConfig.Arguments содержит "-classpath \"...test1.jar\""
-        Assert.Contains("-classpath", processConfig.Arguments);
-        Assert.Contains("test1.jar", processConfig.Arguments);
+
+        // 6) Аргументи передаються через ArgumentList (безпечне екранування)
+        Assert.NotNull(processConfig.ArgumentList);
+        Assert.Contains("-classpath", processConfig.ArgumentList!);
+        Assert.Contains(processConfig.ArgumentList!, a => a.Contains("test1.jar"));
 
         // Дополнительно можно проверить другие части аргументов: jsonRpc, log-file и т.д.
 
         // 7) Очистка
         Directory.Delete(tempDir, recursive: true);
+    }
+
+    [Fact]
+    public void ToProcessConfig_PathsWithSpaces_StayAsSingleArguments()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "dir with spaces " + Guid.NewGuid());
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var libDir = Path.Combine(tempDir, "lib");
+            Directory.CreateDirectory(libDir);
+            File.WriteAllText(Path.Combine(libDir, "test1.jar"), "fake");
+
+            var storage = Path.Combine(tempDir, "storage data");
+            var config = new Config
+            {
+                AppHome = tempDir,
+                LibDirectory = "lib",
+                JavaExecutable = "java",
+                StoragePathCli = storage
+            };
+
+            var processConfig = config.ToProcessConfig();
+
+            Assert.NotNull(processConfig.ArgumentList);
+            // Шлях зі пробілами має бути єдиним аргументом (без розщеплення)
+            Assert.Contains($"--config={storage}", processConfig.ArgumentList!);
+            Assert.Contains("org.asamk.signal.Main", processConfig.ArgumentList!);
+            Assert.Contains("jsonRpc", processConfig.ArgumentList!);
+            // Класичний рядок Arguments не використовується
+            Assert.True(string.IsNullOrEmpty(processConfig.Arguments));
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
     }
 }
