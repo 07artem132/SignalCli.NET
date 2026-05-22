@@ -1,0 +1,16 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <!-- Копіює нативний бінарник signal-cli у вихідну директорію споживача (лише Linux). -->
+    <Target Name="CopySignalCliNativeFromPackage" AfterTargets="Build" Condition="'$(OS)' != 'Windows_NT'">
+        <ItemGroup>
+            <_SignalCliNativeFiles Include="$(MSBuildThisFileDirectory)signal-cli-native\**\*"/>
+        </ItemGroup>
+
+        <Copy SourceFiles="@(_SignalCliNativeFiles)"
+              DestinationFiles="@(_SignalCliNativeFiles->'$(TargetDir)signal-cli-native\%(RecursiveDir)%(Filename)%(Extension)')"
+              SkipUnchangedFiles="true"/>
+
+        <!-- Відновлюємо біт виконання (NuGet не зберігає unix-права) -->
+        <Exec Command="chmod +x &quot;$(TargetDir)signal-cli-native/signal-cli&quot;"
+              Condition="Exists('$(TargetDir)signal-cli-native/signal-cli')" />
+    </Target>
+</Project>

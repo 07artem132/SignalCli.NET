@@ -82,6 +82,16 @@ public class Config
     public string JavaExecutable { get; set; }
 
     /// <summary>
+    /// Шлях до нативного (GraalVM) виконуваного файлу signal-cli.
+    /// </summary>
+    /// <remarks>
+    /// Якщо задано, бібліотека запускає цей бінарник напряму і <b>Java не потрібна</b>
+    /// (режим native). Інакше використовується JVM-режим через <see cref="JavaExecutable"/>
+    /// та classpath із JAR-файлів. Нативні білди signal-cli офіційно доступні лише для Linux x64.
+    /// </remarks>
+    public string? SignalCliExecutable { get; set; }
+
+    /// <summary>
     /// Піддиректорія з JAR-файлами Signal CLI.
     /// </summary>
     public string LibDirectory { get; set; }
@@ -98,41 +108,52 @@ public class Config
     /// <exception cref="FileNotFoundException">Виникає, якщо JAR-файли не знайдено.</exception>
     public ProcessConfig ToProcessConfig()
     {
-        var classpath = BuildClasspath();
         var receiveModeArg = UseManualReceiveMode
             ? "--receive-mode=manual"
             : "--receive-mode=on-start";
-        var logLevelArg = "";
-        switch (CliLogLevelCli)
+        var logLevelArg = CliLogLevelCli switch
         {
-            case CliLogLevel.Info:
-                logLevelArg = "-v";
-                break;
-            case CliLogLevel.Debug:
-                logLevelArg = "-vv";
-                break;
-            case CliLogLevel.Verbose:
-                logLevelArg = "-vvv";
-                break;
-        }
-
-        // Кожен аргумент — окремий елемент: ProcessStartInfo.ArgumentList сам екранує
-        // пробіли та лапки, тож шляхи з лапками не можуть зламати/інжектувати аргументи.
-        var argumentList = new List<string>
-        {
-            "-classpath", classpath,
-            "org.asamk.signal.Main"
+            CliLogLevel.Info => "-v",
+            CliLogLevel.Debug => "-vv",
+            CliLogLevel.Verbose => "-vvv",
+            _ => ""
         };
+
+        // Власні аргументи signal-cli — однакові в обох режимах.
+        var signalCliArgs = new List<string>();
         if (!string.IsNullOrEmpty(logLevelArg))
-            argumentList.Add(logLevelArg);
-        argumentList.Add($"--log-file={LogFileCli}");
-        argumentList.Add($"--config={StoragePathCli}");
-        argumentList.Add("jsonRpc");
-        argumentList.Add(receiveModeArg);
+            signalCliArgs.Add(logLevelArg);
+        signalCliArgs.Add($"--log-file={LogFileCli}");
+        signalCliArgs.Add($"--config={StoragePathCli}");
+        signalCliArgs.Add("jsonRpc");
+        signalCliArgs.Add(receiveModeArg);
+
+        string executable;
+        List<string> argumentList;
+
+        if (!string.IsNullOrEmpty(SignalCliExecutable))
+        {
+            // NATIVE-режим: запускаємо нативний бінарник напряму, Java не потрібна.
+            executable = SignalCliExecutable;
+            argumentList = signalCliArgs;
+        }
+        else if (!string.IsNullOrEmpty(JavaExecutable))
+        {
+            // JVM-режим: java -classpath <jars> org.asamk.signal.Main <signalCliArgs>.
+            // Кожен аргумент — окремий елемент: ArgumentList сам екранує пробіли/лапки.
+            executable = JavaExecutable;
+            argumentList = ["-classpath", BuildClasspath(), "org.asamk.signal.Main", .. signalCliArgs];
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                "Не задано спосіб запуску signal-cli: вкажіть SignalCliExecutable (native, без Java) " +
+                "або JavaExecutable (+ JAR-файли у LibDirectory для JVM-режиму).");
+        }
 
         return new ProcessConfig
         {
-            Executable = JavaExecutable,
+            Executable = executable,
             ArgumentList = argumentList,
             WorkingDirectory = AppHome,
             CreateNewProcessGroup = true,
@@ -170,11 +191,29 @@ public class Config
         return new Config
         {
             AppHome = AppDomain.CurrentDomain.BaseDirectory,
-            JavaExecutable = ResolveJavaPath(),
+            // Java резолвимо «м'яко»: якщо її немає, лишаємо порожнім — користувач
+            // може працювати в native-режимі (SignalCliExecutable). Помилка про
+            // відсутність способу запуску виникне пізніше, у ToProcessConfig.
+            JavaExecutable = TryResolveJavaPath(),
             LibDirectory = DefaultLibDirectory,
             MaxRestartAttempts = 3,
             RestartDelaySeconds = 5
         };
+    }
+
+    /// <summary>
+    /// Намагається знайти Java; повертає порожній рядок, якщо її немає (без винятку).
+    /// </summary>
+    private static string TryResolveJavaPath()
+    {
+        try
+        {
+            return ResolveJavaPath();
+        }
+        catch (InvalidOperationException)
+        {
+            return string.Empty;
+        }
     }
 
     /// <summary>

@@ -15,6 +15,11 @@
   на `where TResponse : notnull` (тепер підтримує value-типи, напр. `JsonElement`).
 
 ### ✨ Додано
+- **Native-режим без Java:** `Config.SignalCliExecutable` запускає нативний (GraalVM)
+  бінарник signal-cli напряму, без JVM. Новий пакет **`SignalCli.Runtime.Native`**
+  бандлить офіційний native-білд (Linux x64, SHA-256-перевірений). `Config.CreateDefault()`
+  більше не вимагає Java — її відсутність не кидає виняток на етапі реєстрації.
+  *(Офіційних native-білдів для Windows/macOS немає — там потрібна Java.)*
 - signal-cli оновлено до **v0.14.3** із перевіркою цілісності завантаження (SHA-256).
 - Граційне завершення signal-cli: ізоляція в окремій групі процесів (Windows, .NET 10)
   + конфігурований таймаут `Config.StopTimeoutSeconds` перед примусовим завершенням.
