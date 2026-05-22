@@ -69,7 +69,9 @@ public class SignalApiFacadeTests
             .FinishLink("sgnl://uri", "MyDevice");
 
         Assert.Equal("+380501234567", result.number);
-        Assert.NotNull(captured);
+        // Перевіряємо, що аргументи реально дійшли у параметри RPC (а не лише "не null")
+        Assert.Equal("sgnl://uri", captured!.deviceLinkUri);
+        Assert.Equal("MyDevice", captured.deviceName);
     }
 
     [Fact]
@@ -100,7 +102,8 @@ public class SignalApiFacadeTests
             .ListGroups("+380501234567");
 
         Assert.Same(expected, result);
-        Assert.NotNull(captured);
+        // account має дійти у параметри listGroups
+        Assert.Equal("+380501234567", captured!.Account);
     }
 
     // ---- SignalService (facade over IJsonRpcClientProvider) ----
