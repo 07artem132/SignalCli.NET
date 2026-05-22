@@ -254,7 +254,11 @@ internal class JsonRpcClient : IJsonRpcClient
 
             // Серіалізація запиту в JSON з використанням System.Text.Json
             var json = JsonSerializer.Serialize(req, SignalJson.Options);
-            if (json.Length > 20000000) // максимально дозволено 20000000 бібліотекою Jackson
+            // signal-cli парсить вхідний JSON через Jackson, у якого
+            // StreamReadConstraints.maxStringLength за замовчуванням = 20 000 000 символів.
+            // Тому великі вкладення передаються через temp-файли (див. SignalMessage),
+            // а тут — остання перевірка довжини всього рядка запиту.
+            if (json.Length > 20_000_000)
                 throw new InvalidOperationException("JSON параметри мають бути коротшими за 20000000 символів");
             // Відправка JSON у стандартний ввід
             await pair.StandardInput.WriteLineAsync(json).ConfigureAwait(false);

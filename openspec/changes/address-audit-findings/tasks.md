@@ -24,7 +24,7 @@
 - [x] 4.1 Sanitize `FileName` with `Path.GetFileName` in `AttachmentEntry.SaveToTempFile` and the `ToDataUri` `filename=` field (via `SafeFileName`)
 - [x] 4.2 Extract the inline-vs-tempfile size threshold into a named constant (`MaxInlineEncodedAttachmentBytes`)
 - [x] 4.3 Add a unit test proving a traversal file name stays inside the GUID temp directory
-- [ ] 4.4 Add a test for temp-file cleanup on send failure (finally-block cleanup already present in `SendUnifiedMessageAsync`)
+- [x] 4.4 Added `SignalMessageTests.SendAttachmentAsync_WhenSendFails_DeletesTempFiles`: a 12 MB attachment takes the temp-file path; the RPC mock captures the path and throws; the test asserts the temp file is removed by the `finally` block
 
 ## 5. Process argument safety (medium)
 

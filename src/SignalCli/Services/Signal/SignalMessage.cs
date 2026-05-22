@@ -17,9 +17,18 @@ namespace SignalCli.Services.Signal
         private readonly ILogger<SignalMessage> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         private bool _disposed;
 
-        // Якщо приблизний розмір вкладень після base64-кодування менший за цей поріг —
-        // передаємо їх інлайн (data URI), інакше зберігаємо у тимчасові файли та
-        // передаємо шляхи (signal-cli підтримує вкладення до ~100 МБ).
+        // signal-cli приймає вкладення двома способами:
+        //   1) data-URI з base64 — вбудовується прямо в JSON-RPC запит (не потребує
+        //      спільної файлової системи);
+        //   2) шлях до файлу — демон читає файл із диска (JSON лишається малим).
+        //
+        // ЧОМУ ВИБІР: signal-cli парсить вхідний JSON через Jackson, у якого
+        // StreamReadConstraints.maxStringLength за замовчуванням = 20 000 000 символів.
+        // base64 роздуває дані на 4/3 (X байт -> (X/3)*4 символів), тож великий інлайн
+        // перевищить цей ліміт і запит впаде (StreamConstraintsException).
+        // Поріг 15 000 000 закодованих символів тримає інлайн-варіант нижче 20M
+        // із запасом на решту полів JSON; вкладення більші за поріг ідуть через temp-файл.
+        // (Клієнт додатково перевіряє довжину всього рядка запиту проти 20 000 000.)
         private const long MaxInlineEncodedAttachmentBytes = 15_000_000;
 
         private async Task<SendMessageResponse> SendUnifiedMessageAsync(
@@ -94,10 +103,13 @@ namespace SignalCli.Services.Signal
             var attachmentEntries = attachments as IAttachmentEntry[] ??
                                     (attachments ?? Array.Empty<IAttachmentEntry>()).ToArray();
 
+            // Сумарний розмір після base64 (4/3 від сирого). Порівнюємо із порогом, нижчим
+            // за ліміт Jackson (див. MaxInlineEncodedAttachmentBytes), щоб вирішити спосіб передачі.
             var rawSize = attachmentEntries.Sum(x => (long)x.Data.Length);
-            var encodedSize = (rawSize / 3) * 4; // приблизний розмір після base64
+            var encodedSize = (rawSize / 3) * 4;
             if (encodedSize < MaxInlineEncodedAttachmentBytes)
             {
+                // Малий обсяг -> інлайн data-URI (JSON лишається в межах ліміту Jackson).
                 foreach (var attach in attachmentEntries)
                 {
                     if (attach is AttachmentEntry entry)
@@ -112,6 +124,7 @@ namespace SignalCli.Services.Signal
             }
             else
             {
+                // Великий обсяг -> temp-файли + шляхи, щоб JSON-рядок не перевищив ліміт Jackson.
                 foreach (var attach in attachmentEntries)
                 {
                     if (attach is AttachmentEntry entry)

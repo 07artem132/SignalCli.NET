@@ -28,7 +28,7 @@
 - [x] 4.1 `SignalJsonContext : JsonSerializerContext` (metadata mode), `[JsonSerializable]` for all RPC/model/event roots
 - [x] 4.2 `TypeInfoResolver = Combine(SignalJsonContext.Default, DefaultJsonTypeInfoResolver())` (reflection fallback for anon/JsonElement)
 - [x] 4.3 Round-trip suite passes unchanged (95/95) — context covers all types
-- [ ] 4.4 (Optional) `JsonSerializerIsReflectionEnabledByDefault=false` — deferred (would drop reflection fallback; needs anon-type removal)
+- [~] 4.4 (Optional) `JsonSerializerIsReflectionEnabledByDefault=false` — intentionally NOT done: reflection fallback (`Combine(context, DefaultJsonTypeInfoResolver())`) is kept by design so consumers can still pass anonymous param objects; full AOT/trim is out of scope. Documented as a design decision, not a gap.
 
 ## 5. Process-state unification ✅ DONE & GREEN
 
