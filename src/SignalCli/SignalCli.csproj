@@ -16,10 +16,10 @@
         <Authors>07artem132</Authors>
         <PackageId>SignalCli.NET</PackageId>
         <Version>2.0.0</Version>
-        <PackageProjectUrl>https://github.com/mil-development/SignalCli.NET</PackageProjectUrl>
+        <PackageProjectUrl>https://github.com/07artem132/SignalCli.NET</PackageProjectUrl>
         <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
         <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
-        <RepositoryUrl>https://github.com/mil-development/SignalCli.NET</RepositoryUrl>
+        <RepositoryUrl>https://github.com/07artem132/SignalCli.NET</RepositoryUrl>
         <IncludeContentFiles>true</IncludeContentFiles>
         <Description>SignalCli.NET — .NET-обгортка для signal-cli, яка забезпечує зручний та зрозумілий API для інтеграції месенджера Signal у ваші .NET-застосунки.</Description>
         <IncludeSymbols>true</IncludeSymbols>

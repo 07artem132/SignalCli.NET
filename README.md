@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](http://www.gnu.org/licenses/gpl-3.0.html)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/download/dotnet/10.0)
 [![Java](https://img.shields.io/badge/JDK-21+-007396)](https://www.oracle.com/java/technologies/javase-downloads.html)
-[![Build Status](https://github.com/mil-development/signal-cli-sharp-wrapper/actions/workflows/dotnet-desktop.yml/badge.svg)](https://github.com/mil-development/signal-cli-sharp-wrapper/actions/workflows/dotnet-desktop.yml)
+[![Build Status](https://github.com/07artem132/SignalCli.NET/actions/workflows/dotnet-desktop.yml/badge.svg)](https://github.com/07artem132/SignalCli.NET/actions/workflows/dotnet-desktop.yml)
 
 **Обгортка для signal-cli на базі .NET з підтримкою реактивного програмування**
 
@@ -48,11 +48,11 @@
 - **signal-cli v0.11.3+** — [Завантажити](https://github.com/AsamK/signal-cli/releases)
 
 ## 📦 Встановлення
-> Публікація ведеться через [організацію mil-development](https://github.com/mil-development)
+> Пакети публікуються в [GitHub Packages](https://github.com/07artem132/SignalCli.NET/pkgs/nuget) репозиторію.
 
 1. 🔐 Додайте джерело пакета GitHub Packages:
  ```bash
-dotnet nuget add source "https://nuget.pkg.github.com/mil-development/index.json" 
+dotnet nuget add source "https://nuget.pkg.github.com/07artem132/index.json" 
    --name github 
    --username USERNAME 
    --password GITHUB_TOKEN 
@@ -62,7 +62,7 @@ dotnet nuget add source "https://nuget.pkg.github.com/mil-development/index.json
 
 ```bash
  dotnet add package SignalCli.NET
- dotnet add package SignalCli.runtime
+ dotnet add package SignalCli.Runtime
 ```
 > ⚠️ **Зверніть увагу**  
 > Без додавання джерела з GitHub цей пакет не буде доступний.

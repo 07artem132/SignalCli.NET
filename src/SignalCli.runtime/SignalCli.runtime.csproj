@@ -9,6 +9,8 @@
         <PackageId>SignalCli.Runtime</PackageId>
         <Authors>07artem132</Authors>
         <Description>signal-cli Runtime NuGet Package</Description>
+        <PackageProjectUrl>https://github.com/07artem132/SignalCli.NET</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/07artem132/SignalCli.NET</RepositoryUrl>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
         <Version>0.14.3.1</Version>
