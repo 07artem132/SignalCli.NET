@@ -1,0 +1,13 @@
+<Project>
+
+  <!-- Спільні налаштування для всіх проєктів рішення -->
+  <PropertyGroup>
+    <!-- Аналізатори: рекомендований набір правил .NET -->
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <!-- Перевіряти стиль коду (.editorconfig) під час збірки -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- Поки що попередження НЕ робимо помилками (спершу розгребти борг) -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>
