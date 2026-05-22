@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <PackageId>SignalCli.Runtime.Native</PackageId>
+        <Authors>07artem132</Authors>
+        <Description>signal-cli native (GraalVM) runtime — Linux x64, Java НЕ потрібна. Використовуйте з Config.SignalCliExecutable.</Description>
+        <PackageProjectUrl>https://github.com/07artem132/SignalCli.NET</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/07artem132/SignalCli.NET</RepositoryUrl>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+        <Version>0.14.3.1</Version>
+        <AssemblyVersion>0.14.3.1</AssemblyVersion>
+        <FileVersion>0.14.3.1</FileVersion>
+    </PropertyGroup>
+
+    <!-- Завантаження нативного бінарника. Лише Linux: офіційного native-білда під
+         Windows/macOS немає. Пропускаємо, якщо вже завантажено або не Linux. -->
+    <Target Name="DownloadSignalCliNative" BeforeTargets="Build;Pack"
+            Condition="'$(OS)' != 'Windows_NT' and !Exists('$(BaseIntermediateOutputPath)signal-cli-native/signal-cli')">
+        <Message Text="🚀 Завантаження native signal-cli (без Java)..." Importance="High" />
+        <Exec Command="bash &quot;$(MSBuildThisFileDirectory)download-signal-cli-native.sh&quot; &quot;$(BaseIntermediateOutputPath)signal-cli-native&quot;" />
+    </Target>
+
+    <ItemGroup>
+        <!-- Нативний бінарник у buildTransitive; на боці споживача його копіює .targets -->
+        <None Include="$(BaseIntermediateOutputPath)signal-cli-native\**\*"
+              Pack="true"
+              PackagePath="buildTransitive\signal-cli-native\%(RecursiveDir)%(Filename)%(Extension)" />
+
+        <None Include="SignalCli.Native.targets"
+              Pack="true"
+              PackagePath="buildTransitive/SignalCli.Runtime.Native.targets" />
+    </ItemGroup>
+
+</Project>

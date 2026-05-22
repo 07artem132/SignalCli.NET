@@ -13,10 +13,12 @@ public class ConfigTests
 
         // 2) Настраиваем Config так, чтобы AppHome указывал на tempDir,
         //    а LibDirectory = "lib". Получим:  /tmp/xxx/lib
+        // JavaExecutable заданий -> JVM-режим -> ToProcessConfig викликає BuildClasspath
         var config = new Config
         {
             AppHome = tempDir,
-            LibDirectory = "lib"
+            LibDirectory = "lib",
+            JavaExecutable = "java"
         };
 
         // Создадим папку lib, но НЕ кладём туда *.jar-файлы
@@ -63,6 +65,34 @@ public class ConfigTests
 
         // 7) Очистка
         Directory.Delete(tempDir, recursive: true);
+    }
+
+    [Fact]
+    public void ToProcessConfig_NativeMode_LaunchesBinaryDirectlyWithoutJava()
+    {
+        // Native-режим: задано лише SignalCliExecutable, JAR-файлів і Java немає
+        var config = new Config
+        {
+            AppHome = Path.GetTempPath(),
+            SignalCliExecutable = "/opt/signal-cli/bin/signal-cli"
+        };
+
+        var pc = config.ToProcessConfig();
+
+        Assert.Equal("/opt/signal-cli/bin/signal-cli", pc.Executable);
+        Assert.NotNull(pc.ArgumentList);
+        // Жодного java/classpath/Main — бінарник запускається напряму
+        Assert.DoesNotContain("-classpath", pc.ArgumentList!);
+        Assert.DoesNotContain("org.asamk.signal.Main", pc.ArgumentList!);
+        Assert.Contains("jsonRpc", pc.ArgumentList!);
+        Assert.Contains(pc.ArgumentList!, a => a.StartsWith("--receive-mode="));
+    }
+
+    [Fact]
+    public void ToProcessConfig_NoJavaAndNoNative_Throws()
+    {
+        var config = new Config { AppHome = Path.GetTempPath() };
+        Assert.Throws<InvalidOperationException>(() => config.ToProcessConfig());
     }
 
     [Fact]

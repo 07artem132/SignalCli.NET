@@ -40,6 +40,10 @@ jobs:
       - name: Pack SignalCli.Runtime
         run: dotnet pack src/SignalCli.runtime/SignalCli.runtime.csproj -c Release --no-build -o "${{ github.workspace }}/nupkgs"
 
+      # Native runtime (Linux x64, без Java). Пакується на ubuntu-runner, де бінарник завантажено.
+      - name: Pack SignalCli.Runtime.Native
+        run: dotnet pack src/SignalCli.runtime.native/SignalCli.runtime.native.csproj -c Release --no-build -o "${{ github.workspace }}/nupkgs"
+
       - name: Push to GitHub Packages
         run: >
           dotnet nuget push "${{ github.workspace }}/nupkgs/*.nupkg"

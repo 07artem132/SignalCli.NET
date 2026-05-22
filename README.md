@@ -44,8 +44,8 @@
 ## 🔧 Вимоги
 
 - **.NET 10.0 (LTS)** або новіше — [Завантажити](https://dotnet.microsoft.com/download/dotnet/10.0)
-- **JDK 21+** — [Завантажити](https://www.oracle.com/java/technologies/javase-downloads.html)
-- **signal-cli v0.11.3+** — [Завантажити](https://github.com/AsamK/signal-cli/releases)
+- **JDK 21+** — [Завантажити](https://www.oracle.com/java/technologies/javase-downloads.html) — *не потрібна в native-режимі (Linux x64), див. нижче*
+- **signal-cli v0.14.3+** — [Завантажити](https://github.com/AsamK/signal-cli/releases)
 
 ## 📦 Встановлення
 > Пакети публікуються в [GitHub Packages](https://github.com/07artem132/SignalCli.NET/pkgs/nuget) репозиторію.
@@ -64,6 +64,28 @@ dotnet nuget add source "https://nuget.pkg.github.com/07artem132/index.json"
  dotnet add package SignalCli.NET
  dotnet add package SignalCli.Runtime
 ```
+
+### 🚫☕ Без Java (native-режим, Linux x64)
+
+signal-cli має офіційний **GraalVM native** збірку — самодостатній бінарник, якому **не потрібна Java**. Доступний лише для **Linux x64** (офіційних native-білдів для Windows/macOS немає).
+
+1. Замість `SignalCli.Runtime` підключіть нативний пакет:
+```bash
+ dotnet add package SignalCli.NET
+ dotnet add package SignalCli.Runtime.Native
+```
+2. Вкажіть шлях до нативного бінарника (його кладе пакет у вихідну папку):
+```csharp
+services.AddSignalCli(config =>
+{
+    config.AppHome = AppContext.BaseDirectory;
+    config.StoragePathCli = Path.Combine(AppContext.BaseDirectory, "SignalCliStorageData");
+    // Native-режим: Java не запускається взагалі
+    config.SignalCliExecutable = Path.Combine(AppContext.BaseDirectory, "signal-cli-native", "signal-cli");
+});
+```
+> Якщо `SignalCliExecutable` задано — бібліотека запускає бінарник напряму. Інакше використовується JVM-режим (`SignalCli.Runtime` + JDK 21+).
+> Для **Windows/macOS** офіційного native-білда немає → там потрібна Java (JVM-режим).
 > ⚠️ **Зверніть увагу**  
 > Без додавання джерела з GitHub цей пакет не буде доступний.
 
