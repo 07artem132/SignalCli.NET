@@ -2,7 +2,7 @@
 ![Lines](.github/badges/lines.svg) ![Methods](.github/badges/methods.svg) ![Branches](.github/badges/branches.svg)
 
 [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](http://www.gnu.org/licenses/gpl-3.0.html)
-[![.NET](https://img.shields.io/badge/.NET-9.0-512BD4)](https://dotnet.microsoft.com/download/dotnet/9.0)
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/download/dotnet/10.0)
 [![Java](https://img.shields.io/badge/JDK-21+-007396)](https://www.oracle.com/java/technologies/javase-downloads.html)
 [![Build Status](https://github.com/mil-development/signal-cli-sharp-wrapper/actions/workflows/dotnet-desktop.yml/badge.svg)](https://github.com/mil-development/signal-cli-sharp-wrapper/actions/workflows/dotnet-desktop.yml)
 
@@ -43,7 +43,7 @@
 
 ## 🔧 Вимоги
 
-- **.NET 9.0** або новіше — [Завантажити](https://dotnet.microsoft.com/download/dotnet/9.0)
+- **.NET 10.0 (LTS)** або новіше — [Завантажити](https://dotnet.microsoft.com/download/dotnet/10.0)
 - **JDK 21+** — [Завантажити](https://www.oracle.com/java/technologies/javase-downloads.html)
 - **signal-cli v0.11.3+** — [Завантажити](https://github.com/AsamK/signal-cli/releases)
 
@@ -101,7 +101,9 @@ using var host = Host.CreateDefaultBuilder(args)
     .ConfigureLogging(logging =>
     {
         logging.ClearProviders();
-        logging.SetMinimumLevel(LogLevel.Trace);
+        // ⚠️ Приватність: рівень Trace вмикає логування сирого JSON-RPC трафіку
+        // (тіла повідомлень, номери, вкладення). Для звичайної роботи лишайте Information.
+        logging.SetMinimumLevel(LogLevel.Information);
         logging.AddConsole();
     })
     .Build();
@@ -136,12 +138,15 @@ Console.WriteLine($"Пристрій успішно зв'язано. ID прис
 ```csharp
 var signalMessage = serviceProvider.GetRequiredService<ISignalMessage>();
 
-// Надсилання текстового повідомлення
-await signalMessage.SendTextMessageAsync(
-    account: "+380501234568",
-    recipients: new[] { new UserRecipient("+380501234567") },
-    message: "Привіт! *Це текст* з **форматуванням**.",
-    cancellationToken: CancellationToken.None);
+// Надсилання текстового повідомлення (через Builder + UseStyle для форматування)
+var options = new TextMessageOptions.Builder(
+        account: "+380501234568",
+        recipients: new List<IRecipient> { new UserRecipient("+380501234567") },
+        message: "Привіт! *Це текст* з **форматуванням**.")
+    .UseStyle()
+    .Build();
+
+await signalMessage.SendTextMessageAsync(options);
 ```
 
 ## ⚙️ API-можливості, доступні через обгортку
@@ -382,7 +387,9 @@ var host = Host.CreateDefaultBuilder(args)
     .ConfigureLogging(logging =>
     {
         logging.ClearProviders();
-        logging.SetMinimumLevel(LogLevel.Trace);
+        // ⚠️ Приватність: рівень Trace вмикає логування сирого JSON-RPC трафіку
+        // (тіла повідомлень, номери, вкладення). Для звичайної роботи лишайте Information.
+        logging.SetMinimumLevel(LogLevel.Information);
         logging.AddConsole();
     })
     .Build();
@@ -503,7 +510,7 @@ var attachmentSubscription = eventService.Attachments.Subscribe(attachment =>
 var reactionSubscription = eventService.Reaction.Subscribe(reaction =>
 {
     var emoji = reaction.DataMessage.Reaction.Emoji;
-    var remove = reaction.DataMessage.Reaction.Remove;
+    var remove = reaction.DataMessage.Reaction.IsRemove;
     var operation = remove ? "видалив(ла)" : "додав(ла)";
     
     Console.WriteLine($"[{DateTime.Now}] {reaction.SourceNumber ?? reaction.SourceUuid} {operation} реакцію {emoji}");
@@ -559,7 +566,7 @@ await signalMessage.SendTextMessageAsync(groupMessageOptions);
 var documentOptions = new AttachmentMessageOptions.Builder(
     account: accountNumber,
     recipients: new List<IRecipient> { userRecipient },
-    attachments: new List<IAttachmentEntry> { new AttachmentEntry(@"C:\Documents\report.pdf") }
+    attachments: new List<IAttachmentEntry> { new AttachmentEntry("report.pdf", File.ReadAllBytes(@"C:\Documents\report.pdf")) }
 )
 .WithMessage("Подивись документ, який я тобі надіслав:")
 .Build();
@@ -570,7 +577,7 @@ await signalMessage.SendAttachmentAsync(documentOptions);
 var imageOptions = new AttachmentMessageOptions.Builder(
     account: accountNumber,
     recipients: new List<IRecipient> { userRecipient },
-    attachments: new List<IAttachmentEntry> { new AttachmentEntry(@"C:\Photos\meeting.jpg") }
+    attachments: new List<IAttachmentEntry> { new AttachmentEntry("meeting.jpg", File.ReadAllBytes(@"C:\Photos\meeting.jpg")) }
 )
 .WithMessage("Ось фото з вчорашньої зустрічі:")
 .Build();
@@ -615,7 +622,7 @@ Signal підтримує вкладення розміром до 100 МБ. З�
 |------------|------------------------------------------------------|
 | Microsoft.Extensions.Hosting.Abstractions | Абстракції для інтеграції з хостингом .NET           |
 | Microsoft.Extensions.Logging.Abstractions | Абстракції для логування                             |
-| Newtonsoft.Json | Робота з JSON (у планах перехід на System.Text.Json) |
+| System.Text.Json | Робота з JSON (вбудована в .NET) |
 | Nito.AsyncEx | Утиліта для асинхронного програмування               |
 | System.Reactive | Бібліотека для реактивного програмування             |
 
@@ -623,7 +630,6 @@ Signal підтримує вкладення розміром до 100 МБ. З�
 
 Запрошую всіх бажаючих до участі в розвитку проекту! Ось деякі напрямки, де потрібна допомога:
 
-- ✅ Перехід на System.Text.Json
 - ✅ Реалізація методів API Signal, яких бракує
 - ✅ Тестування на Linux та macOS
 - ✅ Покращення документації та прикладів
@@ -646,7 +652,7 @@ Signal підтримує вкладення розміром до 100 МБ. З�
 
 - [signal-cli](https://github.com/AsamK/signal-cli)
 - [System.Reactive](https://github.com/dotnet/reactive)
-- [Newtonsoft.Json](https://github.com/JamesNK/Newtonsoft.Json)
+- [System.Text.Json](https://learn.microsoft.com/dotnet/standard/serialization/system-text-json/)
 - [Nito.AsyncEx](https://github.com/StephenCleary/AsyncEx)
 
 ---

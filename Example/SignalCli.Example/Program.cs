@@ -10,7 +10,7 @@ using SignalCli.Models.Signal.Message;
 
 namespace SignalCli.Example
 {
-    internal class Program
+    internal sealed class Program
     {
         static void Main(string[] args)
         {
@@ -43,7 +43,6 @@ namespace SignalCli.Example
 
             // Получаем ISignalEventService
             var eventService = host.Services.GetRequiredService<ISignalEventService>();
-            Task<SubscribeReceiveResponse> eventId  ;
             // Подписываемся на текстовые сообщения:
 
 
@@ -83,9 +82,9 @@ namespace SignalCli.Example
 
                 var groups = await signalGroups.ListGroups(result[0].Number);
                 var group = groups.Where(group => group.IsMember)
-                    .FirstOrDefault(group => group.Name.Contains("test cli"));
+                    .FirstOrDefault(group => group.Name?.Contains("test cli") == true);
                 var group2 = groups.Where(group => group.IsMember)
-                    .FirstOrDefault(group => group.Name.Contains("test cl2"));
+                    .FirstOrDefault(group => group.Name?.Contains("test cl2") == true);
                 Task<SubscribeReceiveResponse> eventId = eventService.SubscribeAsync(result[0].Number);
                 
                 /* var response = await signalMessage.SendTextMessageAsync(
