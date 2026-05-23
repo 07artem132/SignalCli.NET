@@ -22,6 +22,7 @@ public class JsonRpcClientTests
     public JsonRpcClientTests()
     {
         _loggerMock = new Mock<ILogger<JsonRpcClient>>();
+        _loggerMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         _streamProviderMock = new Mock<IStreamPairProvider>();
         _streamPairSubject = new Subject<StreamPair?>();
 
@@ -48,10 +49,11 @@ public class JsonRpcClientTests
             LibDirectory = string.Empty,
             RequestTimeoutSeconds = requestTimeoutSeconds
         };
+        // D.4: JsonRpcClient тепер приймає SignalCliOptions; конвертуємо legacy Config.
         return new JsonRpcClient(
             _loggerMock.Object,
             _streamProviderMock.Object,
-            config
+            config.ToOptions()
         );
     }
 
@@ -128,7 +130,8 @@ public class JsonRpcClientTests
         var invokeTask = client.InvokeMethodAsync<object, object>("test", new { });
 
         // Act
-        client.Dispose(); // Диспоз → отмена всех pending-запросов
+        // A.6: IJsonRpcClient тепер IAsyncDisposable-only.
+        await client.DisposeAsync();
 
         // Assert
         await Assert.ThrowsAsync<TaskCanceledException>(() => invokeTask);

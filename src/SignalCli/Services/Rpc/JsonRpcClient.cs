@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using SignalCli.Exceptions;
 using SignalCli.Interfaces.Rpc;
 using SignalCli.Interfaces.SignalCli;
+using SignalCli.Logging;
 using SignalCli.Models;
 using SignalCli.Models.Rpc;
 using SignalCli.Models.Signal.Events;
@@ -24,7 +25,7 @@ namespace SignalCli.Services.Rpc;
 /// та коректний lifecycle читачів stdout/stderr: цикли скасовуються та чекаються до
 /// завершення на зміні <see cref="StreamPair"/> й при <see cref="DisposeAsync"/>.
 /// </remarks>
-internal sealed class JsonRpcClient : IJsonRpcClient, IAsyncDisposable
+internal sealed class JsonRpcClient : IJsonRpcClient
 {
     private readonly ILogger<JsonRpcClient> _logger;
     private readonly IStreamPairProvider _streamProvider;
@@ -34,6 +35,9 @@ internal sealed class JsonRpcClient : IJsonRpcClient, IAsyncDisposable
     private readonly Nito.AsyncEx.AsyncLock _sendLock = new();
     private readonly AtomicCounter _requestIdCounter = new();
     private readonly CompositeDisposable _disposables = new();
+    // A.9: маркерний токен для скасування pending-requests при DisposeAsync.
+    // Тримаємо як поле, щоб TrySetCanceled нес його у OperationCanceledException.
+    private readonly CancellationTokenSource _disposeCts = new();
     private bool _disposed;
 
     // Стан читачів захищаємо окремим локом, бо OnStreamPairChanged, StartReading
@@ -50,14 +54,15 @@ internal sealed class JsonRpcClient : IJsonRpcClient, IAsyncDisposable
     /// </summary>
     /// <param name="logger">Логер для запису діагностичної інформації.</param>
     /// <param name="streamProvider">Постачальник потоків для взаємодії з зовнішнім процесом.</param>
-    /// <param name="config">Конфігурація — для отримання <see cref="Config.RequestTimeoutSeconds"/>.</param>
-    public JsonRpcClient(ILogger<JsonRpcClient> logger,
+    /// <param name="options">Конфігурація — для отримання <see cref="SignalCliOptions.RequestTimeoutSeconds"/>.</param>
+    /// <remarks>D.4: приймає типовану <see cref="SignalCliOptions"/> замість legacy <c>Config</c>.</remarks>
+    internal JsonRpcClient(ILogger<JsonRpcClient> logger,
         IStreamPairProvider streamProvider,
-        Config config)
+        SignalCliOptions options)
     {
         _logger = logger;
         _streamProvider = streamProvider;
-        var timeoutSeconds = Math.Max(1, config?.RequestTimeoutSeconds ?? 30);
+        var timeoutSeconds = Math.Max(1, options?.RequestTimeoutSeconds ?? 30);
         _requestTimeout = TimeSpan.FromSeconds(timeoutSeconds);
 
         // Коли StreamPair змінюється — скидаємо всі pendingRequests і перезапускаємо читачів.
@@ -79,10 +84,13 @@ internal sealed class JsonRpcClient : IJsonRpcClient, IAsyncDisposable
     {
         if (_disposed) return;
 
-        // Скасовуємо всі очікуючі запити: пара змінилась — старі id більше не отримають відповідь.
+        // A.9: скасовуємо pending-requests маркерним токеном з причини «stream pair замінено».
+        // Власник запиту отримає OperationCanceledException, де CancellationToken == streamChangedCts.Token.
+        using var streamChangedCts = new CancellationTokenSource();
+        streamChangedCts.Cancel();
         foreach (var kv in _pendingRequests)
         {
-            kv.Value.TrySetCanceled();
+            kv.Value.TrySetCanceled(streamChangedCts.Token);
         }
 
         _pendingRequests.Clear();
@@ -173,7 +181,7 @@ internal sealed class JsonRpcClient : IJsonRpcClient, IAsyncDisposable
         }
         catch (TimeoutException)
         {
-            _logger.LogWarning("Очікування завершення reader-циклів перевищило таймаут — продовжуємо disposal");
+            JsonRpcClientLog.ReaderStopTimeout(_logger);
         }
         catch (Exception)
         {
@@ -205,7 +213,7 @@ internal sealed class JsonRpcClient : IJsonRpcClient, IAsyncDisposable
                     var line = await pair.StandardOutput.ReadLineAsync(token).ConfigureAwait(false);
                     if (line is null) break;
                     // ПРИВАТНІСТЬ: сирий рядок містить вміст повідомлень/вкладення — лише Trace.
-                    _logger.LogTrace("Отримано рядок від signal-cli: {Line}", line);
+                    JsonRpcClientLog.StdoutLine(_logger, line);
                     ProcessMessage(line);
                 }
             }
@@ -214,7 +222,7 @@ internal sealed class JsonRpcClient : IJsonRpcClient, IAsyncDisposable
             // одна помилка не повинна зупиняти процес (логуємо й виходимо).
             catch (Exception ex) when (!_disposed && !token.IsCancellationRequested)
             {
-                _logger.LogError(ex, "Помилка читання з виходу процесу");
+                JsonRpcClientLog.StdoutReadFailed(_logger, ex);
             }
         }, token);
 
@@ -227,13 +235,13 @@ internal sealed class JsonRpcClient : IJsonRpcClient, IAsyncDisposable
                 {
                     var line = await pair.StandardError.ReadLineAsync(token).ConfigureAwait(false);
                     if (line is null) break;
-                    _logger.LogTrace("STDERR> {Line}", line);
+                    JsonRpcClientLog.StderrLine(_logger, line);
                 }
             }
             catch (OperationCanceledException) { /* очікувано на скасуванні */ }
             catch (Exception ex) when (!_disposed && !token.IsCancellationRequested)
             {
-                _logger.LogError(ex, "Помилка читання stderr процесу");
+                JsonRpcClientLog.StderrReadFailed(_logger, ex);
             }
         }, token);
 
@@ -267,7 +275,7 @@ internal sealed class JsonRpcClient : IJsonRpcClient, IAsyncDisposable
                     var response = rootElement.Deserialize<JsonRpcResponse>(SignalJson.Options);
                     if (!tcs.TrySetResult(response))
                     {
-                        _logger.LogWarning("Не вдалося встановити результат");
+                        JsonRpcClientLog.TrySetResultFailed(_logger);
                     }
 
                     return;
@@ -280,8 +288,8 @@ internal sealed class JsonRpcClient : IJsonRpcClient, IAsyncDisposable
                 {
                     // ПРИВАТНІСТЬ: RawParams містить вміст повідомлення — не логуємо його.
                     // На рівні Debug — лише метод; повний JSON доступний лише на Trace.
-                    _logger.LogDebug("Отримано повідомлення: Method={Method}", notificationRaw.Method);
-                    _logger.LogTrace("RawParams={Json}", notificationRaw.Params.GetRawText());
+                    JsonRpcClientLog.NotificationMethod(_logger, notificationRaw.Method);
+                    JsonRpcClientLog.NotificationRawParams(_logger, notificationRaw.Params.GetRawText());
 
                     // Далі «до-десеріалізуємо» Params у типізований об'єкт
                     var subscriptionEventArgs =
@@ -299,17 +307,17 @@ internal sealed class JsonRpcClient : IJsonRpcClient, IAsyncDisposable
                 }
             }
 
-            _logger.LogWarning("Невідоме повідомлення: {Json}", jsonLine);
+            JsonRpcClientLog.UnknownMessage(_logger, jsonLine);
         }
         catch (JsonException ex)
         {
-            _logger.LogError(ex, "Помилка розбору JSON: {Line}", jsonLine);
+            JsonRpcClientLog.JsonParseFailed(_logger, ex, jsonLine);
         }
         // Навмисний широкий catch: одне некоректне повідомлення не повинно
         // зривати обробку наступних (логуємо й продовжуємо).
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Неочікувана помилка обробки JSON-рядка: {Line}", jsonLine);
+            JsonRpcClientLog.UnexpectedProcessMessage(_logger, ex, jsonLine);
         }
     }
 
@@ -416,24 +424,15 @@ internal sealed class JsonRpcClient : IJsonRpcClient, IAsyncDisposable
             await pair.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
 
             // ПРИВАТНІСТЬ: json містить тіло повідомлення/вкладення — лише Trace.
-            _logger.LogTrace("Відправлено JSON-RPC запит: {Json}", json);
+            JsonRpcClientLog.SentRequest(_logger, json);
         }
     }
 
-    /// <summary>
-    /// Виконує очищення та вивільнення ресурсів (синхронна версія —
-    /// делегує асинхронній і чекає на завершення).
-    /// </summary>
-    public void Dispose()
-    {
-        if (_disposed) return;
-        // Викликаємо асинхронний шлях й блокуємось на ньому: для бекенду це коректно,
-        // бо StopReadersAsync має бути обмежений ReaderStopTimeout.
-        try { DisposeAsync().AsTask().GetAwaiter().GetResult(); }
-        catch { /* ковтаємо: помилки вже залоговано всередині */ }
-    }
-
     /// <inheritdoc />
+    /// <remarks>
+    /// A.6: <c>IDisposable</c> прибрано з контракту — асинхронний cleanup має тут
+    /// канонічний шлях через <see cref="IAsyncDisposable.DisposeAsync"/>.
+    /// </remarks>
     public async ValueTask DisposeAsync()
     {
         if (_disposed) return;
@@ -443,15 +442,19 @@ internal sealed class JsonRpcClient : IJsonRpcClient, IAsyncDisposable
         _disposables.Dispose();
         await StopReadersAsync().ConfigureAwait(false);
 
-        // 2) Скасовуємо всі очікуючі запити.
+        // 2) A.9: скасовуємо очікуючі запити з токеном диспозу — викликач побачить
+        //    OperationCanceledException, де CancellationToken == _disposeCts.Token.
+        _disposeCts.Cancel();
         foreach (var kv in _pendingRequests.Values)
         {
-            kv.TrySetCanceled();
+            kv.TrySetCanceled(_disposeCts.Token);
         }
         _pendingRequests.Clear();
 
         // 3) Звільняємо потік нотифікацій.
         _notificationSubject.OnCompleted();
         _notificationSubject.Dispose();
+
+        _disposeCts.Dispose();
     }
 }

@@ -14,6 +14,7 @@ public class ProcessRunnerTests
     {
         // Arrange
         var loggerMock = new Mock<ILogger<ProcessRunner>>();
+        loggerMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         var processFactoryMock = new Mock<IProcessFactory>();
         var runner = new ProcessRunner(loggerMock.Object, processFactoryMock.Object);
 
@@ -27,6 +28,7 @@ public class ProcessRunnerTests
     {
         // Arrange
         var loggerMock = new Mock<ILogger<ProcessRunner>>();
+        loggerMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         var processFactoryMock = new Mock<IProcessFactory>();
         var runner = new ProcessRunner(loggerMock.Object, processFactoryMock.Object);
 
@@ -49,6 +51,7 @@ public class ProcessRunnerTests
     {
         // Arrange
         var loggerMock = new Mock<ILogger<ProcessRunner>>();
+        loggerMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
 
         var mockProcess = new Mock<IProcess>();
         // При виклику Start() повернемо false
@@ -81,6 +84,7 @@ public class ProcessRunnerTests
     {
         // Arrange
         var loggerMock = new Mock<ILogger<ProcessRunner>>();
+        loggerMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
 
         var mockProcess = new Mock<IProcess>();
         // Припустимо, Start() поверне true.
@@ -158,6 +162,7 @@ public class ProcessRunnerTests
     {
         // Arrange
         var loggerMock = new Mock<ILogger<ProcessRunner>>();
+        loggerMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
 
         var mockProcess = new Mock<IProcess>();
         mockProcess.Setup(p => p.Start(It.IsAny<CancellationToken>())).Returns(true);

@@ -31,6 +31,8 @@ public abstract class SignalCliHealthMonitorTestBase : IDisposable
     {
         // 1. Логгер для HealthMonitor
         LoggerMonitorMock = new Mock<ILogger<Services.SignalCli.SignalCliHealthMonitor>>();
+        // C.8: source-generated [LoggerMessage] методи спершу перевіряють IsEnabled.
+        LoggerMonitorMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
 
         // 2. Моки для JSON-RPC
         JsonRpcClientMock = new Mock<IJsonRpcClient>();
@@ -49,6 +51,7 @@ public abstract class SignalCliHealthMonitorTestBase : IDisposable
 
         // 3. Моки для HostedService
         _loggerServiceMock = new Mock<ILogger<Services.SignalCli.SignalCliHostedService>>();
+        _loggerServiceMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         ProcessRunnerMock = new Mock<IProcessRunner>();
 
         // Настраиваем возвращение мок-процесса и стримов при запуске
@@ -72,6 +75,7 @@ public abstract class SignalCliHealthMonitorTestBase : IDisposable
             });
 
         var loggerSmMock = new Mock<ILogger<ProcessStateManager>>();
+        loggerSmMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         StateManager = new ProcessStateManager(loggerSmMock.Object);
 
         // 4. Конфиг для SignalCliHostedService
@@ -103,7 +107,7 @@ public abstract class SignalCliHealthMonitorTestBase : IDisposable
             _loggerServiceMock.Object,
             ProcessRunnerMock.Object,
             StateManager,
-            ServiceConfig
+            ServiceConfig.ToIOptions()
         );
     }
 
@@ -117,7 +121,7 @@ public abstract class SignalCliHealthMonitorTestBase : IDisposable
             LoggerMonitorMock.Object,
             _clientProviderMock.Object,
             hostedService,
-            ServiceConfig,
+            ServiceConfig.ToIOptions(),
             timeProvider
         );
     }

@@ -163,19 +163,25 @@ public class SignalCliHostedServiceRestartTests : SignalCliHostedServiceTestsBas
     public async Task ForceRestartAsync_ShouldRespectRestartDelay()
     {
         // Arrange
+        // B.6: Task.Delay у ForceRestartAsync — через TimeProvider. Тест перевіряє, що рестарт
+        // НЕ завершиться, поки віртуальний час не зрушено на RestartDelaySeconds (а потім — завершиться).
         Config.RestartDelaySeconds = 1;
-        var service = CreateService();
+        var fakeTime = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(DateTimeOffset.UtcNow);
+        var service = CreateService(fakeTime);
         await service.StartAsync(CancellationToken.None);
-        
-        var sw = System.Diagnostics.Stopwatch.StartNew();
 
         // Act
-        await service.ForceRestartAsync(CancellationToken.None);
-        sw.Stop();
+        var restartTask = service.ForceRestartAsync(CancellationToken.None);
+        // Даємо ForceRestartAsync дійти до Task.Delay (stop → state-update → delay).
+        for (int i = 0; i < 20 && !restartTask.IsCompleted; i++)
+            await Task.Yield();
+        Assert.False(restartTask.IsCompleted, "ForceRestartAsync завершився до Advance — затримка не дотримана");
+
+        fakeTime.Advance(TimeSpan.FromSeconds(1));
+        await restartTask;
 
         // Assert
-        Assert.True(sw.ElapsedMilliseconds >= 1000, 
-            "Restart should respect RestartDelaySeconds configuration");
+        Assert.True(restartTask.IsCompletedSuccessfully);
     }
 
     [Fact]

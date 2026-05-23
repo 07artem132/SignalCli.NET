@@ -3,6 +3,7 @@ using System.Reactive.Subjects;
 using System.Reactive.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using SignalCli.Interfaces.SignalCli;
+using SignalCli.Logging;
 using SignalCli.Models.SignalCli;
 
 namespace SignalCli.Services.SignalCli;
@@ -89,12 +90,12 @@ public sealed class ProcessStateManager : IProcessStateNotifier, IDisposable
             {
                 // Тихо ігноруємо запізнілі переходи, щоб не зривати ні викликача,
                 // ні фоновий handler (наприклад, OnProcessExited після Dispose).
-                _logger.LogDebug("UpdateState({NewState}) проігноровано — ProcessStateManager уже задиспоужений.", newState);
+                ProcessStateManagerLog.UpdateStateAfterDispose(_logger, newState);
                 return;
             }
 
             _currentStateInfo = new ProcessStateInfo(newState, streamPair, error);
-            _logger.LogInformation("Стан процесу змінено на {NewState}", newState);
+            ProcessStateManagerLog.StateChanged(_logger, newState);
             _stateSubject.OnNext(_currentStateInfo);
         }
     }

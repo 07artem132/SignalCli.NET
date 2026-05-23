@@ -1,6 +1,7 @@
 using JetBrains.Annotations;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using SignalCli.Interfaces.Rpc;
 using SignalCli.Interfaces.Signal;
 using SignalCli.Interfaces.SignalCli;
@@ -21,62 +22,72 @@ public static class ServiceCollectionExtensions
     extension(IServiceCollection services)
     {
         /// <summary>
-        /// Додає всі необхідні сервіси для роботи з Signal CLI до контейнера DI.
+        /// Додає всі необхідні сервіси для роботи з Signal CLI до контейнера DI
+        /// з використанням <see cref="IOptions{TOptions}"/> + типізованою валідацією.
+        /// </summary>
+        /// <param name="configureOptions">Делегат для налаштування <see cref="SignalCliOptions"/>.</param>
+        /// <returns>Колекція сервісів з доданими сервісами Signal CLI.</returns>
+        /// <remarks>
+        /// <para>
+        /// D.2/D.4: налаштовує <see cref="OptionsBuilder{TOptions}"/> для <see cref="SignalCliOptions"/>:
+        /// <c>ValidateDataAnnotations()</c> для атрибутів <c>[Required]</c>/<c>[Range]</c>,
+        /// плюс додаткова перевірка «<see cref="SignalCliOptions.JavaExecutable"/> АБО
+        /// <see cref="SignalCliOptions.SignalCliExecutable"/> має бути задано», плюс
+        /// compile-time-генерований <see cref="SignalCliOptionsValidator"/> (D.9).
+        /// </para>
+        /// <para>
+        /// Валідація виконується «лазі» при першому доступі до <c>IOptions&lt;SignalCliOptions&gt;.Value</c>
+        /// — а саме у конструкторі <see cref="SignalCliHostedService"/>. Якщо опції
+        /// некоректні, <c>StartAsync</c> хоста кидає <see cref="OptionsValidationException"/>.
+        /// </para>
+        /// <para>Реєстрація ідемпотентна.</para>
+        /// </remarks>
+        public IServiceCollection AddSignalCli(Action<SignalCliOptions>? configureOptions)
+        {
+            if (services.Any(d => d.ServiceType == typeof(IOptions<SignalCliOptions>)
+                                  || d.ServiceType == typeof(SignalCliOptions)))
+                return services;
+
+            ConfigureOptions(services, configureOptions);
+            RegisterCoreServices(services);
+            return services;
+        }
+
+        /// <summary>
+        /// Додає всі необхідні сервіси для роботи з Signal CLI до контейнера DI (legacy-overload).
         /// </summary>
         /// <param name="configure">
-        /// Делегат для налаштування конфігурації Signal CLI. Може бути <c>null</c> —
-        /// тоді використовується <see cref="Config.CreateDefault"/> без подальших змін.
+        /// Делегат для налаштування <see cref="Config"/>. Може бути <c>null</c> — тоді
+        /// використовується <see cref="Config.CreateDefault"/> без подальших змін.
         /// </param>
         /// <returns>Колекція сервісів з доданими сервісами Signal CLI.</returns>
         /// <remarks>
-        /// Реєстрація ідемпотентна (F23/H.23): повторні виклики не дублюють hosted-сервіси.
-        /// Конфігурація з ПЕРШОГО виклику залишається активною; пізніші <paramref name="configure"/>
-        /// при повторній реєстрації ігноруються (це навмисно — щоб не змінювати поведінку «гаряче»).
+        /// <para>
+        /// D.3: legacy-overload. Внутрішньо адаптує <see cref="Config"/> у
+        /// <see cref="SignalCliOptions"/> — усі решта сервісів працюють з <c>IOptions</c>-моделлю.
+        /// </para>
+        /// <para>
+        /// Рекомендується новий overload із <see cref="SignalCliOptions"/>, що дає
+        /// явну типізовану валідацію (DataAnnotations + ValidateOnStart). Цей метод
+        /// буде видалений у 3.0.
+        /// </para>
         /// </remarks>
+        [Obsolete("Use AddSignalCli(Action<SignalCliOptions>?) — has DataAnnotations validation + ValidateOnStart. Will be removed in 3.0.")]
         public IServiceCollection AddSignalCli(Action<Config>? configure)
         {
-            // H.23: ідемпотентність — якщо Config уже зареєстровано, нічого не робимо.
-            // Це покриває випадок, коли AddSignalCli викликається двічі (напр., у тестах
-            // або при модульній реєстрації) — у нас усі сервіси — singletons, дубль
-            // hosted-service-ів призвів би до двох процесів signal-cli.
-            if (services.Any(d => d.ServiceType == typeof(Config)))
+            if (services.Any(d => d.ServiceType == typeof(IOptions<SignalCliOptions>)
+                                  || d.ServiceType == typeof(SignalCliOptions)))
                 return services;
 
-            // 1) Конфігурація
-            var config = Config.CreateDefault();
-            configure?.Invoke(config);
-            services.AddSingleton(config);
-
-            // 2) Менеджер стану процесу
-            services.TryAddSingleton<ProcessStateManager>();
-
-            // 3) Запуск процесу
-            services.TryAddSingleton<IProcessFactory, ProcessFactory>();
-            services.TryAddSingleton<IProcessRunner, ProcessRunner>();
-
-            // 4) Об'єднаний HostedService
-            services.TryAddSingleton<SignalCliHostedService>();
-            services.AddHostedService(sp => sp.GetRequiredService<SignalCliHostedService>());
-
-            // 4.1) Реєстрація як IStreamPairProvider
-            services.TryAddSingleton<IStreamPairProvider>(sp => sp.GetRequiredService<SignalCliHostedService>());
-
-            // Інші сервіси (JsonRpcClientFactory, JsonRpcClientHostedService, SignalService, SignalMessage)
-            services.TryAddSingleton<IJsonRpcClientFactory, JsonRpcClientFactory>();
-            services.TryAddSingleton<JsonRpcClientHostedService>();
-            services.AddHostedService(sp => sp.GetRequiredService<JsonRpcClientHostedService>());
-            services.TryAddSingleton<IJsonRpcClientProvider>(sp => sp.GetRequiredService<JsonRpcClientHostedService>());
-
-            services.TryAddSingleton<ISignalCliClient, SignalService>();
-            services.TryAddSingleton<ISignalMessage, SignalMessage>();
-            services.TryAddSingleton<ISignalDevices, SignalDevices>();
-            services.TryAddSingleton<ISignalAccounts, SignalAccounts>();
-            services.TryAddSingleton<ISignalGroups, SignalGroups>();
-
-            // 5) Реєстрація HealthMonitor (також як HostedService)
-            services.TryAddSingleton<SignalCliHealthMonitor>();
-            services.AddHostedService(sp => sp.GetRequiredService<SignalCliHealthMonitor>());
-
+            // Legacy шлях: будуємо Config через CreateDefault, конвертуємо у SignalCliOptions.
+            ConfigureOptions(services, o =>
+            {
+                var legacy = Config.CreateDefault();
+                configure?.Invoke(legacy);
+                var snapshot = legacy.ToOptions();
+                CopyFrom(snapshot, o);
+            });
+            RegisterCoreServices(services);
             return services;
         }
 
@@ -97,5 +108,81 @@ public static class ServiceCollectionExtensions
             services.AddHostedService(sp => sp.GetRequiredService<ISignalEventService>());
             return services;
         }
+    }
+
+    /// <summary>
+    /// D.4: реєструє <see cref="IOptions{SignalCliOptions}"/> з валідаторами.
+    /// </summary>
+    private static void ConfigureOptions(IServiceCollection services, Action<SignalCliOptions>? configureOptions)
+    {
+        var builder = services.AddOptions<SignalCliOptions>();
+        if (configureOptions != null)
+            builder.Configure(configureOptions);
+        builder
+            .ValidateDataAnnotations()
+            .Validate(
+                o => !string.IsNullOrEmpty(o.JavaExecutable) || !string.IsNullOrEmpty(o.SignalCliExecutable),
+                "Потрібно задати JavaExecutable (для JVM-режиму) АБО SignalCliExecutable (для native-режиму).");
+
+        // D.9: компайл-тайм-валідатор (без reflection, AOT-safe).
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IValidateOptions<SignalCliOptions>, SignalCliOptionsValidator>());
+    }
+
+    /// <summary>Поле-в-поле копіювання SignalCliOptions snapshot → інстанс із Options-фреймворку.</summary>
+    private static void CopyFrom(SignalCliOptions src, SignalCliOptions dst)
+    {
+        dst.AppHome = src.AppHome;
+        dst.LibDirectory = src.LibDirectory;
+        dst.JavaExecutable = src.JavaExecutable;
+        dst.SignalCliExecutable = src.SignalCliExecutable;
+        dst.CliLogLevelCli = src.CliLogLevelCli;
+        dst.LogFileCli = src.LogFileCli;
+        dst.StoragePathCli = src.StoragePathCli;
+        dst.UseManualReceiveMode = src.UseManualReceiveMode;
+        dst.MaxRestartAttempts = src.MaxRestartAttempts;
+        dst.HealthCheckIntervalSeconds = src.HealthCheckIntervalSeconds;
+        dst.HealthCheckTimeoutSeconds = src.HealthCheckTimeoutSeconds;
+        dst.RestartDelaySeconds = src.RestartDelaySeconds;
+        dst.StopTimeoutSeconds = src.StopTimeoutSeconds;
+        dst.RequestTimeoutSeconds = src.RequestTimeoutSeconds;
+        dst.RestartWindowSeconds = src.RestartWindowSeconds;
+        dst.EnvironmentVariables = src.EnvironmentVariables;
+    }
+
+    /// <summary>
+    /// Спільна реєстрація сервісів для обох overload-ів <c>AddSignalCli</c>.
+    /// </summary>
+    private static void RegisterCoreServices(IServiceCollection services)
+    {
+        // Менеджер стану процесу
+        services.TryAddSingleton<ProcessStateManager>();
+
+        // Запуск процесу
+        services.TryAddSingleton<IProcessFactory, ProcessFactory>();
+        services.TryAddSingleton<IProcessRunner, ProcessRunner>();
+
+        // Об'єднаний HostedService
+        services.TryAddSingleton<SignalCliHostedService>();
+        services.AddHostedService(sp => sp.GetRequiredService<SignalCliHostedService>());
+
+        // Реєстрація як IStreamPairProvider
+        services.TryAddSingleton<IStreamPairProvider>(sp => sp.GetRequiredService<SignalCliHostedService>());
+
+        // Інші сервіси
+        services.TryAddSingleton<IJsonRpcClientFactory, JsonRpcClientFactory>();
+        services.TryAddSingleton<JsonRpcClientHostedService>();
+        services.AddHostedService(sp => sp.GetRequiredService<JsonRpcClientHostedService>());
+        services.TryAddSingleton<IJsonRpcClientProvider>(sp => sp.GetRequiredService<JsonRpcClientHostedService>());
+
+        services.TryAddSingleton<ISignalCliClient, SignalService>();
+        services.TryAddSingleton<ISignalMessage, SignalMessage>();
+        services.TryAddSingleton<ISignalDevices, SignalDevices>();
+        services.TryAddSingleton<ISignalAccounts, SignalAccounts>();
+        services.TryAddSingleton<ISignalGroups, SignalGroups>();
+
+        // HealthMonitor (також як HostedService)
+        services.TryAddSingleton<SignalCliHealthMonitor>();
+        services.AddHostedService(sp => sp.GetRequiredService<SignalCliHealthMonitor>());
     }
 }

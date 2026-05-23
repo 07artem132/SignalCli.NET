@@ -1,0 +1,44 @@
+using Microsoft.Extensions.Logging;
+
+namespace SignalCli.Logging;
+
+/// <summary>
+/// C.4: source-generated логи для <see cref="Services.Signal.SignalEventService"/>.
+/// EventId-блок 500–599.
+/// </summary>
+internal static partial class SignalEventServiceLog
+{
+    [LoggerMessage(EventId = 500, Level = LogLevel.Debug, Message = "{Type}")]
+    public static partial void DebugMessage(ILogger logger, string type);
+
+    [LoggerMessage(EventId = 501, Level = LogLevel.Information,
+        Message = "SubscribeAsync: обліковий запис={Account}, ідентифікатор підписки={SubId}")]
+    public static partial void Subscribed(ILogger logger, string account, int subId);
+
+    [LoggerMessage(EventId = 502, Level = LogLevel.Warning, Message = "Не знайдено підписку з ідентифікатором={SubId}")]
+    public static partial void UnsubscribeMissing(ILogger logger, int subId);
+
+    [LoggerMessage(EventId = 503, Level = LogLevel.Information,
+        Message = "Відписка успішна: Обліковий запис={Account}, ІдПідписки={SubscriptionId}")]
+    public static partial void Unsubscribed(ILogger logger, string account, int subscriptionId);
+
+    [LoggerMessage(EventId = 504, Level = LogLevel.Warning, Message = "Сповіщення без Envelope, пропускаємо...")]
+    public static partial void EnvelopeMissing(ILogger logger);
+
+    [LoggerMessage(EventId = 505, Level = LogLevel.Debug, Message = "Подія для неактуальної підписки {SubId}, ігноруємо.")]
+    public static partial void StaleSubscription(ILogger logger, int subId);
+
+    [LoggerMessage(EventId = 506, Level = LogLevel.Debug,
+        Message = "DataMessage без впізнаваного payload (пусте/групове-метадані) — пропускаємо.")]
+    public static partial void DataMessageEmpty(ILogger logger);
+
+    [LoggerMessage(EventId = 507, Level = LogLevel.Debug, Message = "Невідомий тип події, пропускаємо...")]
+    public static partial void UnknownEnvelope(ILogger logger);
+
+    [LoggerMessage(EventId = 508, Level = LogLevel.Error, Message = "Помилка при обробці вхідного сповіщення від Signal")]
+    public static partial void NotificationDispatchFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 509, Level = LogLevel.Debug,
+        Message = "E: канал {Type} переповнений — DropOldest. Сумарно дропів={Dropped}")]
+    public static partial void ChannelOverflowed(ILogger logger, string type, long dropped);
+}

@@ -1,11 +1,13 @@
 ﻿using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Text.Json;
+using System.Threading.Channels;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SignalCli.Interfaces.Rpc;
 using SignalCli.Interfaces.Signal;
 using SignalCli.Interfaces.SignalCli;
+using SignalCli.Logging;
 using SignalCli.Models.Rpc;
 using SignalCli.Models.Signal;
 using SignalCli.Models.Signal.Events;
@@ -46,6 +48,30 @@ internal class SignalEventService(
     private readonly Subject<EditEventArgs> _edits = new();
     private readonly Subject<RemoteDeleteEventArgs> _remoteDeletes = new();
 
+    // E (async-stream events): bounded channels, парні до Subject-ів.
+    // DropOldest на переповненні + лічильник дропів (Debug-лог).
+    private const int ChannelCapacity = 1024;
+    private static BoundedChannelOptions ChannelOptionsTemplate() => new(ChannelCapacity)
+    {
+        FullMode = BoundedChannelFullMode.DropOldest,
+        SingleReader = false,
+        SingleWriter = true,
+    };
+    private readonly Channel<TextMessageEventArgs> _textChannel = Channel.CreateBounded<TextMessageEventArgs>(ChannelOptionsTemplate());
+    private readonly Channel<ReactionEventArgs> _reactionChannel = Channel.CreateBounded<ReactionEventArgs>(ChannelOptionsTemplate());
+    private readonly Channel<AttachmentEventArgs> _attachmentChannel = Channel.CreateBounded<AttachmentEventArgs>(ChannelOptionsTemplate());
+    private readonly Channel<StickerEventArgs> _stickerChannel = Channel.CreateBounded<StickerEventArgs>(ChannelOptionsTemplate());
+    private readonly Channel<TypingEventArgs> _typingChannel = Channel.CreateBounded<TypingEventArgs>(ChannelOptionsTemplate());
+    private readonly Channel<ReceiptEventArgs> _receiptChannel = Channel.CreateBounded<ReceiptEventArgs>(ChannelOptionsTemplate());
+    private readonly Channel<SyncEventArgs> _syncChannel = Channel.CreateBounded<SyncEventArgs>(ChannelOptionsTemplate());
+    private readonly Channel<QuoteEventArgs> _quoteChannel = Channel.CreateBounded<QuoteEventArgs>(ChannelOptionsTemplate());
+    private readonly Channel<EditEventArgs> _editChannel = Channel.CreateBounded<EditEventArgs>(ChannelOptionsTemplate());
+    private readonly Channel<RemoteDeleteEventArgs> _remoteDeleteChannel = Channel.CreateBounded<RemoteDeleteEventArgs>(ChannelOptionsTemplate());
+
+    // Сумарний лічильник «дропів через переповнення». Періодично логується на Debug
+    // у TryWrite (раз на 100 дропів — щоб не спамити).
+    private long _droppedCount;
+
     private bool _disposed;
 
     // AsObservable() приховує Subject: споживач не може зробити downcast і самостійно
@@ -69,6 +95,67 @@ internal class SignalEventService(
     public IObservable<EditEventArgs> Edits => _edits.AsObservable();
 
     public IObservable<RemoteDeleteEventArgs> RemoteDeletes => _remoteDeletes.AsObservable();
+
+    // ===== E (async-stream API) =====
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<TextMessageEventArgs> TextMessagesAsync(CancellationToken cancellationToken = default)
+        => _textChannel.Reader.ReadAllAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<ReactionEventArgs> ReactionAsync(CancellationToken cancellationToken = default)
+        => _reactionChannel.Reader.ReadAllAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<AttachmentEventArgs> AttachmentsAsync(CancellationToken cancellationToken = default)
+        => _attachmentChannel.Reader.ReadAllAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<StickerEventArgs> StickerAsync(CancellationToken cancellationToken = default)
+        => _stickerChannel.Reader.ReadAllAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<TypingEventArgs> TypingAsync(CancellationToken cancellationToken = default)
+        => _typingChannel.Reader.ReadAllAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<ReceiptEventArgs> ReceiptsAsync(CancellationToken cancellationToken = default)
+        => _receiptChannel.Reader.ReadAllAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<SyncEventArgs> SyncsAsync(CancellationToken cancellationToken = default)
+        => _syncChannel.Reader.ReadAllAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<QuoteEventArgs> QuotesAsync(CancellationToken cancellationToken = default)
+        => _quoteChannel.Reader.ReadAllAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<EditEventArgs> EditsAsync(CancellationToken cancellationToken = default)
+        => _editChannel.Reader.ReadAllAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<RemoteDeleteEventArgs> RemoteDeletesAsync(CancellationToken cancellationToken = default)
+        => _remoteDeleteChannel.Reader.ReadAllAsync(cancellationToken);
+
+    /// <summary>
+    /// E (async-stream): записує елемент у канал; у DropOldest-режимі TryWrite завжди
+    /// успішне, але якщо канал перед записом був повним — найстаріший елемент вижений.
+    /// Інкрементує лічильник і періодично логує на Debug для діагностики backpressure.
+    /// </summary>
+    private void TryWriteOrDrop<T>(Channel<T> channel, T item)
+    {
+        // Якщо канал вже повний — DropOldest вижене найстаріший. Лічимо це як drop.
+        if (channel.Reader.Count >= ChannelCapacity)
+        {
+            var dropped = Interlocked.Increment(ref _droppedCount);
+            if (dropped % 100 == 1)
+            {
+                SignalEventServiceLog.ChannelOverflowed(_logger, typeof(T).Name, dropped);
+            }
+        }
+        channel.Writer.TryWrite(item);
+    }
 
     public async Task<SubscribeReceiveResponse> SubscribeAsync(string account,
         CancellationToken cancellationToken = default)
@@ -102,8 +189,7 @@ internal class SignalEventService(
             _accountSubscriptions[account] = subscriptionId;
         }
 
-        _logger.LogInformation("SubscribeAsync: обліковий запис={Account}, ідентифікатор підписки={SubId}",
-            account, subscriptionId);
+        SignalEventServiceLog.Subscribed(_logger, account, subscriptionId);
 
         return new SubscribeReceiveResponse(subscriptionId);
     }
@@ -119,7 +205,7 @@ internal class SignalEventService(
 
         if (account == null)
         {
-            _logger.LogWarning("Не знайдено підписку з ідентифікатором={SubId}", subscriptionId);
+            SignalEventServiceLog.UnsubscribeMissing(_logger, subscriptionId);
             return new UnsubscribeReceiveResponse();
         }
 
@@ -134,7 +220,7 @@ internal class SignalEventService(
             _accountSubscriptions.Remove(account);
         }
 
-        _logger.LogInformation("Відписка успішна: Обліковий запис={Account}, ІдПідписки={SubscriptionId}", account, subscriptionId);
+        SignalEventServiceLog.Unsubscribed(_logger, account, subscriptionId);
 
         return resp;
     }
@@ -154,15 +240,23 @@ internal class SignalEventService(
             JsonMessageEnvelope? jsonEnvelope = eventArgs.Envelope;
             if (jsonEnvelope == null)
             {
-                _logger.LogWarning("Сповіщення без Envelope, пропускаємо...");
+                SignalEventServiceLog.EnvelopeMissing(_logger);
                 return;
             }
 
             if (!TryGetAccountBySubscriptionId(subscriptionId, out string? account))
             {
-                _logger.LogDebug("Подія для неактуальної підписки {SubId}, ігноруємо.", subscriptionId);
+                SignalEventServiceLog.StaleSubscription(_logger, subscriptionId);
                 return;
             }
+
+            // A.11: structured-scope, щоб усі логи цієї нотифікації несли SubscriptionId/Account
+            // як structured properties (а не повторювалися в шаблонах кожного повідомлення).
+            using var scope = _logger.BeginScope(new Dictionary<string, object>
+            {
+                ["SubscriptionId"] = subscriptionId,
+                ["Account"] = account!,
+            });
 
             // Якщо отримано подію набору тексту
             if (jsonEnvelope.TypingMessage is not null)
@@ -180,6 +274,7 @@ internal class SignalEventService(
                     jsonEnvelope.ServerReceivedTimestamp,
                     jsonEnvelope.ServerDeliveredTimestamp);
                 _typing.OnNext(typingEvent);
+                TryWriteOrDrop(_typingChannel, typingEvent);
                 return;
             }
 
@@ -199,6 +294,7 @@ internal class SignalEventService(
                     jsonEnvelope.ServerReceivedTimestamp,
                     jsonEnvelope.ServerDeliveredTimestamp);
                 _receipts.OnNext(receiptEvent);
+                TryWriteOrDrop(_receiptChannel, receiptEvent);
                 return;
             }
 
@@ -218,6 +314,7 @@ internal class SignalEventService(
                     jsonEnvelope.ServerReceivedTimestamp,
                     jsonEnvelope.ServerDeliveredTimestamp);
                 _syncs.OnNext(syncEvent);
+                TryWriteOrDrop(_syncChannel, syncEvent);
                 return;
             }
 
@@ -237,6 +334,7 @@ internal class SignalEventService(
                     jsonEnvelope.ServerReceivedTimestamp,
                     jsonEnvelope.ServerDeliveredTimestamp);
                 _edits.OnNext(editEvent);
+                TryWriteOrDrop(_editChannel, editEvent);
                 return;
             }
 
@@ -264,6 +362,7 @@ internal class SignalEventService(
                         jsonEnvelope.ServerReceivedTimestamp,
                         jsonEnvelope.ServerDeliveredTimestamp);
                     _textMessages.OnNext(textEvent);
+                    TryWriteOrDrop(_textChannel, textEvent);
                     emitted = true;
                 }
 
@@ -284,6 +383,7 @@ internal class SignalEventService(
                         jsonEnvelope.ServerDeliveredTimestamp);
 
                     _reaction.OnNext(reactionEvent);
+                    TryWriteOrDrop(_reactionChannel, reactionEvent);
                     emitted = true;
                 }
 
@@ -303,6 +403,7 @@ internal class SignalEventService(
                         jsonEnvelope.ServerReceivedTimestamp,
                         jsonEnvelope.ServerDeliveredTimestamp);
                     _sticker.OnNext(stickerEvent);
+                    TryWriteOrDrop(_stickerChannel, stickerEvent);
                     emitted = true;
                 }
 
@@ -322,6 +423,7 @@ internal class SignalEventService(
                         jsonEnvelope.ServerReceivedTimestamp,
                         jsonEnvelope.ServerDeliveredTimestamp);
                     _attachments.OnNext(attachmentEvent);
+                    TryWriteOrDrop(_attachmentChannel, attachmentEvent);
                     emitted = true;
                 }
 
@@ -341,6 +443,7 @@ internal class SignalEventService(
                         jsonEnvelope.ServerReceivedTimestamp,
                         jsonEnvelope.ServerDeliveredTimestamp);
                     _remoteDeletes.OnNext(rd);
+                    TryWriteOrDrop(_remoteDeleteChannel, rd);
                     emitted = true;
                 }
 
@@ -362,21 +465,22 @@ internal class SignalEventService(
                         jsonEnvelope.ServerReceivedTimestamp,
                         jsonEnvelope.ServerDeliveredTimestamp);
                     _quotes.OnNext(qe);
+                    TryWriteOrDrop(_quoteChannel, qe);
                     emitted = true;
                 }
 
                 if (!emitted)
-                    _logger.LogDebug("DataMessage без впізнаваного payload (пусте/групове-метадані) — пропускаємо.");
+                    SignalEventServiceLog.DataMessageEmpty(_logger);
                 return;
             }
 
-            _logger.LogDebug("Невідомий тип події, пропускаємо...");
+            SignalEventServiceLog.UnknownEnvelope(_logger);
         }
         // Навмисний широкий catch: межа диспетчера сповіщень — одне погане
         // сповіщення не повинно зривати потік подій (логуємо й продовжуємо).
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Помилка при обробці вхідного сповіщення від Signal");
+            SignalEventServiceLog.NotificationDispatchFailed(_logger, ex);
         }
     }
 
@@ -412,6 +516,19 @@ internal class SignalEventService(
         // Спершу припиняємо приймати нові нотифікації, потім завершуємо потоки подій.
         _notificationSubscription?.Dispose();
         _notificationSubscription = null;
+
+        // E (async-stream): спершу закриваємо канали — будь-який активний `await foreach`
+        // дочитає буфер і завершиться нормально без винятків.
+        _textChannel.Writer.TryComplete();
+        _reactionChannel.Writer.TryComplete();
+        _attachmentChannel.Writer.TryComplete();
+        _stickerChannel.Writer.TryComplete();
+        _typingChannel.Writer.TryComplete();
+        _receiptChannel.Writer.TryComplete();
+        _syncChannel.Writer.TryComplete();
+        _quoteChannel.Writer.TryComplete();
+        _editChannel.Writer.TryComplete();
+        _remoteDeleteChannel.Writer.TryComplete();
 
         // F17 (H.17): OnCompleted ПЛЮС Dispose — раніше Subject не диспоузувся
         // (раніше теж так було, але якщо StartAsync викликався двічі — _notificationSubscription

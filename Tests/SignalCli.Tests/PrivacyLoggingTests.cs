@@ -27,6 +27,7 @@ public class PrivacyLoggingTests
             .ReturnsAsync(response);
 
         var logger = new Mock<ILogger<SignalAccounts>>();
+        logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         var sut = new SignalAccounts(client.Object, logger.Object);
 
         await sut.ListAccounts();
@@ -76,6 +77,7 @@ public class PrivacyLoggingTests
             .ReturnsAsync(response);
 
         var logger = new Mock<ILogger<SignalGroups>>();
+        logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         var sut = new SignalGroups(client.Object, logger.Object);
 
         await sut.ListGroups("+1");

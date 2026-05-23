@@ -26,13 +26,14 @@ public class JsonRpcClientHostedServiceTests
     {
         // 1) Моки для JsonRpcClientHostedService
         _loggerMock = new Mock<ILogger<JsonRpcClientHostedService>>();
+        _loggerMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         _clientFactoryMock = new Mock<IJsonRpcClientFactory>();
         _clientMock = new Mock<IJsonRpcClient>();
 
         // За замовчуванням при створенні фабрика повертає _clientMock.Object
         _clientFactoryMock
-            .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(_clientMock.Object);
+            .Setup(f => f.Create())
+            .Returns(_clientMock.Object);
 
         // Коли викликаємо InvokeMethodAsync("version", ...)
         _clientMock
@@ -44,6 +45,7 @@ public class JsonRpcClientHostedServiceTests
 
         // 2) Для реального SignalCliHostedService
         _scsLoggerMock = new Mock<ILogger<Services.SignalCli.SignalCliHostedService>>();
+        _scsLoggerMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         _processRunnerMock = new Mock<IProcessRunner>();
 
         // Налаштовуємо, щоб при запуску повертався «фейковий» IProcess і StreamPair
@@ -67,6 +69,7 @@ public class JsonRpcClientHostedServiceTests
             });
 
         var loggerPsMock = new Mock<ILogger<ProcessStateManager>>();
+        loggerPsMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         _stateManager = new ProcessStateManager(loggerPsMock.Object);
 
         // Конфіг, щоб не впасти при BuildClasspath
@@ -97,7 +100,7 @@ public class JsonRpcClientHostedServiceTests
             _scsLoggerMock.Object,
             _processRunnerMock.Object,
             _stateManager,
-            _config
+            _config.ToIOptions()
         );
     }
 
@@ -129,7 +132,7 @@ public class JsonRpcClientHostedServiceTests
 
         // Assert
         // 1) Перевіримо, що фабрика створила клієнт
-        _clientFactoryMock.Verify(f => f.CreateAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _clientFactoryMock.Verify(f => f.Create(), Times.Once);
 
         // 2) Перевіримо виклик "version"
         _clientMock.Verify(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(

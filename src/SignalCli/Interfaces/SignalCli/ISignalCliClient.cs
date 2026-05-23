@@ -1,4 +1,4 @@
-﻿using SignalCli.Models.SignalCli;
+using SignalCli.Models.SignalCli;
 
 namespace SignalCli.Interfaces.SignalCli;
 
@@ -24,11 +24,21 @@ public interface ISignalCliClient
     ) where TResponse : notnull;
 
     /// <summary>
-    /// Отримує інформацію про версію Signal CLI.
+    /// Асинхронно отримує інформацію про версію Signal CLI.
     /// </summary>
     /// <param name="cancellationToken">Токен скасування для переривання операції.</param>
     /// <returns>Об'єкт з інформацією про версію Signal CLI.</returns>
-    public Task<VersionResponse> Version(
+    Task<VersionResponse> VersionAsync(
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>
+    /// Застаріле: використовуйте <see cref="VersionAsync"/>.
+    /// </summary>
+    /// <param name="cancellationToken">Токен скасування для переривання операції.</param>
+    /// <returns>Об'єкт з інформацією про версію Signal CLI.</returns>
+    [Obsolete("Use VersionAsync; will be removed in 3.0")]
+    public Task<VersionResponse> Version(
+        CancellationToken cancellationToken = default
+    ) => VersionAsync(cancellationToken);
 }

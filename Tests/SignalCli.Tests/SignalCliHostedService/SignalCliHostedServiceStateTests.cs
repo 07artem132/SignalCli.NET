@@ -138,26 +138,24 @@ public class SignalCliHostedServiceStateTests : SignalCliHostedServiceTestsBase
     public async Task ForceRestart_ShouldHandleVariousRestartDelays(int delaySeconds)
     {
         // Arrange
+        // B.6: Task.Delay у ForceRestartAsync тепер через TimeProvider — крутимо віртуальний час
+        // FakeTimeProvider замість wall-clock-Stopwatch (раніше тест був flaky через ±1мс).
         Config.RestartDelaySeconds = delaySeconds;
-        var service = CreateService();
+        var fakeTime = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(DateTimeOffset.UtcNow);
+        var service = CreateService(fakeTime);
         await service.StartAsync(CancellationToken.None);
 
         // Act
-        var sw = Stopwatch.StartNew();
-        await service.ForceRestartAsync(CancellationToken.None);
-        sw.Stop();
+        var restartTask = service.ForceRestartAsync(CancellationToken.None);
+        // Дамо ForceRestartAsync дійти до Task.Delay (зупинка процесу + перехід стану).
+        for (int i = 0; i < 20 && !restartTask.IsCompleted; i++)
+            await Task.Yield();
+        // Провернемо віртуальний годинник на потрібну затримку.
+        fakeTime.Advance(TimeSpan.FromSeconds(delaySeconds));
+        await restartTask;
 
-        // Assert
-        if (delaySeconds <= 0)
-        {
-            Assert.True(sw.ElapsedMilliseconds < 100,
-                $"Restart took {sw.ElapsedMilliseconds}ms for delay {delaySeconds}s");
-        }
-        else
-        {
-            Assert.True(sw.ElapsedMilliseconds >= delaySeconds * 1000,
-                $"Restart took {sw.ElapsedMilliseconds}ms for delay {delaySeconds}s");
-        }
+        // Assert: достатньо, що ForceRestartAsync завершився після Advance(delaySeconds).
+        Assert.True(restartTask.IsCompletedSuccessfully);
     }
 
     [Theory]

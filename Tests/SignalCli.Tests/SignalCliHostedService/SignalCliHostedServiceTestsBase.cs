@@ -23,6 +23,9 @@ public abstract class SignalCliHostedServiceTestsBase : IDisposable
     protected SignalCliHostedServiceTestsBase()
     {
         LoggerMock = new Mock<ILogger<Services.SignalCli.SignalCliHostedService>>();
+        // C.8: source-generated [LoggerMessage] методи спершу перевіряють IsEnabled —
+        // інакше Verify(...x.Log...) показав би 0 викликів. У тестах вмикаємо всі рівні.
+        LoggerMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         ProcessRunnerMock = new Mock<IProcessRunner>();
 
         // Подготовка ProcessRunner
@@ -30,6 +33,7 @@ public abstract class SignalCliHostedServiceTestsBase : IDisposable
 
         // Настройка ProcessStateManager
         var loggerSm = new Mock<ILogger<ProcessStateManager>>();
+        loggerSm.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         StateManager = new ProcessStateManager(loggerSm.Object);
 
         // Створення тимчасової директорії для тестів
@@ -92,13 +96,17 @@ public abstract class SignalCliHostedServiceTestsBase : IDisposable
         File.WriteAllText(Path.Combine(libDir, "signal-cli.jar"), "fake jar content");
     }
 
-    protected Services.SignalCli.SignalCliHostedService CreateService()
+    protected Services.SignalCli.SignalCliHostedService CreateService(TimeProvider? timeProvider = null)
     {
+        // B.5/B.6: дозволяє тесту підставити FakeTimeProvider для віртуального часу
+        // (Task.Delay у ForceRestartAsync та timer вікна стабільності — обидва через _timeProvider).
+        // D.4: legacy Config обгортаємо в IOptions<SignalCliOptions> через internal helper.
         return new Services.SignalCli.SignalCliHostedService(
             LoggerMock.Object,
             ProcessRunnerMock.Object,
             StateManager,
-            Config
+            Config.ToIOptions(),
+            timeProvider
         );
     }
 

@@ -1,18 +1,19 @@
 ﻿using Microsoft.Extensions.Logging;
 using SignalCli.Interfaces.Signal;
 using SignalCli.Interfaces.SignalCli;
+using SignalCli.Logging;
 using SignalCli.Models.Signal.Devices;
 
 namespace SignalCli.Services.Signal;
 
+// A.13: IDisposable прибрано — клас не тримає жодних ресурсів.
 internal class SignalDevices(
     ISignalCliClient signalCliClient,
     ILogger<SignalDevices> logger)
-    : ISignalDevices, IDisposable
+    : ISignalDevices
 {
     private readonly ISignalCliClient _signalCliClient = signalCliClient ?? throw new ArgumentNullException(nameof(signalCliClient));
     private readonly ILogger<SignalDevices> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    private bool _disposed;
 
     public async Task<StartLinkResponse> StartLink(CancellationToken cancellationToken = default)
     {
@@ -33,7 +34,7 @@ internal class SignalDevices(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Помилка запуску процесу зв'язування пристрою");
+            SignalDevicesLog.StartLinkFailed(_logger, ex);
             throw;
         }
     }
@@ -57,14 +58,9 @@ internal class SignalDevices(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Помилка завершення процесу зв'язування пристрою");
+            SignalDevicesLog.FinishLinkFailed(_logger, ex);
             throw;
         }
     }
 
-    public void Dispose()
-    {
-        if (_disposed) return;
-        _disposed = true;
-    }
 }

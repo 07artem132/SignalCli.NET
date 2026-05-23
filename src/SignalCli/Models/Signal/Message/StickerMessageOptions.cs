@@ -14,6 +14,8 @@ public record StickerMessageOptions
     /// <summary>Згадки користувачів (рідкісне використання для стікерів).</summary>
     public IEnumerable<string>? Mentions { get; private set; }
     /// <summary>Токен скасування.</summary>
+    /// <remarks>A.5: deprecated — передавайте <c>CancellationToken</c> явно як параметр методу <c>SendStickerAsync(options, ct)</c>.</remarks>
+    [Obsolete("Pass CancellationToken to SendStickerAsync directly; will be removed in 3.0")]
     public CancellationToken CancellationToken { get; private set; } = CancellationToken.None;
 
     /// <summary>Будівельник <see cref="StickerMessageOptions"/>.</summary>
@@ -50,9 +52,13 @@ public record StickerMessageOptions
         }
 
         /// <summary>Задати токен скасування.</summary>
+        /// <remarks>A.5: deprecated — передавайте <c>CancellationToken</c> прямо в <c>SendStickerAsync(options, ct)</c>.</remarks>
+        [Obsolete("Pass CancellationToken to SendStickerAsync directly; will be removed in 3.0")]
         public Builder WithCancellationToken(CancellationToken cancellationToken)
         {
+#pragma warning disable CS0618
             _options.CancellationToken = cancellationToken;
+#pragma warning restore CS0618
             return this;
         }
 
