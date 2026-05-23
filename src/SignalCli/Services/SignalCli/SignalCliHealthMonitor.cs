@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -149,6 +150,9 @@ public sealed class SignalCliHealthMonitor : BackgroundService
     /// <returns>true, якщо CLI відповів вчасно; інакше - false.</returns>
     private async Task<bool> PingCliAsync(TimeSpan timeout, CancellationToken ct)
     {
+        // post-modernize-tuning §11.A.4 (audit N1): healthcheck.ping span.
+        using var activity = SignalCliDiagnostics.ActivitySource.StartActivity(
+            SignalCliDiagnostics.HealthCheckPingActivityName, ActivityKind.Internal);
         try
         {
             // Якщо у нас немає доступного StreamPair (сервіс ще не "готовий"),
@@ -156,6 +160,7 @@ public sealed class SignalCliHealthMonitor : BackgroundService
             if (_signalCliHostedService.CurrentStreamPair == null)
             {
                 SignalCliHealthMonitorLog.PingNoStreamPair(_logger);
+                activity?.SetTag("signal.healthcheck.outcome", "no_stream_pair");
                 return false;
             }
 
@@ -174,18 +179,28 @@ public sealed class SignalCliHealthMonitor : BackgroundService
                 localCts.Token
             ).ConfigureAwait(false);
             // Якщо відповіли без помилки і є поле Version, значить все ок
-            if (string.IsNullOrEmpty(response.Version)) return false;
+            if (string.IsNullOrEmpty(response.Version))
+            {
+                activity?.SetTag("signal.healthcheck.outcome", "failed");
+                return false;
+            }
             SignalCliHealthMonitorLog.PingOk(_logger, response.Version);
+            activity?.SetTag("signal.healthcheck.outcome", "ok");
+            activity?.SetStatus(ActivityStatusCode.Ok);
             return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             SignalCliHealthMonitorLog.PingFailed(_logger, ex);
+            activity?.SetTag("signal.healthcheck.outcome", "failed");
+            activity?.SetStatus(ActivityStatusCode.Error, ex.GetType().Name);
             return false;
         }
         catch (OperationCanceledException ex)
         {
             SignalCliHealthMonitorLog.PingTimedOut(_logger, ex);
+            activity?.SetTag("signal.healthcheck.outcome", "timeout");
+            activity?.SetStatus(ActivityStatusCode.Error, nameof(TimeoutException));
             return false;
         }
     }

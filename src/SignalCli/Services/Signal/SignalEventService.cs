@@ -1,4 +1,5 @@
-﻿using System.Reactive.Linq;
+﻿using System.Diagnostics;
+using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Text.Json;
 using System.Threading.Channels;
@@ -198,6 +199,11 @@ internal sealed class SignalEventService(
         // (типізовано, не NRE через _disposed-перевірки в downstream).
         ObjectDisposedException.ThrowIf(_disposed, this);
 
+        // post-modernize-tuning §11.A.5 (audit N1): subscribe span.
+        // signal.subscription.id (int) — не PII; account — НЕ ставимо як тег (PII — номер).
+        using var activity = SignalCliDiagnostics.ActivitySource.StartActivity(
+            SignalCliDiagnostics.SubscribeActivityName, ActivityKind.Internal);
+
         // post-modernize-tuning §3.1-3.5 (audit A4) + audit N5: під одним локом
         // вирішуємо ВСЕ — committed, in-flight (placeholder), або стаємо leader-ом.
         TaskCompletionSource<int>? myTcs = null;
@@ -252,6 +258,9 @@ internal sealed class SignalEventService(
             // Будимо всіх follower-ів — вони отримають той самий ID.
             myTcs!.TrySetResult(subscriptionId);
 
+            // §11.A.5: subscriptionId — integer, безпечно як тег; account — НЕ ставимо (PII).
+            activity?.SetTag("signal.subscription.id", subscriptionId);
+            activity?.SetStatus(ActivityStatusCode.Ok);
             SignalEventServiceLog.Subscribed(_logger, account, subscriptionId);
             return new SubscribeReceiveResponse(subscriptionId);
         }
@@ -263,6 +272,7 @@ internal sealed class SignalEventService(
                 _pendingSubscribes.Remove(account);
             }
             myTcs!.TrySetException(ex);
+            activity?.SetStatus(ActivityStatusCode.Error, ex.GetType().Name);
             throw;
         }
     }

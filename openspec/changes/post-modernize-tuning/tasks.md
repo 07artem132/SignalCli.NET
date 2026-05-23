@@ -42,7 +42,7 @@
 - [x] 4.5 (D2) `ISignalGroups.ListGroupsAsync` + impl + tests; old name kept as `[Obsolete]` shim
 - [x] 4.6 (D2) `ISignalCliClient.VersionAsync` + impl + tests + `SignalCliHealthMonitor` call site — done in 2.1.0 (agent-friendly-modernization A.1-A.2)
 - [ ] 4.7 (D3) `CancellationToken` removed from `TextMessageOptions` / `AttachmentMessageOptions` / `StickerMessageOptions`; added as last parameter to `SendTextMessageAsync` / `SendAttachmentAsync` / `SendStickerAsync`
-- [ ] 4.8 (D5) `SignalCliHostedService` becomes `sealed`
+- [x] 4.8 (D5) `SignalCliHostedService` becomes `sealed`
 - [ ] 4.9 (D6) `ConfigureAwait(false)` added to the 5 missing public-path `await`s; `.editorconfig` raises `CA2007` from `silent` → `warning`
 - [ ] 4.10 (D7) `Config.EnvironmentVariables` becomes `IReadOnlyDictionary<string,string>` with a `WithEnvironment(IDictionary<string,string>)` setter helper
 - [ ] 4.11 (D8) `Example/Program.cs` rewritten as `async Task Main`, `await using IHost host = …`, awaited `SendTextMessageAsync`, awaited `host.StopAsync()`
@@ -123,11 +123,11 @@
 
 ## 8a. Hosting modernization (capability `hosting-modernization`)
 
-- [ ] 8a.1 (B1) `SignalCliHealthMonitor` inherits from `BackgroundService`; the loop moves into `ExecuteAsync(stoppingToken)`; remove the hand-rolled `Task.Run(MonitorLoop)` + manual `CancellationTokenSource`
-- [ ] 8a.2 (B3) `SignalCliHostedService` and `JsonRpcClientHostedService` implement `IHostedLifecycleService`; startup ordering moves from "registration order" to `StartedAsync`/`StoppingAsync` phases
-- [ ] 8a.3 (C1) `SignalCliHostedService` implements `IAsyncDisposable` (in addition to `IDisposable`); host's container picks it up
-- [ ] 8a.4 (B4) `IProcessRunner.StartProcessWithHandle` signature → either sync `(IProcess, StreamPair)` or `ValueTask<(IProcess, StreamPair)>` with `ValueTask.FromResult`; remove the `Task.FromResult` wrapper
-- [ ] 8a.5 (A1) `JsonRpcClient` drops `IDisposable` from its declared interfaces; consumers (DI path already does `is IAsyncDisposable`) keep working; the sync `Dispose()` body that called `DisposeAsync().AsTask().GetAwaiter().GetResult()` is deleted
+- [x] 8a.1 (B1) `SignalCliHealthMonitor` inherits from `BackgroundService`; the loop is in `ExecuteAsync(stoppingToken)` — already shipped in 2.1.0 (`agent-friendly-modernization` B.1/B.2).
+- [ ] 8a.2 (B3) `SignalCliHostedService` and `JsonRpcClientHostedService` implement `IHostedLifecycleService`; startup ordering moves from "registration order" to `StartedAsync`/`StoppingAsync` phases **(deferred — explicit lifecycle ordering not currently a regression)**
+- [ ] 8a.3 (C1) `SignalCliHostedService` implements `IAsyncDisposable` (in addition to `IDisposable`); host's container picks it up **(deferred — currently `IDisposable` suffices because all cleanup is sync; can be added if a future change introduces async cleanup in the hosted service)**
+- [ ] 8a.4 (B4) `IProcessRunner.StartProcessWithHandle` signature → either sync `(IProcess, StreamPair)` or `ValueTask<(IProcess, StreamPair)>` with `ValueTask.FromResult`; remove the `Task.FromResult` wrapper **(deferred — micro-optimization)**
+- [x] 8a.5 (A1) `JsonRpcClient` drops `IDisposable` from its declared interfaces — already shipped in 2.1.0 (`agent-friendly-modernization` A.6); `IJsonRpcClient` derives from `IAsyncDisposable` only.
 - [ ] 8a.6 Test: a tests-only fake `BackgroundService` lifecycle exerciser confirms that the host's `StopAsync` blocks on the monitor's `ExecuteAsync` until cancellation observed
 - [x] 8a.7 (audit N4) `SignalCliHostedService.StopProcessInternalAsyncNoLock` — replace `new CancellationTokenSource(TimeSpan.FromSeconds(_options.StopTimeoutSeconds))` (line 335) with `new CancellationTokenSource(TimeSpan.FromSeconds(_options.StopTimeoutSeconds), _timeProvider)` (the .NET 8+ overload). The `TimeProvider` field is already injected — only the constructor call changes.
 - [ ] 8a.8 (audit N4) Regression test: `FakeTimeProvider.Advance(StopTimeoutSeconds + 1)` faults `StopProcessInternalAsync` into the `Kill` branch. **(Deferred — adding `_timeProvider` test seam to existing StopProcess test fixtures; tracked separately.)**
@@ -194,11 +194,11 @@ This capability is **additive** — it lands in a 2.2.0 minor before the 3.0 bre
 
 - [x] 11.A.1 New file `src/SignalCli/Diagnostics/SignalCliDiagnostics.cs` with `internal static readonly ActivitySource ActivitySource = new("SignalCli.NET", AssemblyVersion)` ([Adding distributed tracing instrumentation — best practices](https://learn.microsoft.com/dotnet/core/diagnostics/distributed-tracing-instrumentation-walkthroughs#add-basic-instrumentation): create once, store in a static, name hierarchical with the assembly).
 - [x] 11.A.2 `JsonRpcClient.InvokeMethodAsync` wraps the request lifecycle: `using var activity = SignalCliDiagnostics.ActivitySource.StartActivity($"rpc.{method}", ActivityKind.Client);` — tags `signal.rpc.method` + `signal.rpc.request_id` set; `Ok`-status on success, `Error` with `ex.GetType().Name` (type-name only, no PII from messages) on failure including the `TimeoutException` branch.
-- [ ] 11.A.3 `SignalCliHostedService` instruments: `StartProcessInternalAsyncNoLock` → `rpc.signalcli.process.start` span (tag `signal.process.executable` = basename only, not full path); `OnProcessExitedAsync` → `signalcli.process.exited` span with tag `signal.process.exit_code` (if available); `ForceRestartAsync` → `signalcli.force_restart` span with tag `signal.restart.attempt`.
-- [ ] 11.A.4 `SignalCliHealthMonitor.PingCliAsync` → `signalcli.healthcheck.ping` span; tag `signal.healthcheck.outcome` ∈ {`ok`,`timeout`,`failed`,`no_stream_pair`}.
-- [ ] 11.A.5 `SignalEventService.SubscribeAsync` / `UnsubscribeAsync` → `signalcli.subscribe` / `signalcli.unsubscribe` spans; tag `signal.subscription.id` (int — not a phone number).
-- [ ] 11.A.6 **Privacy guard test:** `Tests/SignalCli.Tests/Observability/ActivityTagPrivacyTests.cs` — uses `ActivityListener` to capture every Activity emitted by a synthetic message-roundtrip; asserts no tag value matches the test's `+380501234567` / message body / file content.
-- [ ] 11.A.7 README + `docs/cloud-development.md` add a section "Observability — enabling distributed traces in OpenTelemetry" showing `AddSource("SignalCli.NET")`.
+- [x] 11.A.3 `SignalCliHostedService.StartProcessInternalAsyncNoLock` instruments `signalcli.process.start` span; tag `signal.process.executable` = basename via `Path.GetFileName(procConfig.Executable)` (full path is PII-adjacent — host-layout leak). `OnProcessExitedAsync`/`ForceRestartAsync` spans **(deferred)** — counter via `ProcessRestarts` already covers metric side.
+- [x] 11.A.4 `SignalCliHealthMonitor.PingCliAsync` → `signalcli.healthcheck.ping` span; tag `signal.healthcheck.outcome` ∈ {`ok`,`timeout`,`failed`,`no_stream_pair`}; status Ok on healthy, Error+exception-type-name on failure/timeout.
+- [x] 11.A.5 `SignalEventService.SubscribeAsync` → `signalcli.subscribe` span; tag `signal.subscription.id` (int) set on success. **`account` NOT a tag** (PII — phone number). `UnsubscribeAsync` span **(deferred)**.
+- [ ] 11.A.6 **Privacy guard test:** `Tests/SignalCli.Tests/Observability/ActivityTagPrivacyTests.cs` **(deferred — pairs with §11.B.8 in a single Observability test fixture)**
+- [ ] 11.A.7 README + `docs/cloud-development.md` Observability section **(deferred — docs-only)**
 
 ### 11.B. Meter (`System.Diagnostics.Metrics` — counters & histograms)
 

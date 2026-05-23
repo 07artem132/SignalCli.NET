@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using Microsoft.Extensions.Hosting;
@@ -18,7 +19,9 @@ namespace SignalCli.Services.SignalCli;
 ///    у межах вікна <see cref="Config.RestartWindowSeconds"/>).
 /// 3) Надає доступ до StreamPair через IStreamPairProvider.
 /// </summary>
-public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisposable
+// post-modernize-tuning §4.8 (audit D5): sealed — inheriting from hosted-services
+// is not a supported extension point; configuration via SignalCliOptions only.
+public sealed class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisposable
 {
     private readonly ILogger<SignalCliHostedService> _logger;
     private readonly IProcessRunner _processRunner;
@@ -257,6 +260,10 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         if (_disposed) return;
         cancellationToken.ThrowIfCancellationRequested();
 
+        // post-modernize-tuning §11.A.3 (audit N1): process.start span.
+        using var activity = SignalCliDiagnostics.ActivitySource.StartActivity(
+            SignalCliDiagnostics.ProcessStartActivityName, ActivityKind.Internal);
+
         var currentState = _stateManager.CurrentState;
         if (currentState != ProcessState.NotStarted &&
             currentState != ProcessState.Stopped &&
@@ -288,6 +295,9 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             // ProcessStateManager — єдине джерело істини; з нього похідні
             // CurrentStreamPair / StreamPairChanged / WaitForReadyAsync.
             _stateManager.UpdateState(ProcessState.Running, streams);
+            // §11.A.3: basename only — full path is PII-adjacent (reveals host layout).
+            activity?.SetTag("signal.process.executable", Path.GetFileName(procConfig.Executable));
+            activity?.SetStatus(ActivityStatusCode.Ok);
             SignalCliHostedServiceLog.ProcessStarted(_logger, _currentProcess.Id);
 
             // B.4 (F3): стартуємо вікно стабільності — якщо процес проживе RestartWindowSeconds
@@ -299,6 +309,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         {
             SignalCliHostedServiceLog.ProcessStartFailed(_logger, ex);
             _stateManager.UpdateState(ProcessState.Failed, error: ex);
+            activity?.SetStatus(ActivityStatusCode.Error, ex.GetType().Name);
             throw;
         }
     }
