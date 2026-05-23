@@ -220,142 +220,6 @@
             </code>
             </example>
         </member>
-        <member name="T:SignalCli.Interfaces.SignalCli.IProcess">
-            <summary>
-            Інтерфейс для абстракції процесу операційної системи.
-            Надає методи для запуску, контролю та зупинки процесу.
-            </summary>
-        </member>
-        <member name="P:SignalCli.Interfaces.SignalCli.IProcess.Id">
-            <summary>
-            Ідентифікатор процесу.
-            </summary>
-        </member>
-        <member name="P:SignalCli.Interfaces.SignalCli.IProcess.HasExited">
-            <summary>
-            Вказує, чи завершився процес.
-            </summary>
-        </member>
-        <member name="P:SignalCli.Interfaces.SignalCli.IProcess.StandardInput">
-            <summary>
-            Потік для запису у стандартний ввід процесу.
-            </summary>
-        </member>
-        <member name="P:SignalCli.Interfaces.SignalCli.IProcess.StandardOutput">
-            <summary>
-            Потік для читання зі стандартного виводу процесу.
-            </summary>
-        </member>
-        <member name="P:SignalCli.Interfaces.SignalCli.IProcess.StandardError">
-            <summary>
-            Потік для читання зі стандартного потоку помилок процесу.
-            </summary>
-        </member>
-        <member name="M:SignalCli.Interfaces.SignalCli.IProcess.Start(System.Threading.CancellationToken)">
-            <summary>
-            Запускає процес.
-            </summary>
-            <param name="cancellationToken">Токен скасування операції.</param>
-            <returns>true, якщо процес успішно запущено; інакше - false.</returns>
-        </member>
-        <member name="M:SignalCli.Interfaces.SignalCli.IProcess.WaitForExitAsync(System.Threading.CancellationToken)">
-            <summary>
-            Асинхронно очікує завершення процесу.
-            </summary>
-            <param name="cancellationToken">Токен скасування операції.</param>
-        </member>
-        <member name="E:SignalCli.Interfaces.SignalCli.IProcess.Exited">
-            <summary>
-            Подія, що викликається, коли процес завершується.
-            </summary>
-        </member>
-        <member name="M:SignalCli.Interfaces.SignalCli.IProcess.Kill(System.Boolean)">
-            <summary>
-            Примусово завершує процес.
-            </summary>
-            <param name="entireProcessTree">Якщо true, також завершує всі дочірні процеси.</param>
-        </member>
-        <member name="T:SignalCli.Interfaces.SignalCli.IProcessFactory">
-            <summary>
-            Фабрика для створення об'єктів IProcess.
-            </summary>
-        </member>
-        <member name="M:SignalCli.Interfaces.SignalCli.IProcessFactory.CreateProcess(System.Diagnostics.ProcessStartInfo)">
-            <summary>
-            Створює об'єкт IProcess з вказаними параметрами запуску.
-            </summary>
-            <param name="startInfo">Параметри запуску процесу.</param>
-            <returns>Новий екземпляр IProcess.</returns>
-        </member>
-        <member name="T:SignalCli.Interfaces.SignalCli.IProcessRunner">
-            <summary>
-            Інтерфейс для запуску зовнішніх процесів (Signal-CLI та ін.).
-            </summary>
-        </member>
-        <member name="M:SignalCli.Interfaces.SignalCli.IProcessRunner.StartProcessWithHandle(SignalCli.Models.SignalCli.ProcessConfig,System.Threading.CancellationToken)">
-            <summary>
-            Запускає процес і повертає об'єкт для управління ним та потоки для взаємодії.
-            </summary>
-            <param name="config">Конфігурація процесу.</param>
-            <param name="cancellationToken">Токен скасування операції.</param>
-            <returns>Кортеж із запущеним процесом та парою потоків для взаємодії з ним.</returns>
-        </member>
-        <member name="T:SignalCli.Interfaces.SignalCli.IProcessStateNotifier">
-            <summary>
-            Інтерфейс, що надає потік подій про стан процесу.
-            </summary>
-        </member>
-        <member name="P:SignalCli.Interfaces.SignalCli.IProcessStateNotifier.ProcessState">
-            <summary>
-            Потік інформації про стан процесу.
-            </summary>
-        </member>
-        <member name="T:SignalCli.Interfaces.SignalCli.ISignalCliClient">
-            <summary>
-            Інтерфейс для виклику методів Signal CLI через JSON-RPC.
-            Надає можливість взаємодії з Signal месенджером через його CLI інтерфейс.
-            </summary>
-        </member>
-        <member name="M:SignalCli.Interfaces.SignalCli.ISignalCliClient.InvokeMethodAsync``2(System.String,``1,System.Threading.CancellationToken)">
-            <summary>
-            Асинхронно викликає вказаний метод Signal CLI з переданими параметрами.
-            </summary>
-            <typeparam name="TResponse">Тип об'єкта відповіді.</typeparam>
-            <typeparam name="TRequest">Тип об'єкта запиту.</typeparam>
-            <param name="method">Назва методу Signal CLI, який потрібно викликати.</param>
-            <param name="parameters">Параметри для виклику методу.</param>
-            <param name="cancellationToken">Токен скасування для переривання операції.</param>
-            <returns>Об'єкт відповіді від Signal CLI.</returns>
-        </member>
-        <member name="M:SignalCli.Interfaces.SignalCli.ISignalCliClient.Version(System.Threading.CancellationToken)">
-            <summary>
-            Отримує інформацію про версію Signal CLI.
-            </summary>
-            <param name="cancellationToken">Токен скасування для переривання операції.</param>
-            <returns>Об'єкт з інформацією про версію Signal CLI.</returns>
-        </member>
-        <member name="T:SignalCli.Interfaces.SignalCli.IStreamPairProvider">
-            <summary>
-            Інтерфейс, що надає доступ до поточної пари потоків для взаємодії з процесом 
-            та сповіщає про їх зміну.
-            </summary>
-        </member>
-        <member name="P:SignalCli.Interfaces.SignalCli.IStreamPairProvider.CurrentStreamPair">
-            <summary>
-            Поточна пара потоків для взаємодії з процесом.
-            </summary>
-        </member>
-        <member name="P:SignalCli.Interfaces.SignalCli.IStreamPairProvider.StreamPairChanged">
-            <summary>
-            Потік сповіщень про зміну пари потоків.
-            </summary>
-        </member>
-        <member name="M:SignalCli.Interfaces.SignalCli.IStreamPairProvider.WaitForReadyAsync(System.Threading.CancellationToken)">
-            <summary>
-            Асинхронно очікує, поки пара потоків стане доступною.
-            </summary>
-            <param name="cancellationToken">Токен скасування операції.</param>
-        </member>
         <member name="T:SignalCli.Interfaces.Signal.IRecipient">
             <summary>
             Отримувач повідомлення у Signal.
@@ -722,6 +586,142 @@
             </code>
             </example>
         </member>
+        <member name="T:SignalCli.Interfaces.SignalCli.IProcess">
+            <summary>
+            Інтерфейс для абстракції процесу операційної системи.
+            Надає методи для запуску, контролю та зупинки процесу.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Interfaces.SignalCli.IProcess.Id">
+            <summary>
+            Ідентифікатор процесу.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Interfaces.SignalCli.IProcess.HasExited">
+            <summary>
+            Вказує, чи завершився процес.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Interfaces.SignalCli.IProcess.StandardInput">
+            <summary>
+            Потік для запису у стандартний ввід процесу.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Interfaces.SignalCli.IProcess.StandardOutput">
+            <summary>
+            Потік для читання зі стандартного виводу процесу.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Interfaces.SignalCli.IProcess.StandardError">
+            <summary>
+            Потік для читання зі стандартного потоку помилок процесу.
+            </summary>
+        </member>
+        <member name="M:SignalCli.Interfaces.SignalCli.IProcess.Start(System.Threading.CancellationToken)">
+            <summary>
+            Запускає процес.
+            </summary>
+            <param name="cancellationToken">Токен скасування операції.</param>
+            <returns>true, якщо процес успішно запущено; інакше - false.</returns>
+        </member>
+        <member name="M:SignalCli.Interfaces.SignalCli.IProcess.WaitForExitAsync(System.Threading.CancellationToken)">
+            <summary>
+            Асинхронно очікує завершення процесу.
+            </summary>
+            <param name="cancellationToken">Токен скасування операції.</param>
+        </member>
+        <member name="E:SignalCli.Interfaces.SignalCli.IProcess.Exited">
+            <summary>
+            Подія, що викликається, коли процес завершується.
+            </summary>
+        </member>
+        <member name="M:SignalCli.Interfaces.SignalCli.IProcess.Kill(System.Boolean)">
+            <summary>
+            Примусово завершує процес.
+            </summary>
+            <param name="entireProcessTree">Якщо true, також завершує всі дочірні процеси.</param>
+        </member>
+        <member name="T:SignalCli.Interfaces.SignalCli.IProcessFactory">
+            <summary>
+            Фабрика для створення об'єктів IProcess.
+            </summary>
+        </member>
+        <member name="M:SignalCli.Interfaces.SignalCli.IProcessFactory.CreateProcess(System.Diagnostics.ProcessStartInfo)">
+            <summary>
+            Створює об'єкт IProcess з вказаними параметрами запуску.
+            </summary>
+            <param name="startInfo">Параметри запуску процесу.</param>
+            <returns>Новий екземпляр IProcess.</returns>
+        </member>
+        <member name="T:SignalCli.Interfaces.SignalCli.IProcessRunner">
+            <summary>
+            Інтерфейс для запуску зовнішніх процесів (Signal-CLI та ін.).
+            </summary>
+        </member>
+        <member name="M:SignalCli.Interfaces.SignalCli.IProcessRunner.StartProcessWithHandle(SignalCli.Models.SignalCli.ProcessConfig,System.Threading.CancellationToken)">
+            <summary>
+            Запускає процес і повертає об'єкт для управління ним та потоки для взаємодії.
+            </summary>
+            <param name="config">Конфігурація процесу.</param>
+            <param name="cancellationToken">Токен скасування операції.</param>
+            <returns>Кортеж із запущеним процесом та парою потоків для взаємодії з ним.</returns>
+        </member>
+        <member name="T:SignalCli.Interfaces.SignalCli.IProcessStateNotifier">
+            <summary>
+            Інтерфейс, що надає потік подій про стан процесу.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Interfaces.SignalCli.IProcessStateNotifier.ProcessState">
+            <summary>
+            Потік інформації про стан процесу.
+            </summary>
+        </member>
+        <member name="T:SignalCli.Interfaces.SignalCli.ISignalCliClient">
+            <summary>
+            Інтерфейс для виклику методів Signal CLI через JSON-RPC.
+            Надає можливість взаємодії з Signal месенджером через його CLI інтерфейс.
+            </summary>
+        </member>
+        <member name="M:SignalCli.Interfaces.SignalCli.ISignalCliClient.InvokeMethodAsync``2(System.String,``1,System.Threading.CancellationToken)">
+            <summary>
+            Асинхронно викликає вказаний метод Signal CLI з переданими параметрами.
+            </summary>
+            <typeparam name="TResponse">Тип об'єкта відповіді.</typeparam>
+            <typeparam name="TRequest">Тип об'єкта запиту.</typeparam>
+            <param name="method">Назва методу Signal CLI, який потрібно викликати.</param>
+            <param name="parameters">Параметри для виклику методу.</param>
+            <param name="cancellationToken">Токен скасування для переривання операції.</param>
+            <returns>Об'єкт відповіді від Signal CLI.</returns>
+        </member>
+        <member name="M:SignalCli.Interfaces.SignalCli.ISignalCliClient.Version(System.Threading.CancellationToken)">
+            <summary>
+            Отримує інформацію про версію Signal CLI.
+            </summary>
+            <param name="cancellationToken">Токен скасування для переривання операції.</param>
+            <returns>Об'єкт з інформацією про версію Signal CLI.</returns>
+        </member>
+        <member name="T:SignalCli.Interfaces.SignalCli.IStreamPairProvider">
+            <summary>
+            Інтерфейс, що надає доступ до поточної пари потоків для взаємодії з процесом 
+            та сповіщає про їх зміну.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Interfaces.SignalCli.IStreamPairProvider.CurrentStreamPair">
+            <summary>
+            Поточна пара потоків для взаємодії з процесом.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Interfaces.SignalCli.IStreamPairProvider.StreamPairChanged">
+            <summary>
+            Потік сповіщень про зміну пари потоків.
+            </summary>
+        </member>
+        <member name="M:SignalCli.Interfaces.SignalCli.IStreamPairProvider.WaitForReadyAsync(System.Threading.CancellationToken)">
+            <summary>
+            Асинхронно очікує, поки пара потоків стане доступною.
+            </summary>
+            <param name="cancellationToken">Токен скасування операції.</param>
+        </member>
         <member name="T:SignalCli.Models.Config">
             <summary>
             Конфігурація Signal CLI.
@@ -1082,296 +1082,6 @@
             <summary>
             Ідентифікатор запиту, на який надається відповідь.
             </summary>
-        </member>
-        <member name="T:SignalCli.Models.SignalCli.CliLogLevel">
-            <summary>
-            Рівень логування для Signal CLI.
-            </summary>
-            <remarks>
-            Визначає детальність виведення діагностичної інформації
-            при роботі з Signal CLI.
-            </remarks>
-        </member>
-        <member name="F:SignalCli.Models.SignalCli.CliLogLevel.Info">
-            <summary>
-            Інформаційні повідомлення.
-            </summary>
-            <remarks>
-            Базовий рівень логування, що містить загальну інформацію про роботу.
-            Відповідає прапорцю -v у Signal CLI.
-            </remarks>
-        </member>
-        <member name="F:SignalCli.Models.SignalCli.CliLogLevel.Debug">
-            <summary>
-            Повідомлення для відлагодження.
-            </summary>
-            <remarks>
-            Розширений рівень логування, що містить додаткову інформацію для розробників.
-            Відповідає прапорцю -vv у Signal CLI.
-            </remarks>
-        </member>
-        <member name="F:SignalCli.Models.SignalCli.CliLogLevel.Verbose">
-            <summary>
-            Детальні повідомлення для діагностики.
-            </summary>
-            <remarks>
-            Максимальний рівень деталізації. Включає всі можливі повідомлення.
-            Відповідає прапорцю -vvv у Signal CLI.
-            </remarks>
-        </member>
-        <member name="T:SignalCli.Models.SignalCli.ProcessConfig">
-            <summary>
-            Конфігурація для запуску зовнішнього процесу.
-            </summary>
-            <remarks>
-            Містить набір налаштувань для запуску та керування процесом Signal CLI,
-            включаючи шляхи до виконуваного файлу, аргументи, робочу директорію
-            та налаштування перенаправлення потоків.
-            </remarks>
-        </member>
-        <member name="P:SignalCli.Models.SignalCli.ProcessConfig.Executable">
-            <summary>
-            Шлях до виконуваного файлу.
-            </summary>
-            <remarks>
-            Повний або відносний шлях до файлу, який буде запущено (наприклад, "java").
-            </remarks>
-        </member>
-        <member name="P:SignalCli.Models.SignalCli.ProcessConfig.Arguments">
-            <summary>
-            Аргументи командного рядка для процесу (єдиний рядок).
-            </summary>
-            <remarks>
-            Використовується лише як запасний варіант, якщо <see cref="P:SignalCli.Models.SignalCli.ProcessConfig.ArgumentList"/> порожній.
-            Для безпечної передачі аргументів із пробілами/лапками віддавайте перевагу <see cref="P:SignalCli.Models.SignalCli.ProcessConfig.ArgumentList"/>.
-            </remarks>
-        </member>
-        <member name="P:SignalCli.Models.SignalCli.ProcessConfig.ArgumentList">
-            <summary>
-            Аргументи командного рядка як окремі елементи.
-            </summary>
-            <remarks>
-            Кожен елемент передається процесу окремо (через ProcessStartInfo.ArgumentList),
-            тож .NET сам екранує пробіли, лапки та інші спецсимволи — це усуває ризик
-            зламати чи інжектувати аргументи через шляхи з лапками.
-            </remarks>
-        </member>
-        <member name="P:SignalCli.Models.SignalCli.ProcessConfig.CreateNewProcessGroup">
-            <summary>
-            Запускати процес у новій групі процесів (Windows).
-            </summary>
-            <remarks>
-            .NET 10: ізолює дочірній процес від консольних сигналів батька (наприклад Ctrl+C),
-            тож завершенням signal-cli керує лише бібліотека (через "exit" або Kill).
-            </remarks>
-        </member>
-        <member name="P:SignalCli.Models.SignalCli.ProcessConfig.WorkingDirectory">
-            <summary>
-            Робоча директорія для процесу.
-            </summary>
-            <remarks>
-            Шлях до директорії, в якій буде запущено процес.
-            Якщо не вказано, використовується поточна директорія.
-            </remarks>
-        </member>
-        <member name="P:SignalCli.Models.SignalCli.ProcessConfig.RedirectStandardInput">
-            <summary>
-            Вказує, чи потрібно перенаправляти стандартний ввід.
-            </summary>
-            <remarks>
-            Якщо true, створюється потік для запису у стандартний ввід процесу.
-            </remarks>
-        </member>
-        <member name="P:SignalCli.Models.SignalCli.ProcessConfig.RedirectStandardOutput">
-            <summary>
-            Вказує, чи потрібно перенаправляти стандартний вивід.
-            </summary>
-            <remarks>
-            Якщо true, створюється потік для читання зі стандартного виводу процесу.
-            </remarks>
-        </member>
-        <member name="P:SignalCli.Models.SignalCli.ProcessConfig.RedirectStandardError">
-            <summary>
-            Вказує, чи потрібно перенаправляти стандартний потік помилок.
-            </summary>
-            <remarks>
-            Якщо true, створюється потік для читання зі стандартного потоку помилок процесу.
-            </remarks>
-        </member>
-        <member name="P:SignalCli.Models.SignalCli.ProcessConfig.EnvironmentVariables">
-            <summary>
-            Змінні середовища для процесу.
-            </summary>
-            <remarks>
-            Словник з парами ключ-значення, що визначають змінні середовища
-            для запущеного процесу.
-            </remarks>
-        </member>
-        <member name="T:SignalCli.Models.SignalCli.ProcessState">
-            <summary>
-            Стан процесу Signal CLI.
-            </summary>
-            <remarks>
-            Визначає можливі стани життєвого циклу процесу,
-            які використовуються для відстеження його роботи.
-            </remarks>
-        </member>
-        <member name="F:SignalCli.Models.SignalCli.ProcessState.NotStarted">
-            <summary>
-            Процес не запущено.
-            </summary>
-            <remarks>
-            Початковий стан перед першим запуском або після завершення роботи.
-            </remarks>
-        </member>
-        <member name="F:SignalCli.Models.SignalCli.ProcessState.Starting">
-            <summary>
-            Процес запускається.
-            </summary>
-            <remarks>
-            Перехідний стан під час ініціалізації процесу.
-            </remarks>
-        </member>
-        <member name="F:SignalCli.Models.SignalCli.ProcessState.Running">
-            <summary>
-            Процес запущено та працює.
-            </summary>
-            <remarks>
-            Нормальний робочий стан, який означає готовність процесу до обробки запитів.
-            </remarks>
-        </member>
-        <member name="F:SignalCli.Models.SignalCli.ProcessState.Stopping">
-            <summary>
-            Процес зупиняється.
-            </summary>
-            <remarks>
-            Перехідний стан під час штатного завершення роботи процесу.
-            </remarks>
-        </member>
-        <member name="F:SignalCli.Models.SignalCli.ProcessState.Stopped">
-            <summary>
-            Процес зупинено.
-            </summary>
-            <remarks>
-            Стан, що вказує на нормальне завершення роботи процесу.
-            </remarks>
-        </member>
-        <member name="F:SignalCli.Models.SignalCli.ProcessState.Failed">
-            <summary>
-            Сталася помилка під час роботи процесу.
-            </summary>
-            <remarks>
-            Стан, що вказує на аварійне завершення роботи або інші проблеми.
-            </remarks>
-        </member>
-        <member name="T:SignalCli.Models.SignalCli.ProcessStateInfo">
-            <summary>
-            Інформація про стан процесу Signal CLI.
-            </summary>
-            <remarks>
-            Об'єднує поточний стан процесу, потоки для взаємодії та інформацію про помилку.
-            Використовується для повідомлення про зміни стану процесу через ProcessStateManager.
-            </remarks>
-        </member>
-        <member name="P:SignalCli.Models.SignalCli.ProcessStateInfo.State">
-            <summary>
-            Поточний стан процесу.
-            </summary>
-            <value>Одне зі значень <see cref="T:SignalCli.Models.SignalCli.ProcessState"/>.</value>
-        </member>
-        <member name="P:SignalCli.Models.SignalCli.ProcessStateInfo.StreamPair">
-            <summary>
-            Пара потоків для взаємодії з процесом.
-            </summary>
-            <value>Об'єкт <see cref="P:SignalCli.Models.SignalCli.ProcessStateInfo.StreamPair"/> або null, якщо потоки недоступні.</value>
-        </member>
-        <member name="P:SignalCli.Models.SignalCli.ProcessStateInfo.Error">
-            <summary>
-            Інформація про помилку, якщо вона сталася.
-            </summary>
-            <value>Об'єкт винятку або null, якщо помилки не було.</value>
-        </member>
-        <member name="M:SignalCli.Models.SignalCli.ProcessStateInfo.#ctor(SignalCli.Models.SignalCli.ProcessState,SignalCli.Models.SignalCli.StreamPair,System.Exception)">
-            <summary>
-            Створює новий екземпляр класу ProcessStateInfo.
-            </summary>
-            <param name="state">Стан процесу.</param>
-            <param name="streamPair">Пара потоків для взаємодії з процесом.</param>
-            <param name="error">Інформація про помилку.</param>
-        </member>
-        <member name="T:SignalCli.Models.SignalCli.StreamPair">
-            <summary>
-            Обгортка над потоками вводу/виводу зовнішнього процесу.
-            </summary>
-            <remarks>
-            Інкапсулює стандартні потоки (stdin, stdout, stderr) для взаємодії
-            з зовнішнім процесом. Реалізує <see cref="T:System.IDisposable"/> для
-            коректного звільнення ресурсів.
-            </remarks>
-        </member>
-        <member name="M:SignalCli.Models.SignalCli.StreamPair.#ctor(System.IO.StreamWriter,System.IO.StreamReader,System.IO.StreamReader)">
-            <summary>
-            Створює новий екземпляр класу StreamPair.
-            </summary>
-            <param name="input">Потік для запису у стандартний ввід процесу.</param>
-            <param name="output">Потік для читання зі стандартного виводу процесу.</param>
-            <param name="error">Потік для читання зі стандартного потоку помилок процесу.</param>
-            <exception cref="T:System.ArgumentNullException">Виникає, якщо будь-який з параметрів є null.</exception>
-        </member>
-        <member name="P:SignalCli.Models.SignalCli.StreamPair.StandardInput">
-            <summary>
-            Потік для запису у стандартний ввід процесу.
-            </summary>
-        </member>
-        <member name="P:SignalCli.Models.SignalCli.StreamPair.StandardOutput">
-            <summary>
-            Потік для читання зі стандартного виводу процесу.
-            </summary>
-        </member>
-        <member name="P:SignalCli.Models.SignalCli.StreamPair.StandardError">
-            <summary>
-            Потік для читання зі стандартного потоку помилок процесу.
-            </summary>
-        </member>
-        <member name="M:SignalCli.Models.SignalCli.StreamPair.Dispose">
-            <summary>
-            Звільняє всі ресурси, пов'язані з потоками.
-            </summary>
-            <remarks>
-            Закриває всі три потоки: StandardInput, StandardOutput та StandardError.
-            </remarks>
-        </member>
-        <member name="T:SignalCli.Models.SignalCli.VersionParameters">
-            <summary>
-            Параметри запиту для отримання версії Signal CLI.
-            </summary>
-            <remarks>
-            Порожній запис, що використовується з методом version
-            для отримання інформації про версію Signal CLI.
-            </remarks>
-        </member>
-        <member name="T:SignalCli.Models.SignalCli.VersionResponse">
-            <summary>
-            Відповідь на запит версії Signal CLI.
-            </summary>
-            <remarks>
-            Містить інформацію про версію Signal CLI,
-            отриману викликом методу version.
-            </remarks>
-            <param name="Version">Рядок, що містить номер версії Signal CLI.</param>
-        </member>
-        <member name="M:SignalCli.Models.SignalCli.VersionResponse.#ctor(System.String)">
-            <summary>
-            Відповідь на запит версії Signal CLI.
-            </summary>
-            <remarks>
-            Містить інформацію про версію Signal CLI,
-            отриману викликом методу version.
-            </remarks>
-            <param name="Version">Рядок, що містить номер версії Signal CLI.</param>
-        </member>
-        <member name="P:SignalCli.Models.SignalCli.VersionResponse.Version">
-            <summary>Рядок, що містить номер версії Signal CLI.</summary>
         </member>
         <member name="T:SignalCli.Models.Signal.Accounts.ListAccountsParameters">
             <summary>
@@ -3709,6 +3419,296 @@
             </summary>
             <value>Ідентифікатор користувача для адресації повідомлень.</value>
         </member>
+        <member name="T:SignalCli.Models.SignalCli.CliLogLevel">
+            <summary>
+            Рівень логування для Signal CLI.
+            </summary>
+            <remarks>
+            Визначає детальність виведення діагностичної інформації
+            при роботі з Signal CLI.
+            </remarks>
+        </member>
+        <member name="F:SignalCli.Models.SignalCli.CliLogLevel.Info">
+            <summary>
+            Інформаційні повідомлення.
+            </summary>
+            <remarks>
+            Базовий рівень логування, що містить загальну інформацію про роботу.
+            Відповідає прапорцю -v у Signal CLI.
+            </remarks>
+        </member>
+        <member name="F:SignalCli.Models.SignalCli.CliLogLevel.Debug">
+            <summary>
+            Повідомлення для відлагодження.
+            </summary>
+            <remarks>
+            Розширений рівень логування, що містить додаткову інформацію для розробників.
+            Відповідає прапорцю -vv у Signal CLI.
+            </remarks>
+        </member>
+        <member name="F:SignalCli.Models.SignalCli.CliLogLevel.Verbose">
+            <summary>
+            Детальні повідомлення для діагностики.
+            </summary>
+            <remarks>
+            Максимальний рівень деталізації. Включає всі можливі повідомлення.
+            Відповідає прапорцю -vvv у Signal CLI.
+            </remarks>
+        </member>
+        <member name="T:SignalCli.Models.SignalCli.ProcessConfig">
+            <summary>
+            Конфігурація для запуску зовнішнього процесу.
+            </summary>
+            <remarks>
+            Містить набір налаштувань для запуску та керування процесом Signal CLI,
+            включаючи шляхи до виконуваного файлу, аргументи, робочу директорію
+            та налаштування перенаправлення потоків.
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.SignalCli.ProcessConfig.Executable">
+            <summary>
+            Шлях до виконуваного файлу.
+            </summary>
+            <remarks>
+            Повний або відносний шлях до файлу, який буде запущено (наприклад, "java").
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.SignalCli.ProcessConfig.Arguments">
+            <summary>
+            Аргументи командного рядка для процесу (єдиний рядок).
+            </summary>
+            <remarks>
+            Використовується лише як запасний варіант, якщо <see cref="P:SignalCli.Models.SignalCli.ProcessConfig.ArgumentList"/> порожній.
+            Для безпечної передачі аргументів із пробілами/лапками віддавайте перевагу <see cref="P:SignalCli.Models.SignalCli.ProcessConfig.ArgumentList"/>.
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.SignalCli.ProcessConfig.ArgumentList">
+            <summary>
+            Аргументи командного рядка як окремі елементи.
+            </summary>
+            <remarks>
+            Кожен елемент передається процесу окремо (через ProcessStartInfo.ArgumentList),
+            тож .NET сам екранує пробіли, лапки та інші спецсимволи — це усуває ризик
+            зламати чи інжектувати аргументи через шляхи з лапками.
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.SignalCli.ProcessConfig.CreateNewProcessGroup">
+            <summary>
+            Запускати процес у новій групі процесів (Windows).
+            </summary>
+            <remarks>
+            .NET 10: ізолює дочірній процес від консольних сигналів батька (наприклад Ctrl+C),
+            тож завершенням signal-cli керує лише бібліотека (через "exit" або Kill).
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.SignalCli.ProcessConfig.WorkingDirectory">
+            <summary>
+            Робоча директорія для процесу.
+            </summary>
+            <remarks>
+            Шлях до директорії, в якій буде запущено процес.
+            Якщо не вказано, використовується поточна директорія.
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.SignalCli.ProcessConfig.RedirectStandardInput">
+            <summary>
+            Вказує, чи потрібно перенаправляти стандартний ввід.
+            </summary>
+            <remarks>
+            Якщо true, створюється потік для запису у стандартний ввід процесу.
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.SignalCli.ProcessConfig.RedirectStandardOutput">
+            <summary>
+            Вказує, чи потрібно перенаправляти стандартний вивід.
+            </summary>
+            <remarks>
+            Якщо true, створюється потік для читання зі стандартного виводу процесу.
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.SignalCli.ProcessConfig.RedirectStandardError">
+            <summary>
+            Вказує, чи потрібно перенаправляти стандартний потік помилок.
+            </summary>
+            <remarks>
+            Якщо true, створюється потік для читання зі стандартного потоку помилок процесу.
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.SignalCli.ProcessConfig.EnvironmentVariables">
+            <summary>
+            Змінні середовища для процесу.
+            </summary>
+            <remarks>
+            Словник з парами ключ-значення, що визначають змінні середовища
+            для запущеного процесу.
+            </remarks>
+        </member>
+        <member name="T:SignalCli.Models.SignalCli.ProcessState">
+            <summary>
+            Стан процесу Signal CLI.
+            </summary>
+            <remarks>
+            Визначає можливі стани життєвого циклу процесу,
+            які використовуються для відстеження його роботи.
+            </remarks>
+        </member>
+        <member name="F:SignalCli.Models.SignalCli.ProcessState.NotStarted">
+            <summary>
+            Процес не запущено.
+            </summary>
+            <remarks>
+            Початковий стан перед першим запуском або після завершення роботи.
+            </remarks>
+        </member>
+        <member name="F:SignalCli.Models.SignalCli.ProcessState.Starting">
+            <summary>
+            Процес запускається.
+            </summary>
+            <remarks>
+            Перехідний стан під час ініціалізації процесу.
+            </remarks>
+        </member>
+        <member name="F:SignalCli.Models.SignalCli.ProcessState.Running">
+            <summary>
+            Процес запущено та працює.
+            </summary>
+            <remarks>
+            Нормальний робочий стан, який означає готовність процесу до обробки запитів.
+            </remarks>
+        </member>
+        <member name="F:SignalCli.Models.SignalCli.ProcessState.Stopping">
+            <summary>
+            Процес зупиняється.
+            </summary>
+            <remarks>
+            Перехідний стан під час штатного завершення роботи процесу.
+            </remarks>
+        </member>
+        <member name="F:SignalCli.Models.SignalCli.ProcessState.Stopped">
+            <summary>
+            Процес зупинено.
+            </summary>
+            <remarks>
+            Стан, що вказує на нормальне завершення роботи процесу.
+            </remarks>
+        </member>
+        <member name="F:SignalCli.Models.SignalCli.ProcessState.Failed">
+            <summary>
+            Сталася помилка під час роботи процесу.
+            </summary>
+            <remarks>
+            Стан, що вказує на аварійне завершення роботи або інші проблеми.
+            </remarks>
+        </member>
+        <member name="T:SignalCli.Models.SignalCli.ProcessStateInfo">
+            <summary>
+            Інформація про стан процесу Signal CLI.
+            </summary>
+            <remarks>
+            Об'єднує поточний стан процесу, потоки для взаємодії та інформацію про помилку.
+            Використовується для повідомлення про зміни стану процесу через ProcessStateManager.
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.SignalCli.ProcessStateInfo.State">
+            <summary>
+            Поточний стан процесу.
+            </summary>
+            <value>Одне зі значень <see cref="T:SignalCli.Models.SignalCli.ProcessState"/>.</value>
+        </member>
+        <member name="P:SignalCli.Models.SignalCli.ProcessStateInfo.StreamPair">
+            <summary>
+            Пара потоків для взаємодії з процесом.
+            </summary>
+            <value>Об'єкт <see cref="P:SignalCli.Models.SignalCli.ProcessStateInfo.StreamPair"/> або null, якщо потоки недоступні.</value>
+        </member>
+        <member name="P:SignalCli.Models.SignalCli.ProcessStateInfo.Error">
+            <summary>
+            Інформація про помилку, якщо вона сталася.
+            </summary>
+            <value>Об'єкт винятку або null, якщо помилки не було.</value>
+        </member>
+        <member name="M:SignalCli.Models.SignalCli.ProcessStateInfo.#ctor(SignalCli.Models.SignalCli.ProcessState,SignalCli.Models.SignalCli.StreamPair,System.Exception)">
+            <summary>
+            Створює новий екземпляр класу ProcessStateInfo.
+            </summary>
+            <param name="state">Стан процесу.</param>
+            <param name="streamPair">Пара потоків для взаємодії з процесом.</param>
+            <param name="error">Інформація про помилку.</param>
+        </member>
+        <member name="T:SignalCli.Models.SignalCli.StreamPair">
+            <summary>
+            Обгортка над потоками вводу/виводу зовнішнього процесу.
+            </summary>
+            <remarks>
+            Інкапсулює стандартні потоки (stdin, stdout, stderr) для взаємодії
+            з зовнішнім процесом. Реалізує <see cref="T:System.IDisposable"/> для
+            коректного звільнення ресурсів.
+            </remarks>
+        </member>
+        <member name="M:SignalCli.Models.SignalCli.StreamPair.#ctor(System.IO.StreamWriter,System.IO.StreamReader,System.IO.StreamReader)">
+            <summary>
+            Створює новий екземпляр класу StreamPair.
+            </summary>
+            <param name="input">Потік для запису у стандартний ввід процесу.</param>
+            <param name="output">Потік для читання зі стандартного виводу процесу.</param>
+            <param name="error">Потік для читання зі стандартного потоку помилок процесу.</param>
+            <exception cref="T:System.ArgumentNullException">Виникає, якщо будь-який з параметрів є null.</exception>
+        </member>
+        <member name="P:SignalCli.Models.SignalCli.StreamPair.StandardInput">
+            <summary>
+            Потік для запису у стандартний ввід процесу.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Models.SignalCli.StreamPair.StandardOutput">
+            <summary>
+            Потік для читання зі стандартного виводу процесу.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Models.SignalCli.StreamPair.StandardError">
+            <summary>
+            Потік для читання зі стандартного потоку помилок процесу.
+            </summary>
+        </member>
+        <member name="M:SignalCli.Models.SignalCli.StreamPair.Dispose">
+            <summary>
+            Звільняє всі ресурси, пов'язані з потоками.
+            </summary>
+            <remarks>
+            Закриває всі три потоки: StandardInput, StandardOutput та StandardError.
+            </remarks>
+        </member>
+        <member name="T:SignalCli.Models.SignalCli.VersionParameters">
+            <summary>
+            Параметри запиту для отримання версії Signal CLI.
+            </summary>
+            <remarks>
+            Порожній запис, що використовується з методом version
+            для отримання інформації про версію Signal CLI.
+            </remarks>
+        </member>
+        <member name="T:SignalCli.Models.SignalCli.VersionResponse">
+            <summary>
+            Відповідь на запит версії Signal CLI.
+            </summary>
+            <remarks>
+            Містить інформацію про версію Signal CLI,
+            отриману викликом методу version.
+            </remarks>
+            <param name="Version">Рядок, що містить номер версії Signal CLI.</param>
+        </member>
+        <member name="M:SignalCli.Models.SignalCli.VersionResponse.#ctor(System.String)">
+            <summary>
+            Відповідь на запит версії Signal CLI.
+            </summary>
+            <remarks>
+            Містить інформацію про версію Signal CLI,
+            отриману викликом методу version.
+            </remarks>
+            <param name="Version">Рядок, що містить номер версії Signal CLI.</param>
+        </member>
+        <member name="P:SignalCli.Models.SignalCli.VersionResponse.Version">
+            <summary>Рядок, що містить номер версії Signal CLI.</summary>
+        </member>
         <member name="T:SignalCli.Serialization.SignalJson">
             <summary>
             Спільні налаштування System.Text.Json для протоколу signal-cli JSON-RPC.
@@ -4391,6 +4391,44 @@
             Асинхронно звільняє ресурси, пов'язані з об'єктом.
             </summary>
         </member>
+        <member name="M:SignalCli.Services.Signal.SignalEventService.OnNotificationReceived(SignalCli.Models.Rpc.JsonRpcNotification{SignalCli.Models.Signal.Events.SubscriptionEventArgs})">
+            <summary>
+            Обробка вхідного сповіщення від JSON-RPC.
+            Використовує новий DTO JsonMessageEnvelope для уніфікованої обробки.
+            </summary>
+            <param name="notification">Сповіщення для обробки.</param>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalEventService.TryGetAccountBySubscriptionId(System.Int32,System.String@)">
+            <summary>
+            Знаходить обліковий запис за ідентифікатором підписки.
+            </summary>
+            <param name="subscriptionId">Ідентифікатор підписки.</param>
+            <param name="account">Знайдений обліковий запис або null, якщо підписка не існує.</param>
+            <returns>true, якщо підписка знайдена; інакше - false.</returns>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalMessage.SendTextMessageAsync(SignalCli.Models.Signal.Message.TextMessageOptions)">
+            <summary>
+            Обгортка для відправки звичайного текстового повідомлення без вкладень.
+            Підтримує цитування та прев’ю посилань.
+            </summary>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalMessage.SendAttachmentAsync(SignalCli.Models.Signal.Message.AttachmentMessageOptions)">
+            <summary>
+            Обгортка для відправки повідомлення з вкладенням.
+            Підтримує цитування. Для групових повідомлень допускається лише один отримувач.
+            </summary>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalMessage.SendStickerAsync(SignalCli.Models.Signal.Message.StickerMessageOptions)">
+            <summary>
+            Обгортка для відправки стікера.
+            Для групових повідомлень допускається лише один отримувач.
+            </summary>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalMessage.ValidateRecipients(System.Collections.Generic.IEnumerable{SignalCli.Interfaces.Signal.IRecipient},System.String)">
+            <summary>
+            Перевіряє, що список отримувачів не порожній.
+            </summary>
+        </member>
         <member name="T:SignalCli.Services.SignalCli.ProcessFactory">
             <summary>
             Реалізація інтерфейсу IProcessFactory, що створює екземпляри IProcess.
@@ -4616,44 +4654,6 @@
         <member name="M:SignalCli.Services.SignalCli.SignalCliHostedService.Dispose">
             <summary>
             Звільняє ресурси, пов'язані з об'єктом.
-            </summary>
-        </member>
-        <member name="M:SignalCli.Services.Signal.SignalEventService.OnNotificationReceived(SignalCli.Models.Rpc.JsonRpcNotification{SignalCli.Models.Signal.Events.SubscriptionEventArgs})">
-            <summary>
-            Обробка вхідного сповіщення від JSON-RPC.
-            Використовує новий DTO JsonMessageEnvelope для уніфікованої обробки.
-            </summary>
-            <param name="notification">Сповіщення для обробки.</param>
-        </member>
-        <member name="M:SignalCli.Services.Signal.SignalEventService.TryGetAccountBySubscriptionId(System.Int32,System.String@)">
-            <summary>
-            Знаходить обліковий запис за ідентифікатором підписки.
-            </summary>
-            <param name="subscriptionId">Ідентифікатор підписки.</param>
-            <param name="account">Знайдений обліковий запис або null, якщо підписка не існує.</param>
-            <returns>true, якщо підписка знайдена; інакше - false.</returns>
-        </member>
-        <member name="M:SignalCli.Services.Signal.SignalMessage.SendTextMessageAsync(SignalCli.Models.Signal.Message.TextMessageOptions)">
-            <summary>
-            Обгортка для відправки звичайного текстового повідомлення без вкладень.
-            Підтримує цитування та прев’ю посилань.
-            </summary>
-        </member>
-        <member name="M:SignalCli.Services.Signal.SignalMessage.SendAttachmentAsync(SignalCli.Models.Signal.Message.AttachmentMessageOptions)">
-            <summary>
-            Обгортка для відправки повідомлення з вкладенням.
-            Підтримує цитування. Для групових повідомлень допускається лише один отримувач.
-            </summary>
-        </member>
-        <member name="M:SignalCli.Services.Signal.SignalMessage.SendStickerAsync(SignalCli.Models.Signal.Message.StickerMessageOptions)">
-            <summary>
-            Обгортка для відправки стікера.
-            Для групових повідомлень допускається лише один отримувач.
-            </summary>
-        </member>
-        <member name="M:SignalCli.Services.Signal.SignalMessage.ValidateRecipients(System.Collections.Generic.IEnumerable{SignalCli.Interfaces.Signal.IRecipient},System.String)">
-            <summary>
-            Перевіряє, що список отримувачів не порожній.
             </summary>
         </member>
         <member name="T:SignalCli.Utilities.AtomicCounter">
