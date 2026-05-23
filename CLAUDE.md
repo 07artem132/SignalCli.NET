@@ -43,6 +43,21 @@ Patterns in use: Dependency Injection, Hosted Services, Factory, Adapter/Wrapper
 - **Comments and log messages are written in Ukrainian** in this codebase — match that when editing existing files.
 - Keep XML doc comments on public members.
 
+### For new code (forward-looking, tracked by `agent-friendly-modernization`)
+
+These patterns apply to *new* code and to non-trivial edits in touched files. They make the library more discoverable for both humans and LLM agents (typed DI, real `Async` signatures, structured logs). The full migration of existing code is staged across the `agent-friendly-modernization` OpenSpec change — but do **not** add new code that re-introduces the old shape.
+
+- **Async naming:** every new `Task`/`ValueTask`-returning method gets the `Async` suffix. The single historical exception, `ISignalCliClient.Version()`, is being renamed to `VersionAsync()` with an `[Obsolete]` shim — do not copy that anti-pattern.
+- **CancellationToken:** new public methods expose `CancellationToken cancellationToken = default` as the **last explicit parameter**, even when an `*Options` record also carries one (link both via `CreateLinkedTokenSource` if needed). Agents look at signatures, not at options fields.
+- **Logging:** new `ILogger` callsites go through `[LoggerMessage]` `partial` methods in a sibling `XxxLog.cs` file (closes CA1848/CA1873). Direct `_logger.LogInformation("template", args)` is being phased out; do not add new such calls. Privacy rules (#1 in Critical rules) still apply — never reference PII in templates at `Information+`. EventId blocks are reserved per service in `openspec/changes/agent-friendly-modernization/design.md`.
+- **Background loops:** any new periodic worker is a `BackgroundService` whose `ExecuteAsync` uses `PeriodicTimer(interval, TimeProvider)` — not `Task.Run` + `while (!ct.IsCancellationRequested) { await Task.Delay(...) }`. Inject `TimeProvider` (default `TimeProvider.System`) so `FakeTimeProvider` drives tests; tests under `SignalCliHealthMonitor/` and `SignalCliHostedService/Restart*/` must not do `Task.Delay(>10ms)`.
+- **Configurable knobs:** new settings go into `SignalCliOptions` (typed `IOptions<>`) with `[Required]` / `[Range]` data annotations and `.ValidateOnStart()`. The public `Config` is being replaced; do not extend it with new fields. Internal services read `_options.Value` once in the constructor (options are immutable).
+- **Event streams:** new event channels should be exposed as `IAsyncEnumerable<T>` on top of a bounded `Channel<T>` (`FullMode = DropOldest`, capacity 1024) — `await foreach` is the default ergonomic for both humans and LLM agents. Pair with the existing `IObservable<T>` only when broadcast/fan-out is a documented requirement; in XMLDoc, state single-consumer semantics explicitly.
+- **Disposal:** classes with asynchronous cleanup implement **only** `IAsyncDisposable` — no synchronous `Dispose()` that blocks via `GetAwaiter().GetResult()`. Stateless façades (`SignalAccounts`, `SignalGroups`, `SignalDevices`, `SignalService`, `SignalMessage`) should not implement `IDisposable` at all.
+- **TaskCompletionSource cancellation:** pass the originating token to `TrySetCanceled(token)` so callers see the actual cancellation source via `OperationCanceledException.CancellationToken`.
+- **`TimeProvider` consistency:** if a class already takes `TimeProvider`, every wait it performs goes through it (`Task.Delay(_, _, TimeProvider, ct)`, `new CancellationTokenSource(timeout, TimeProvider)`, `TimeProvider.CreateTimer(...)`). Do not mix real and virtual clocks in the same class.
+- **Strong typing over magic strings:** prefer `enum` (e.g. `TextStyleMode`) over `string? mode = "styled"`-flags in new code; case-insensitive string compares for protocol values use `StringComparison.OrdinalIgnoreCase` (and `ToUpperInvariant()` only when the value leaves the process boundary — see #5).
+
 ## Critical rules (do not regress — these are audit findings)
 
 1. **Privacy:** never log message bodies, phone numbers, or attachment payloads above `Trace`. RPC params/results and raw stdin/stdout lines are `Trace`-only. `SignalService` logs the method name only.
@@ -56,7 +71,17 @@ Patterns in use: Dependency Injection, Hosted Services, Factory, Adapter/Wrapper
 
 ## Planning (OpenSpec)
 
-This repo uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for change planning under `openspec/changes/`. For non-trivial work, create/extend a change (proposal → design → specs → tasks) and run `npx -y @fission-ai/openspec@latest validate <change>` before implementing. The existing changes (`address-audit-findings`, `modernize-architecture` — net10 + System.Text.Json, `agent-ready-conventions`) are all **implemented** on `main`; treat them as historical reference, not pending work.
+This repo uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for change planning under `openspec/changes/`. For non-trivial work, create/extend a change (proposal → design → specs → tasks) and run `npx -y @fission-ai/openspec@latest validate <change> --strict` before implementing.
+
+**Implemented and merged** (historical reference, do not re-open):
+- `address-audit-findings` — privacy/security/correctness audit round 1.
+- `modernize-architecture` — `net9.0` → `net10.0`, `Newtonsoft.Json` → `System.Text.Json` (+ source-gen `JsonSerializerContext`), single-source-of-truth process state via `ProcessStateManager`.
+- `agent-ready-conventions` — `.editorconfig`, analyzers (`AnalysisLevel=latest-recommended`, `EnforceCodeStyleInBuild`), narrowed broad `catch`-es, this `CLAUDE.md`.
+- `address-audit-findings-2` — audit round 2: bounded RPC timeout (`Config.RequestTimeoutSeconds`), windowed restart budget, idempotent `AddSignalCli`, `IAsyncDisposable` on `JsonRpcClient`, integration tests + bundled-JRE E2E.
+- `comprehensive-code-audit` — the audit document itself (`AUDIT-FINDINGS.md`); fixes live in the two `address-audit-findings*` changes.
+
+**Pending** (proposal stage, not yet implemented):
+- `agent-friendly-modernization` — `IOptions<SignalCliOptions>` + `ValidateOnStart`, `SignalCliHealthMonitor` as `BackgroundService` + `PeriodicTimer`, source-generated logging (`[LoggerMessage]`), `IAsyncEnumerable<T>` event streams via `Channel<T>`, and API-discoverability fixes (`Async` suffix, explicit `CancellationToken`, drop sync-over-async `Dispose`, drop empty `IDisposable` on façades, simplify `AtomicCounter`, `[CallerArgumentExpression]`). Five capabilities, five independently shippable PRs (`agent-friendly-api` → `background-monitor` → `source-generated-logging` → `options-pattern` → `async-stream-events`). See `openspec/changes/agent-friendly-modernization/{proposal,design,tasks}.md`. **Follow the forward-looking conventions in §"For new code" above when adding code, even before the migration lands.**
 
 ## Git
 
