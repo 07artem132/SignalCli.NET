@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SignalCli.Diagnostics;
 using SignalCli.Interfaces.Rpc;
 using SignalCli.Logging;
 using SignalCli.Models;
@@ -114,6 +115,8 @@ public sealed class SignalCliHealthMonitor : BackgroundService
 
                     if (isHealthy) continue;
                     SignalCliHealthMonitorLog.RestartTriggered(_logger);
+                    // post-modernize-tuning §11.B.5: process-restart counter (health-triggered).
+                    SignalCliDiagnostics.ProcessRestarts.Add(1, new KeyValuePair<string, object?>("trigger", "health"));
                     await _signalCliHostedService.ForceRestartAsync(stoppingToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)

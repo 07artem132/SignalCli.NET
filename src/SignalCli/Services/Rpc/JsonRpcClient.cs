@@ -1,10 +1,12 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Text.Json;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
+using SignalCli.Diagnostics;
 using SignalCli.Exceptions;
 using SignalCli.Interfaces.Rpc;
 using SignalCli.Interfaces.SignalCli;
@@ -442,6 +444,17 @@ internal sealed class JsonRpcClient : IJsonRpcClient
             ["RpcMethod"] = method,
             ["RpcRequestId"] = requestId,
         });
+
+        // post-modernize-tuning §11.A.2 (audit N1): tracing span. Без активного listener'а
+        // StartActivity повертає null — нульова накладна, ?.SetTag — no-op.
+        using var activity = SignalCliDiagnostics.ActivitySource.StartActivity(
+            SignalCliDiagnostics.RpcActivityNamePrefix + method, ActivityKind.Client);
+        activity?.SetTag("signal.rpc.method", method);
+        activity?.SetTag("signal.rpc.request_id", requestId);
+
+        // post-modernize-tuning §11.B.3: histogram-таймер під весь lifecycle запиту.
+        var sw = Stopwatch.GetTimestamp();
+        var status = "error"; // overwritten below; "error" — default-fail-stance per §11.A.2
         // ВАЖЛИВО: серіалізуємо параметри за КОНКРЕТНИМ типом TRequest у JsonElement.
         // Інакше STJ серіалізує властивість Params (тип object) як "{}" і всі параметри
         // запиту втрачаються (на відміну від Newtonsoft, який брав runtime-тип).
@@ -476,20 +489,37 @@ internal sealed class JsonRpcClient : IJsonRpcClient
                     if (typedResult is null)
                         throw new InvalidOperationException($"Не вдалося перетворити JSON-результат на {typeof(TResponse).Name}");
 
+                    status = "ok";
+                    activity?.SetStatus(ActivityStatusCode.Ok);
                     return typedResult;
                 }
                 catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
                 {
                     // Спрацював лише таймаут (а не callerCancel) — фолтимо TimeoutException, щоб
                     // викликач міг відрізнити «нема відповіді» від власного скасування.
+                    status = "timeout";
+                    activity?.SetStatus(ActivityStatusCode.Error, nameof(TimeoutException));
                     throw new TimeoutException(
                         $"JSON-RPC метод '{method}' не отримав відповіді за {_requestTimeout.TotalSeconds:F0} с");
                 }
             }
         }
+        catch (Exception ex) when (status == "error")
+        {
+            // §11.A.2 (audit N1): Type-name only — повідомлення може нести RPC-error-текст (PII-ризик).
+            activity?.SetStatus(ActivityStatusCode.Error, ex.GetType().Name);
+            throw;
+        }
         finally
         {
             _pendingRequests.TryRemove(requestId, out _);
+            // §11.B.2-3: лічильник + гістограма.
+            var elapsedMs = Stopwatch.GetElapsedTime(sw).TotalMilliseconds;
+            SignalCliDiagnostics.RpcRequests.Add(1,
+                new KeyValuePair<string, object?>("method", method),
+                new KeyValuePair<string, object?>("status", status));
+            SignalCliDiagnostics.RpcDuration.Record(elapsedMs,
+                new KeyValuePair<string, object?>("method", method));
         }
     }
 

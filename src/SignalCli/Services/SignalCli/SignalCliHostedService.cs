@@ -3,6 +3,7 @@ using System.Reactive.Subjects;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SignalCli.Diagnostics;
 using SignalCli.Interfaces.SignalCli;
 using SignalCli.Logging;
 using SignalCli.Models;
@@ -227,6 +228,8 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             }
 
             SignalCliHostedServiceLog.ForceRestartAttempt(_logger, _restartCount, _options.MaxRestartAttempts);
+            // post-modernize-tuning §11.B.5: process-restart counter for observability.
+            SignalCliDiagnostics.ProcessRestarts.Add(1, new KeyValuePair<string, object?>("trigger", "force"));
 
             // 1) Зупинка
             await StopProcessInternalAsyncNoLock(cancellationToken).ConfigureAwait(false);
@@ -557,6 +560,8 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             }
 
             SignalCliHostedServiceLog.AutoRestartAttempt(_logger, _restartCount, _options.MaxRestartAttempts);
+            // post-modernize-tuning §11.B.5: process-restart counter (crash-triggered).
+            SignalCliDiagnostics.ProcessRestarts.Add(1, new KeyValuePair<string, object?>("trigger", "crash"));
             try
             {
                 // B.5: через _timeProvider для консистентності з ForceRestartAsync.

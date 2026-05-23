@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Threading.Channels;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using SignalCli.Diagnostics;
 using SignalCli.Interfaces.Rpc;
 using SignalCli.Interfaces.Signal;
 using SignalCli.Interfaces.SignalCli;
@@ -98,9 +99,9 @@ internal sealed class SignalEventService(
     private readonly Channel<EditEventArgs> _editChannel = Channel.CreateBounded<EditEventArgs>(ChannelOptionsTemplate());
     private readonly Channel<RemoteDeleteEventArgs> _remoteDeleteChannel = Channel.CreateBounded<RemoteDeleteEventArgs>(ChannelOptionsTemplate());
 
-    // Сумарний лічильник «дропів через переповнення». Періодично логується на Debug
-    // у TryWrite (раз на 100 дропів — щоб не спамити).
-    private long _droppedCount;
+    // post-modernize-tuning §8c.21 + §11.B.4: drop accounting перенесено повністю
+    // на Meter (`signalcli.events.dropped` counter з `event_type` тегом).
+    // Приватний _droppedCount field видалено.
 
     // post-modernize-tuning §2.4: Interlocked.Exchange-based disposal flag.
     private int _disposedFlag;
@@ -175,16 +176,14 @@ internal sealed class SignalEventService(
     /// успішне, але якщо канал перед записом був повним — найстаріший елемент вижений.
     /// Інкрементує лічильник і періодично логує на Debug для діагностики backpressure.
     /// </summary>
-    private void TryWriteOrDrop<T>(Channel<T> channel, T item)
+    private static void TryWriteOrDrop<T>(Channel<T> channel, T item, string eventType)
     {
-        // Якщо канал вже повний — DropOldest вижене найстаріший. Лічимо це як drop.
+        // Якщо канал вже повний — DropOldest вижене найстаріший. Інкрементуємо
+        // Meter-counter — drop accounting тепер виходить назовні через OTel.
         if (channel.Reader.Count >= ChannelCapacity)
         {
-            var dropped = Interlocked.Increment(ref _droppedCount);
-            if (dropped % 100 == 1)
-            {
-                SignalEventServiceLog.ChannelOverflowed(_logger, typeof(T).Name, dropped);
-            }
+            SignalCliDiagnostics.EventsDropped.Add(1,
+                new KeyValuePair<string, object?>("event_type", eventType));
         }
         channel.Writer.TryWrite(item);
     }
@@ -351,7 +350,7 @@ internal sealed class SignalEventService(
                     jsonEnvelope.ServerReceivedTimestamp,
                     jsonEnvelope.ServerDeliveredTimestamp);
                 _typing.OnNext(typingEvent);
-                TryWriteOrDrop(_typingChannel, typingEvent);
+                TryWriteOrDrop(_typingChannel, typingEvent, "typing");
                 return;
             }
 
@@ -371,7 +370,7 @@ internal sealed class SignalEventService(
                     jsonEnvelope.ServerReceivedTimestamp,
                     jsonEnvelope.ServerDeliveredTimestamp);
                 _receipts.OnNext(receiptEvent);
-                TryWriteOrDrop(_receiptChannel, receiptEvent);
+                TryWriteOrDrop(_receiptChannel, receiptEvent, "receipt");
                 return;
             }
 
@@ -391,7 +390,7 @@ internal sealed class SignalEventService(
                     jsonEnvelope.ServerReceivedTimestamp,
                     jsonEnvelope.ServerDeliveredTimestamp);
                 _syncs.OnNext(syncEvent);
-                TryWriteOrDrop(_syncChannel, syncEvent);
+                TryWriteOrDrop(_syncChannel, syncEvent, "sync");
                 return;
             }
 
@@ -411,7 +410,7 @@ internal sealed class SignalEventService(
                     jsonEnvelope.ServerReceivedTimestamp,
                     jsonEnvelope.ServerDeliveredTimestamp);
                 _edits.OnNext(editEvent);
-                TryWriteOrDrop(_editChannel, editEvent);
+                TryWriteOrDrop(_editChannel, editEvent, "edit");
                 return;
             }
 
@@ -439,7 +438,7 @@ internal sealed class SignalEventService(
                         jsonEnvelope.ServerReceivedTimestamp,
                         jsonEnvelope.ServerDeliveredTimestamp);
                     _textMessages.OnNext(textEvent);
-                    TryWriteOrDrop(_textChannel, textEvent);
+                    TryWriteOrDrop(_textChannel, textEvent, "text");
                     emitted = true;
                 }
 
@@ -460,7 +459,7 @@ internal sealed class SignalEventService(
                         jsonEnvelope.ServerDeliveredTimestamp);
 
                     _reaction.OnNext(reactionEvent);
-                    TryWriteOrDrop(_reactionChannel, reactionEvent);
+                    TryWriteOrDrop(_reactionChannel, reactionEvent, "reaction");
                     emitted = true;
                 }
 
@@ -480,7 +479,7 @@ internal sealed class SignalEventService(
                         jsonEnvelope.ServerReceivedTimestamp,
                         jsonEnvelope.ServerDeliveredTimestamp);
                     _sticker.OnNext(stickerEvent);
-                    TryWriteOrDrop(_stickerChannel, stickerEvent);
+                    TryWriteOrDrop(_stickerChannel, stickerEvent, "sticker");
                     emitted = true;
                 }
 
@@ -500,7 +499,7 @@ internal sealed class SignalEventService(
                         jsonEnvelope.ServerReceivedTimestamp,
                         jsonEnvelope.ServerDeliveredTimestamp);
                     _attachments.OnNext(attachmentEvent);
-                    TryWriteOrDrop(_attachmentChannel, attachmentEvent);
+                    TryWriteOrDrop(_attachmentChannel, attachmentEvent, "attachment");
                     emitted = true;
                 }
 
@@ -520,7 +519,7 @@ internal sealed class SignalEventService(
                         jsonEnvelope.ServerReceivedTimestamp,
                         jsonEnvelope.ServerDeliveredTimestamp);
                     _remoteDeletes.OnNext(rd);
-                    TryWriteOrDrop(_remoteDeleteChannel, rd);
+                    TryWriteOrDrop(_remoteDeleteChannel, rd, "remote_delete");
                     emitted = true;
                 }
 
@@ -542,7 +541,7 @@ internal sealed class SignalEventService(
                         jsonEnvelope.ServerReceivedTimestamp,
                         jsonEnvelope.ServerDeliveredTimestamp);
                     _quotes.OnNext(qe);
-                    TryWriteOrDrop(_quoteChannel, qe);
+                    TryWriteOrDrop(_quoteChannel, qe, "quote");
                     emitted = true;
                 }
 

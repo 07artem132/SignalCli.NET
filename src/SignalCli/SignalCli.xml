@@ -4,6 +4,83 @@
         <name>SignalCli</name>
     </assembly>
     <members>
+        <member name="T:SignalCli.Diagnostics.SignalCliDiagnostics">
+            <summary>
+            post-modernize-tuning §11 (audit N1/N2): єдиний фасад для distributed-tracing (<see cref="F:SignalCli.Diagnostics.SignalCliDiagnostics.ActivitySource"/>)
+            та metrics (<see cref="F:SignalCli.Diagnostics.SignalCliDiagnostics.Meter"/>) бібліотеки SignalCli.NET.
+            </summary>
+            <remarks>
+            <para>
+            <b>Споживання.</b> Викликачі підписуються на джерела через OpenTelemetry:
+            <code>
+            builder.Services.AddOpenTelemetry()
+                .WithTracing(t =&gt; t.AddSource("SignalCli.NET"))
+                .WithMetrics(m =&gt; m.AddMeter("SignalCli.NET"));
+            </code>
+            </para>
+            <para>
+            <b>Privacy invariant</b> (CLAUDE.md rule #1): значення тегів у <c>Activity</c> та
+            <c>Meter</c>-інструментах — тільки method-names, status enums, integer IDs, durations,
+            exception type names. <b>Ніколи</b> — тіло повідомлення, номер телефону, шлях до файлу
+            вкладення. Privacy guard tests (<c>ActivityTagPrivacyTests</c>, <c>MeterTagPrivacyTests</c>)
+            перевіряють це через literal-substring asserts на seed-PII.
+            </para>
+            <para>
+            <b>Best practice</b> (Microsoft *Adding distributed tracing instrumentation — best practices*):
+            один <see cref="F:SignalCli.Diagnostics.SignalCliDiagnostics.ActivitySource"/> на бібліотеку, статичне поле, ієрархічна назва, версія.
+            </para>
+            </remarks>
+        </member>
+        <member name="F:SignalCli.Diagnostics.SignalCliDiagnostics.SourceName">
+            <summary>Assembly-name + assembly-version (наприклад, "SignalCli.NET" + "2.1.0").</summary>
+        </member>
+        <member name="F:SignalCli.Diagnostics.SignalCliDiagnostics.ActivitySource">
+            <summary>
+            Єдине джерело <see cref="T:System.Diagnostics.Activity"/>-ів для всієї бібліотеки. Без активного слухача
+            <c>StartActivity</c> повертає <c>null</c> — нульовий runtime-cost.
+            </summary>
+        </member>
+        <member name="F:SignalCli.Diagnostics.SignalCliDiagnostics.Meter">
+            <summary>
+            Єдиний <see cref="F:SignalCli.Diagnostics.SignalCliDiagnostics.Meter"/> для метрик бібліотеки. Інструменти створюються нижче;
+            без слухача (<c>MeterListener</c> / OTel exporter) — нульова видима витрата.
+            </summary>
+        </member>
+        <member name="F:SignalCli.Diagnostics.SignalCliDiagnostics.RpcRequests">
+            <summary>
+            JSON-RPC requests sent to signal-cli. Tags: `method` (string), `status` ∈
+            {`ok`, `timeout`, `error`}.
+            </summary>
+        </member>
+        <member name="F:SignalCli.Diagnostics.SignalCliDiagnostics.RpcDuration">
+            <summary>
+            JSON-RPC round-trip duration. Tag: `method`. Recorded in milliseconds.
+            </summary>
+        </member>
+        <member name="F:SignalCli.Diagnostics.SignalCliDiagnostics.ProcessRestarts">
+            <summary>
+            signal-cli process restarts. Tag: `trigger` ∈ {`force`, `crash`, `health`}.
+            </summary>
+        </member>
+        <member name="F:SignalCli.Diagnostics.SignalCliDiagnostics.EventsDropped">
+            <summary>
+            Channel-overflow drops in <c>SignalEventService</c>. Tag: `event_type` ∈
+            {`text`, `reaction`, `attachment`, `sticker`, `typing`, `receipt`, `sync`,
+            `quote`, `edit`, `remote_delete`}. Replaces the private `_droppedCount` field.
+            </summary>
+        </member>
+        <member name="F:SignalCli.Diagnostics.SignalCliDiagnostics.RpcActivityNamePrefix">
+            <summary>RPC client activity name prefix; full name = `rpc.{method}`.</summary>
+        </member>
+        <member name="F:SignalCli.Diagnostics.SignalCliDiagnostics.ProcessStartActivityName">
+            <summary>Process lifecycle activity names (§11.A.3).</summary>
+        </member>
+        <member name="F:SignalCli.Diagnostics.SignalCliDiagnostics.HealthCheckPingActivityName">
+            <summary>Health-check ping activity name (§11.A.4).</summary>
+        </member>
+        <member name="F:SignalCli.Diagnostics.SignalCliDiagnostics.SubscribeActivityName">
+            <summary>Subscribe/unsubscribe activity names (§11.A.5).</summary>
+        </member>
         <member name="T:SignalCli.Exceptions.JsonRpcException">
             <summary>
             Виняток, що виникає при помилках JSON-RPC взаємодії.
@@ -20,23 +97,34 @@
             </summary>
             <value>Об'єкт <see cref="T:SignalCli.Models.Rpc.JsonRpcError"/> з кодом та повідомленням помилки.</value>
         </member>
+        <member name="M:SignalCli.Exceptions.JsonRpcException.#ctor">
+            <summary>
+            post-modernize-tuning §4.21 (CA1032): стандартний parameterless ctor.
+            <see cref="P:SignalCli.Exceptions.JsonRpcException.Error"/> заповнюється sentinel-значенням (`code -32603, "JSON-RPC error"`).
+            </summary>
+        </member>
+        <member name="M:SignalCli.Exceptions.JsonRpcException.#ctor(System.String)">
+            <summary>
+            post-modernize-tuning §4.21 (CA1032): стандартний message-only ctor.
+            <see cref="P:SignalCli.Exceptions.JsonRpcException.Error"/> заповнюється sentinel-значенням з переданим повідомленням
+            і канонічним кодом -32603 ("Internal error" per JSON-RPC 2.0).
+            </summary>
+            <param name="message">Повідомлення про помилку.</param>
+        </member>
+        <member name="M:SignalCli.Exceptions.JsonRpcException.#ctor(System.String,System.Exception)">
+            <summary>
+            post-modernize-tuning §4.21 (CA1032): стандартний (message, innerException) ctor.
+            <see cref="P:SignalCli.Exceptions.JsonRpcException.Error"/> заповнюється канонічним -32603 + переданим повідомленням.
+            </summary>
+            <param name="message">Повідомлення про помилку.</param>
+            <param name="innerException">Внутрішній виняток, що спричинив цю помилку.</param>
+        </member>
         <member name="M:SignalCli.Exceptions.JsonRpcException.#ctor(SignalCli.Models.Rpc.JsonRpcError)">
             <summary>
             Створює новий екземпляр винятку з інформацією про помилку JSON-RPC.
             </summary>
             <param name="error">Об'єкт з інформацією про помилку JSON-RPC.</param>
             <exception cref="T:System.ArgumentNullException">Виникає, якщо параметр error дорівнює null.</exception>
-        </member>
-        <member name="M:SignalCli.Exceptions.JsonRpcException.#ctor(System.String,System.Exception)">
-            <summary>
-            Створює новий екземпляр винятку з текстовим повідомленням та опціональним внутрішнім винятком.
-            </summary>
-            <param name="message">Повідомлення про помилку.</param>
-            <param name="inner">Внутрішній виняток, що спричинив цю помилку.</param>
-            <remarks>
-            Автоматично створює об'єкт <see cref="T:SignalCli.Models.Rpc.JsonRpcError"/> з кодом -32000 (внутрішня помилка сервера)
-            та вказаним повідомленням.
-            </remarks>
         </member>
         <member name="T:SignalCli.Extensions.ServiceCollectionExtensions">
             <summary>
@@ -5114,7 +5202,7 @@
         <member name="M:SignalCli.Services.Signal.SignalEventService.RemoteDeletesAsync(System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
-        <member name="M:SignalCli.Services.Signal.SignalEventService.TryWriteOrDrop``1(System.Threading.Channels.Channel{``0},``0)">
+        <member name="M:SignalCli.Services.Signal.SignalEventService.TryWriteOrDrop``1(System.Threading.Channels.Channel{``0},``0,System.String)">
             <summary>
             E (async-stream): записує елемент у канал; у DropOldest-режимі TryWrite завжди
             успішне, але якщо канал перед записом був повним — найстаріший елемент вижений.
