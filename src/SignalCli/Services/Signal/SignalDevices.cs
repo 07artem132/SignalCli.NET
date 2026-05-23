@@ -16,7 +16,7 @@ internal sealed class SignalDevices(
     private readonly ISignalCliClient _signalCliClient = signalCliClient ?? throw new ArgumentNullException(nameof(signalCliClient));
     private readonly ILogger<SignalDevices> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-    public async Task<StartLinkResponse> StartLink(CancellationToken cancellationToken = default)
+    public async Task<StartLinkResponse> StartLinkAsync(CancellationToken cancellationToken = default)
     {
         // post-modernize-tuning §8c.13 (audit N16): entry-level log symmetric з ListAccounts.
         SignalDevicesLog.StartLinkRequested(_logger);
@@ -42,7 +42,7 @@ internal sealed class SignalDevices(
         }
     }
 
-    public async Task<FinishLinkResponse> FinishLink(string deviceLinkUri, string deviceName, CancellationToken cancellationToken = default)
+    public async Task<FinishLinkResponse> FinishLinkAsync(string deviceLinkUri, string deviceName, CancellationToken cancellationToken = default)
     {
         // post-modernize-tuning §8c.11 (audit N5): validate inputs at the boundary —
         // ArgumentException for null/empty замість 400-class signal-cli-помилки після RPC.

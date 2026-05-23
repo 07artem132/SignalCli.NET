@@ -16,7 +16,7 @@ internal sealed class SignalGroups(
     private readonly ISignalCliClient _signalCliClient = signalCliClient ?? throw new ArgumentNullException(nameof(signalCliClient));
     private readonly ILogger<SignalGroups> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-    public async Task<ListGroupsResponse> ListGroups(string account, CancellationToken cancellationToken = default)
+    public async Task<ListGroupsResponse> ListGroupsAsync(string account, CancellationToken cancellationToken = default)
     {
         // post-modernize-tuning §8c.11 (audit N5): validate at the boundary.
         ArgumentException.ThrowIfNullOrEmpty(account);

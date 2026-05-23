@@ -96,10 +96,42 @@ public class SignalEventServiceDispatchTests
         var third = await service.SubscribeAsync(Account);
 
         // Усі три виклики повертають один і той самий ID (з RPC-мока — SubId).
-        Assert.Equal(SubId, first.id);
-        Assert.Equal(SubId, second.id);
-        Assert.Equal(SubId, third.id);
+        Assert.Equal(SubId, first.Id);
+        Assert.Equal(SubId, second.Id);
+        Assert.Equal(SubId, third.Id);
         // subscribeReceive викликаний РІВНО ОДИН раз — другий і третій ішли коротким шляхом.
+        rpc.Verify(c => c.InvokeMethodAsync<JsonElement, SubscribeReceiveParameters>(
+            "subscribeReceive", It.IsAny<SubscribeReceiveParameters>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    // post-modernize-tuning §3.6 (audit A4): 10 паралельних SubscribeAsync для одного
+    // облікового запису роблять РІВНО ОДИН subscribeReceive-RPC (reservation placeholder
+    // pattern) — і всі 10 викликачів отримують той самий subscriptionId. Без цієї
+    // інваріанти на signal-cli залишається N-1 orphan subscription'ів.
+    [Fact]
+    public async Task SubscribeAsync_Concurrent_TenCallers_InvokesRpcExactlyOnceAndReturnsSameId()
+    {
+        var service = Create(out _, out var rpc);
+        await service.StartAsync(CancellationToken.None);
+
+        // Невелика затримка у моку — щоб усі 10 викликачів встигли зайти у lock-section.
+        rpc.Setup(c => c.InvokeMethodAsync<JsonElement, SubscribeReceiveParameters>(
+                "subscribeReceive", It.IsAny<SubscribeReceiveParameters>(), It.IsAny<CancellationToken>()))
+            .Returns(async (string _, SubscribeReceiveParameters _, CancellationToken _) =>
+            {
+                await Task.Delay(50).ConfigureAwait(false);
+                return JsonSerializer.SerializeToElement(SubId);
+            });
+
+        var tasks = Enumerable.Range(0, 10)
+            .Select(_ => service.SubscribeAsync(Account))
+            .ToArray();
+        var results = await Task.WhenAll(tasks);
+
+        // Усі 10 повернули один і той самий ID.
+        Assert.All(results, r => Assert.Equal(SubId, r.Id));
+        // RPC викликано РІВНО ОДИН раз (reservation placeholder зупинив 9 інших).
         rpc.Verify(c => c.InvokeMethodAsync<JsonElement, SubscribeReceiveParameters>(
             "subscribeReceive", It.IsAny<SubscribeReceiveParameters>(), It.IsAny<CancellationToken>()),
             Times.Once);

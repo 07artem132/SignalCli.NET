@@ -459,7 +459,7 @@
             та керування їхніми налаштуваннями.
             </remarks>
         </member>
-        <member name="M:SignalCli.Interfaces.Signal.ISignalAccounts.ListAccounts(System.Threading.CancellationToken)">
+        <member name="M:SignalCli.Interfaces.Signal.ISignalAccounts.ListAccountsAsync(System.Threading.CancellationToken)">
             <summary>
             Отримує список зареєстрованих акаунтів Signal.
             </summary>
@@ -478,7 +478,12 @@
             </code>
             </example>
         </member>
-        <member name="M:SignalCli.Interfaces.Signal.ISignalAccounts.SyncAccount(System.Threading.CancellationToken)">
+        <member name="M:SignalCli.Interfaces.Signal.ISignalAccounts.ListAccounts(System.Threading.CancellationToken)">
+            <summary>Застаріле: використовуйте <see cref="M:SignalCli.Interfaces.Signal.ISignalAccounts.ListAccountsAsync(System.Threading.CancellationToken)"/>.</summary>
+            <param name="cancellationToken">Токен скасування операції.</param>
+            <returns>Список зареєстрованих акаунтів.</returns>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalAccounts.SyncAccountAsync(System.Threading.CancellationToken)">
             <summary>
             Надішліть повідомлення із запитом на синхронізацію на основний пристрій (для груп, контактів, ...).
             Основний пристрій відповість повідомленням синхронізації з повним списком контактів і груп.
@@ -490,6 +495,11 @@
             <exception cref="T:SignalCli.Exceptions.JsonRpcException">Виникає при помилці JSON-RPC запиту.</exception>
             <exception cref="T:System.OperationCanceledException">Виникає, якщо операцію скасовано.</exception>
         </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalAccounts.SyncAccount(System.Threading.CancellationToken)">
+            <summary>Застаріле: використовуйте <see cref="M:SignalCli.Interfaces.Signal.ISignalAccounts.SyncAccountAsync(System.Threading.CancellationToken)"/>.</summary>
+            <param name="cancellationToken">Токен скасування операції.</param>
+            <returns>Пустий об'єкт.</returns>
+        </member>
         <member name="T:SignalCli.Interfaces.Signal.ISignalDevices">
             <summary>
             Сервіс для роботи з пристроями Signal.
@@ -499,7 +509,7 @@
             облікового запису Signal.
             </remarks>
         </member>
-        <member name="M:SignalCli.Interfaces.Signal.ISignalDevices.StartLink(System.Threading.CancellationToken)">
+        <member name="M:SignalCli.Interfaces.Signal.ISignalDevices.StartLinkAsync(System.Threading.CancellationToken)">
             <summary>
             Починає процес зв'язування нового пристрою з обліковим записом.
             </summary>
@@ -509,7 +519,12 @@
             <exception cref="T:SignalCli.Exceptions.JsonRpcException">Виникає при помилці JSON-RPC запиту.</exception>
             <exception cref="T:System.OperationCanceledException">Виникає, якщо операцію скасовано.</exception>
         </member>
-        <member name="M:SignalCli.Interfaces.Signal.ISignalDevices.FinishLink(System.String,System.String,System.Threading.CancellationToken)">
+        <member name="M:SignalCli.Interfaces.Signal.ISignalDevices.StartLink(System.Threading.CancellationToken)">
+            <summary>Застаріле: використовуйте <see cref="M:SignalCli.Interfaces.Signal.ISignalDevices.StartLinkAsync(System.Threading.CancellationToken)"/>.</summary>
+            <param name="cancellationToken">Токен скасування операції.</param>
+            <returns>Інформація для зв'язування, включаючи URI для QR-коду.</returns>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalDevices.FinishLinkAsync(System.String,System.String,System.Threading.CancellationToken)">
             <summary>
             Завершує процес зв'язування нового пристрою з обліковим записом.
             </summary>
@@ -537,6 +552,13 @@
             </code>
             </example>
         </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalDevices.FinishLink(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>Застаріле: використовуйте <see cref="M:SignalCli.Interfaces.Signal.ISignalDevices.FinishLinkAsync(System.String,System.String,System.Threading.CancellationToken)"/>.</summary>
+            <param name="deviceLinkUri">URI для зв'язування, отриманий під час сканування QR-коду.</param>
+            <param name="deviceName">Назва нового пристрою.</param>
+            <param name="cancellationToken">Токен скасування операції.</param>
+            <returns>Результат зв'язування з номером пристрою.</returns>
+        </member>
         <member name="T:SignalCli.Interfaces.Signal.ISignalEventService">
             <summary>
             Сервіс для обробки подій Signal.
@@ -553,7 +575,7 @@
             </summary>
             <remarks>
             audit N5: ідемпотентно — повторні виклики для того самого <paramref name="account"/>
-            повертають той самий <see cref="P:SignalCli.Models.Signal.Events.SubscribeReceiveResponse.id"/> без додаткового
+            повертають той самий <see cref="P:SignalCli.Models.Signal.Events.SubscribeReceiveResponse.Id"/> без додаткового
             <c>subscribeReceive</c>-RPC. Безпечно викликати кілька разів (наприклад, після
             перезапуску процесу або з гарячого reload).
             </remarks>
@@ -689,7 +711,7 @@
             Надає методи для отримання списку груп та керування ними.
             </remarks>
         </member>
-        <member name="M:SignalCli.Interfaces.Signal.ISignalGroups.ListGroups(System.String,System.Threading.CancellationToken)">
+        <member name="M:SignalCli.Interfaces.Signal.ISignalGroups.ListGroupsAsync(System.String,System.Threading.CancellationToken)">
             <summary>
             Отримує список груп для вказаного акаунту.
             </summary>
@@ -709,6 +731,12 @@
             }
             </code>
             </example>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalGroups.ListGroups(System.String,System.Threading.CancellationToken)">
+            <summary>Застаріле: використовуйте <see cref="M:SignalCli.Interfaces.Signal.ISignalGroups.ListGroupsAsync(System.String,System.Threading.CancellationToken)"/>.</summary>
+            <param name="account">Ідентифікатор акаунту.</param>
+            <param name="cancellationToken">Токен скасування операції.</param>
+            <returns>Список груп.</returns>
         </member>
         <member name="T:SignalCli.Interfaces.Signal.ISignalMessage">
             <summary>
@@ -1794,8 +1822,10 @@
             <remarks>
             Містить ідентифікатор облікового запису, з яким був зв'язаний пристрій.
             Повертається після успішного завершення процесу зв'язування.
+            post-modernize-tuning §4.1 (audit D1): PascalCase property (Microsoft *Capitalization conventions*);
+            wire-level JSON field name `number` зберігається через <c>[JsonPropertyName]</c>.
             </remarks>
-            <param name="number">Номер телефону зв'язаного облікового запису.</param>
+            <param name="Number">Номер телефону зв'язаного облікового запису.</param>
         </member>
         <member name="M:SignalCli.Models.Signal.Devices.FinishLinkResponse.#ctor(System.String)">
             <summary>
@@ -1804,10 +1834,12 @@
             <remarks>
             Містить ідентифікатор облікового запису, з яким був зв'язаний пристрій.
             Повертається після успішного завершення процесу зв'язування.
+            post-modernize-tuning §4.1 (audit D1): PascalCase property (Microsoft *Capitalization conventions*);
+            wire-level JSON field name `number` зберігається через <c>[JsonPropertyName]</c>.
             </remarks>
-            <param name="number">Номер телефону зв'язаного облікового запису.</param>
+            <param name="Number">Номер телефону зв'язаного облікового запису.</param>
         </member>
-        <member name="P:SignalCli.Models.Signal.Devices.FinishLinkResponse.number">
+        <member name="P:SignalCli.Models.Signal.Devices.FinishLinkResponse.Number">
             <summary>Номер телефону зв'язаного облікового запису.</summary>
         </member>
         <member name="T:SignalCli.Models.Signal.Devices.StartLinkParameters">
@@ -3244,22 +3276,26 @@
             Відповідь на запит підписки на отримання подій.
             </summary>
             <remarks>
-            Містить ідентифікатор створеної підписки, який використовується 
+            Містить ідентифікатор створеної підписки, який використовується
             для подальшої ідентифікації подій та відписки.
+            post-modernize-tuning §4.2 (audit D1): PascalCase property;
+            wire-level JSON field `id` зберігається через <c>[JsonPropertyName]</c>.
             </remarks>
-            <param name="id">Ідентифікатор підписки.</param>
+            <param name="Id">Ідентифікатор підписки.</param>
         </member>
         <member name="M:SignalCli.Models.Signal.Events.SubscribeReceiveResponse.#ctor(System.Int32)">
             <summary>
             Відповідь на запит підписки на отримання подій.
             </summary>
             <remarks>
-            Містить ідентифікатор створеної підписки, який використовується 
+            Містить ідентифікатор створеної підписки, який використовується
             для подальшої ідентифікації подій та відписки.
+            post-modernize-tuning §4.2 (audit D1): PascalCase property;
+            wire-level JSON field `id` зберігається через <c>[JsonPropertyName]</c>.
             </remarks>
-            <param name="id">Ідентифікатор підписки.</param>
+            <param name="Id">Ідентифікатор підписки.</param>
         </member>
-        <member name="P:SignalCli.Models.Signal.Events.SubscribeReceiveResponse.id">
+        <member name="P:SignalCli.Models.Signal.Events.SubscribeReceiveResponse.Id">
             <summary>Ідентифікатор підписки.</summary>
         </member>
         <member name="T:SignalCli.Models.Signal.Events.SubscriptionEventArgs">

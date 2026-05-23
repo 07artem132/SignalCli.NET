@@ -30,7 +30,7 @@ public class PrivacyLoggingTests
         logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         var sut = new SignalAccounts(client.Object, logger.Object);
 
-        await sut.ListAccounts();
+        await sut.ListAccountsAsync();
 
         // Будь-який лог-запис рівня >= Debug із вмістом номера телефону — порушення приватності.
         foreach (var level in new[] { LogLevel.Debug, LogLevel.Information, LogLevel.Warning, LogLevel.Error })
@@ -80,7 +80,7 @@ public class PrivacyLoggingTests
         logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         var sut = new SignalGroups(client.Object, logger.Object);
 
-        await sut.ListGroups("+1");
+        await sut.ListGroupsAsync("+1");
 
         foreach (var level in new[] { LogLevel.Debug, LogLevel.Information, LogLevel.Warning, LogLevel.Error })
         {

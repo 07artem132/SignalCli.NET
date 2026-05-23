@@ -50,6 +50,13 @@ internal sealed class SignalEventService(
 
     // Зберігаємо "account -> subscriptionId"
     private readonly Dictionary<string, int> _accountSubscriptions = new();
+    // post-modernize-tuning §3.1-3.5 (audit A4): reservation placeholder pattern.
+    // Перший виклик SubscribeAsync(account) кладе TCS у _pendingSubscribes; кокурентні
+    // виклики бачать той самий TCS і await'ять його замість того, щоб робити власний
+    // subscribeReceive-RPC. Це усуває orphan-subscriptions на signal-cli (N RPC при
+    // одночасних 10 викликах → завжди 1 RPC), і паралельні викликачі отримують
+    // ОДИН і той самий subscriptionId. Захищено тим самим _subscriptionsLock.
+    private readonly Dictionary<string, TaskCompletionSource<int>> _pendingSubscribes = new();
 
     // C# 13 / .NET 9+: окремий System.Threading.Lock замість блокування на самому словнику
     // (не блокуємося на структурі даних, яку захищаємо — див. IDE0330).
@@ -188,49 +195,85 @@ internal sealed class SignalEventService(
         // audit N5: вхідні рядки валідуємо типізовано — ArgumentException, не NRE.
         ArgumentException.ThrowIfNullOrEmpty(account);
 
-        // audit N5: ідемпотентність — повторний виклик для того самого облікового запису
-        // повертає існуючий subscriptionId замість того, щоб кидати локалізаційно-крихкий
-        // InvalidOperationException. Це усуває потребу в `catch(IOE) when (msg.Contains(...))`
-        // у викликачів і робить SubscribeAsync безпечним для повторного виклику —
-        // одна з ключових agent-friendly характеристик (Microsoft *Idempotency*).
+        // §3.5 (audit C6): rejected-after-dispose throws ObjectDisposedException
+        // (типізовано, не NRE через _disposed-перевірки в downstream).
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        // post-modernize-tuning §3.1-3.5 (audit A4) + audit N5: під одним локом
+        // вирішуємо ВСЕ — committed, in-flight (placeholder), або стаємо leader-ом.
+        TaskCompletionSource<int>? myTcs = null;
+        Task<int>? waitOn = null;
         lock (_subscriptionsLock)
         {
+            // 1. Уже зареєстрована → ідемпотентно повертаємо існуючий ID без RPC.
             if (_accountSubscriptions.TryGetValue(account, out var existingId))
             {
                 SignalEventServiceLog.SubscribeIdempotent(_logger, account, existingId);
                 return new SubscribeReceiveResponse(existingId);
             }
+
+            // 2. RPC уже летить — чекаємо на існуючий placeholder, замість дублювати RPC.
+            if (_pendingSubscribes.TryGetValue(account, out var existingTcs))
+            {
+                waitOn = existingTcs.Task;
+            }
+            else
+            {
+                // 3. Ми — leader, ставимо placeholder ATOMICALLY.
+                myTcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+                _pendingSubscribes[account] = myTcs;
+            }
         }
 
-        var responseToken = await _signalCliClient
-            .InvokeMethodAsync<JsonElement, SubscribeReceiveParameters>(
-                "subscribeReceive",
-                new SubscribeReceiveParameters(account),
-                cancellationToken).ConfigureAwait(false);
-
-        int subscriptionId = responseToken.GetInt32();
-
-        lock (_subscriptionsLock)
+        // Шлях для follower-ів — чекаємо на leader.
+        if (waitOn != null)
         {
-            // Гонка: інший виклик міг вступити за час RPC. Поважаємо існуюче й
-            // не перетираємо — повертаємо саме той ID, який зараз у мапі.
-            if (_accountSubscriptions.TryGetValue(account, out var raceWinnerId))
+            var id = await waitOn.WaitAsync(cancellationToken).ConfigureAwait(false);
+            SignalEventServiceLog.SubscribeIdempotent(_logger, account, id);
+            return new SubscribeReceiveResponse(id);
+        }
+
+        // Шлях для leader — робимо RPC, потім commit-ить placeholder.
+        try
+        {
+            var responseToken = await _signalCliClient
+                .InvokeMethodAsync<JsonElement, SubscribeReceiveParameters>(
+                    "subscribeReceive",
+                    new SubscribeReceiveParameters(account),
+                    cancellationToken).ConfigureAwait(false);
+
+            int subscriptionId = responseToken.GetInt32();
+
+            lock (_subscriptionsLock)
             {
-                SignalEventServiceLog.SubscribeIdempotent(_logger, account, raceWinnerId);
-                return new SubscribeReceiveResponse(raceWinnerId);
+                _accountSubscriptions[account] = subscriptionId;
+                _pendingSubscribes.Remove(account);
             }
 
-            _accountSubscriptions[account] = subscriptionId;
+            // Будимо всіх follower-ів — вони отримають той самий ID.
+            myTcs!.TrySetResult(subscriptionId);
+
+            SignalEventServiceLog.Subscribed(_logger, account, subscriptionId);
+            return new SubscribeReceiveResponse(subscriptionId);
         }
-
-        SignalEventServiceLog.Subscribed(_logger, account, subscriptionId);
-
-        return new SubscribeReceiveResponse(subscriptionId);
+        catch (Exception ex)
+        {
+            // §3.2: на помилку RPC — rollback placeholder і прокинути виняток follower-ам теж.
+            lock (_subscriptionsLock)
+            {
+                _pendingSubscribes.Remove(account);
+            }
+            myTcs!.TrySetException(ex);
+            throw;
+        }
     }
 
     public async Task<UnsubscribeReceiveResponse> UnsubscribeAsync(int subscriptionId,
         CancellationToken cancellationToken = default)
     {
+        // §3.5 (audit C6): typed dispose guard.
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
         string? account;
         lock (_subscriptionsLock)
         {

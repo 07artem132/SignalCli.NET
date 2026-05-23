@@ -24,23 +24,23 @@
 
 ## 3. Subscription race safety (capability `subscription-race-safety`)
 
-- [ ] 3.1 (A4) `SignalEventService.SubscribeAsync` inserts `account → Pending(-1)` placeholder under `_subscriptionsLock` before sending RPC
-- [ ] 3.2 (A4) On RPC exception, rollback the placeholder
-- [ ] 3.3 (A4) On RPC success, overwrite placeholder with real `subscriptionId`
-- [ ] 3.4 (A4) `UnsubscribeAsync` ignores placeholders (no signal-cli call for a never-completed reservation)
-- [ ] 3.5 (A4) `ObjectDisposedException.ThrowIf(_disposed, ...)` added to `SubscribeAsync`/`UnsubscribeAsync` (Audit C6)
-- [ ] 3.6 (A4) Test: `Task.WhenAll(10x SubscribeAsync(same account))` → mocked RPC invoked exactly once; **all 10 callers receive the same `subscriptionId`** (idempotent — see audit N5); dictionary holds exactly one entry **(partial: §3.8 covers sequential ×3 case; concurrent WhenAll(×10) still deferred under §3.1-3.5 reservation-placeholder work)**
+- [x] 3.1 (A4) `SignalEventService.SubscribeAsync` inserts `account → TaskCompletionSource<int>` placeholder under `_subscriptionsLock` before sending RPC (reservation pattern; leader/follower roles)
+- [x] 3.2 (A4) On RPC exception, rollback the placeholder (Remove + TrySetException — propagates failure to all followers awaiting the TCS)
+- [x] 3.3 (A4) On RPC success, overwrite placeholder with real `subscriptionId` (write to `_accountSubscriptions`, remove from `_pendingSubscribes`, `TrySetResult(id)` wakes followers)
+- [x] 3.4 (A4) `UnsubscribeAsync` searches `_accountSubscriptions` only (placeholders in `_pendingSubscribes` never match because they don't hold `subscriptionId` — they hold a TCS that resolves to one)
+- [x] 3.5 (A4) `ObjectDisposedException.ThrowIf(_disposed, ...)` added to `SubscribeAsync`/`UnsubscribeAsync` (audit C6)
+- [x] 3.6 (A4) Test: `Task.WhenAll(10x SubscribeAsync(same account))` → mocked RPC invoked exactly once (`Times.Once`); all 10 callers receive the same `subscriptionId`. `SubscribeAsync_Concurrent_TenCallers_InvokesRpcExactlyOnceAndReturnsSameId`.
 - [x] 3.7 (audit N5) `SignalEventService.SubscribeAsync(string account, …)` adds `ArgumentException.ThrowIfNullOrEmpty(account)` at the entry; the duplicate-subscription branch (lines 168-170, 185-187) **returns the existing `SubscribeReceiveResponse(existingId)` instead of throwing `InvalidOperationException`** — operation becomes idempotent. XMLDoc on `ISignalEventService.SubscribeAsync` updated: removed `<exception cref="InvalidOperationException">` for "already subscribed"; added `<remarks>` documenting idempotency; added `<exception cref="TimeoutException">` (closing audit N12 for this method too).
 - [x] 3.8 (audit N5) Test: `SubscribeAsync(account)` × 3 — second and third call do NOT invoke `subscribeReceive` RPC; all three return identical `Id`. Plus `[Theory]` over null/empty `account` asserting `ArgumentException` with `ParamName == "account"`. `SignalEventServiceDispatchTests.SubscribeAsync_Idempotent_SameAccountThrice_ReturnsSameIdAndCallsRpcOnce` + `…_NullOrEmptyAccount_ThrowsArgumentException`.
 
 ## 4. Agent-friendly public API (capability `agent-friendly-api`)
 
-- [ ] 4.1 (D1) `FinishLinkResponse(string Number)` PascalCase + `[property: JsonPropertyName("number")]`
-- [ ] 4.2 (D1) `SubscribeReceiveResponse(int Id)` PascalCase + `[property: JsonPropertyName("id")]`
-- [ ] 4.3 (D2) `ISignalAccounts.ListAccountsAsync` / `SyncAccountAsync` + impls + tests
-- [ ] 4.4 (D2) `ISignalDevices.StartLinkAsync` / `FinishLinkAsync` + impls + tests
-- [ ] 4.5 (D2) `ISignalGroups.ListGroupsAsync` + impl + tests
-- [ ] 4.6 (D2) `ISignalCliClient.VersionAsync` + impl + tests + `SignalCliHealthMonitor` call site
+- [x] 4.1 (D1) `FinishLinkResponse(string Number)` PascalCase + `[property: JsonPropertyName("number")]`
+- [x] 4.2 (D1) `SubscribeReceiveResponse(int Id)` PascalCase + `[property: JsonPropertyName("id")]`
+- [x] 4.3 (D2) `ISignalAccounts.ListAccountsAsync` / `SyncAccountAsync` + impls + tests; old names kept as `[Obsolete]` default interface members delegating to new ones (one-major-version grace shim per CLAUDE.md backward-compat convention)
+- [x] 4.4 (D2) `ISignalDevices.StartLinkAsync` / `FinishLinkAsync` + impls + tests; old names kept as `[Obsolete]` shim
+- [x] 4.5 (D2) `ISignalGroups.ListGroupsAsync` + impl + tests; old name kept as `[Obsolete]` shim
+- [x] 4.6 (D2) `ISignalCliClient.VersionAsync` + impl + tests + `SignalCliHealthMonitor` call site — done in 2.1.0 (agent-friendly-modernization A.1-A.2)
 - [ ] 4.7 (D3) `CancellationToken` removed from `TextMessageOptions` / `AttachmentMessageOptions` / `StickerMessageOptions`; added as last parameter to `SendTextMessageAsync` / `SendAttachmentAsync` / `SendStickerAsync`
 - [ ] 4.8 (D5) `SignalCliHostedService` becomes `sealed`
 - [ ] 4.9 (D6) `ConfigureAwait(false)` added to the 5 missing public-path `await`s; `.editorconfig` raises `CA2007` from `silent` → `warning`

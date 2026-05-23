@@ -30,8 +30,16 @@ public interface ISignalGroups
     /// }
     /// </code>
     /// </example>
-    Task<ListGroupsResponse> ListGroups(
+    Task<ListGroupsResponse> ListGroupsAsync(
         string account,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>Застаріле: використовуйте <see cref="ListGroupsAsync"/>.</summary>
+    /// <param name="account">Ідентифікатор акаунту.</param>
+    /// <param name="cancellationToken">Токен скасування операції.</param>
+    /// <returns>Список груп.</returns>
+    [Obsolete("Use ListGroupsAsync; will be removed in 4.0")]
+    Task<ListGroupsResponse> ListGroups(string account, CancellationToken cancellationToken = default)
+        => ListGroupsAsync(account, cancellationToken);
 }

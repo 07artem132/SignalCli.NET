@@ -16,7 +16,7 @@ internal sealed class SignalAccounts(
     private readonly ISignalCliClient _signalCliClient = signalCliClient ?? throw new ArgumentNullException(nameof(signalCliClient));
     private readonly ILogger<SignalAccounts> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-    public async Task<ListAccountsResponse> ListAccounts(CancellationToken cancellationToken = default)
+    public async Task<ListAccountsResponse> ListAccountsAsync(CancellationToken cancellationToken = default)
     {
         SignalAccountsLog.ListAccountsRequested(_logger);
 
@@ -48,7 +48,7 @@ internal sealed class SignalAccounts(
         }
     }
 
-    public async Task<SyncAccountsResponse> SyncAccount(CancellationToken cancellationToken = default)
+    public async Task<SyncAccountsResponse> SyncAccountAsync(CancellationToken cancellationToken = default)
     {
         //todo work
         SignalAccountsLog.SyncAccountRequested(_logger);

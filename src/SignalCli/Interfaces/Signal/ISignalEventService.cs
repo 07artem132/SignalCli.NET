@@ -19,7 +19,7 @@ public interface ISignalEventService : IHostedService
     /// </summary>
     /// <remarks>
     /// audit N5: ідемпотентно — повторні виклики для того самого <paramref name="account"/>
-    /// повертають той самий <see cref="SubscribeReceiveResponse.id"/> без додаткового
+    /// повертають той самий <see cref="SubscribeReceiveResponse.Id"/> без додаткового
     /// <c>subscribeReceive</c>-RPC. Безпечно викликати кілька разів (наприклад, після
     /// перезапуску процесу або з гарячого reload).
     /// </remarks>

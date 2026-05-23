@@ -24,7 +24,7 @@ public class SignalApiFacadeTests
             "listAccounts", It.IsAny<ListAccountsParameters>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expected);
 
-        var result = await new SignalAccounts(client.Object, Mock.Of<ILogger<SignalAccounts>>()).ListAccounts();
+        var result = await new SignalAccounts(client.Object, Mock.Of<ILogger<SignalAccounts>>()).ListAccountsAsync();
 
         Assert.Same(expected, result);
     }
@@ -38,7 +38,7 @@ public class SignalApiFacadeTests
             .ReturnsAsync((ListAccountsResponse)null!);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => new SignalAccounts(client.Object, Mock.Of<ILogger<SignalAccounts>>()).ListAccounts());
+            () => new SignalAccounts(client.Object, Mock.Of<ILogger<SignalAccounts>>()).ListAccountsAsync());
     }
 
     // ---- SignalDevices ----
@@ -50,7 +50,7 @@ public class SignalApiFacadeTests
             "startLink", It.IsAny<StartLinkParameters>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new StartLinkResponse("sgnl://linkdevice?uuid=x"));
 
-        var result = await new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>()).StartLink();
+        var result = await new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>()).StartLinkAsync();
 
         Assert.Equal("sgnl://linkdevice?uuid=x", result.DeviceLinkUri);
     }
@@ -66,9 +66,9 @@ public class SignalApiFacadeTests
             .ReturnsAsync(new FinishLinkResponse("+380501234567"));
 
         var result = await new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>())
-            .FinishLink("sgnl://uri", "MyDevice");
+            .FinishLinkAsync("sgnl://uri", "MyDevice");
 
-        Assert.Equal("+380501234567", result.number);
+        Assert.Equal("+380501234567", result.Number);
         // Перевіряємо, що аргументи реально дійшли у параметри RPC (а не лише "не null")
         Assert.Equal("sgnl://uri", captured!.deviceLinkUri);
         Assert.Equal("MyDevice", captured.deviceName);
@@ -83,7 +83,7 @@ public class SignalApiFacadeTests
             .ReturnsAsync((StartLinkResponse)null!);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>()).StartLink());
+            () => new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>()).StartLinkAsync());
     }
 
     // ---- SignalGroups ----
@@ -99,7 +99,7 @@ public class SignalApiFacadeTests
             .ReturnsAsync(expected);
 
         var result = await new SignalGroups(client.Object, Mock.Of<ILogger<SignalGroups>>())
-            .ListGroups("+380501234567");
+            .ListGroupsAsync("+380501234567");
 
         Assert.Same(expected, result);
         // account має дійти у параметри listGroups
@@ -130,7 +130,7 @@ public class SignalApiFacadeTests
             "sendSyncRequest", It.IsAny<SyncAccountsParameters>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SyncAccountsResponse());
 
-        var result = await new SignalAccounts(client.Object, Mock.Of<ILogger<SignalAccounts>>()).SyncAccount();
+        var result = await new SignalAccounts(client.Object, Mock.Of<ILogger<SignalAccounts>>()).SyncAccountAsync();
 
         Assert.NotNull(result);
     }
@@ -144,7 +144,7 @@ public class SignalApiFacadeTests
             .ReturnsAsync((FinishLinkResponse)null!);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>()).FinishLink("u", "n"));
+            () => new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>()).FinishLinkAsync("u", "n"));
     }
 
     [Fact]
@@ -156,7 +156,7 @@ public class SignalApiFacadeTests
             .ReturnsAsync((ListGroupsResponse)null!);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => new SignalGroups(client.Object, Mock.Of<ILogger<SignalGroups>>()).ListGroups("+1"));
+            () => new SignalGroups(client.Object, Mock.Of<ILogger<SignalGroups>>()).ListGroupsAsync("+1"));
     }
 
     [Fact]
