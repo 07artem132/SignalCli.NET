@@ -29,32 +29,40 @@ After `comprehensive-code-audit` (2025-Q1) and its remediation pass `address-aud
 
 Grouped by capability (each is a separate spec under `specs/`):
 
-- **`rpc-back-pressure`** — introduce `System.Threading.Channels.Channel<JsonRpcNotificationRaw>` between the stdout reader loop and the notification fan-out so a slow subscriber cannot block JSON-RPC stdout drain.
-- **`state-machine-thread-safety`** — `ProcessStateManager.UpdateState` snapshots state under the lock, releases the lock, *then* calls `OnNext`; `_disposed` flips via `Interlocked` so it's safe to read without holding the lock.
-- **`subscription-race-safety`** — `SignalEventService.SubscribeAsync` inserts a reservation placeholder into `_accountSubscriptions` atomically *before* sending the RPC; rollback on failure; an orphan `subscribeReceive` on signal-cli is no longer possible.
-- **`agent-friendly-api`** — public API breaks, all in one wave (kept reviewable):
-  - `FinishLinkResponse(string Number)` and `SubscribeReceiveResponse(int Id)` use PascalCase params with explicit `[JsonPropertyName]` for the wire format.
-  - `Async` suffix on every public `Task`/`ValueTask`-returning method (`ListAccountsAsync`, `StartLinkAsync`, `FinishLinkAsync`, `ListGroupsAsync`, `VersionAsync`, `SyncAccountAsync`).
-  - `CancellationToken` removed from options records; passed as the last method parameter.
-  - `SignalCliHostedService` sealed; `EnvironmentVariables` becomes `IReadOnlyDictionary<string,string>`.
-  - `JsonRpcRequest` stops re-declaring the positional properties (record body is empty).
-  - `Example/Program.cs` rewritten as `async Task Main` with proper `await using` host, `await` on send, `await host.StopAsync()`.
-- **`high-performance-logging`** — every `_logger.LogXxx(...)` site in `src/SignalCli/Services/**` migrates to a `static partial class Log` per service with `[LoggerMessage(EventId=…, Level=…, Message="…")]` partial methods. Privacy invariant (no PII above `Trace`) preserved verbatim.
-- **`aot-readiness`** — `<IsAotCompatible>true</IsAotCompatible>` in `src/SignalCli/SignalCli.csproj`; resolve resulting trim-/AOT-analyzer warnings: drop `Nito.AsyncEx` in favor of `SemaphoreSlim(1,1)`; replace the reflection fallback in `SignalJson.Options` with a strict source-gen-only `JsonTypeInfoResolver` (all serialized types must be in `SignalJsonContext`); `JsonSourceGenerationMode.Default` to enable fast-path.
-- **`test-virtualization`** — every wall-clock `Task.Delay(...)` in unit tests becomes a virtual-time wait via `FakeTimeProvider` (already used in one place); private-field reflection in test bases replaced with `[InternalsVisibleTo]`-exposed test seams; new race tests for the three subscription/state findings; xUnit v2 → v3 + Microsoft.Testing.Platform migration.
-- **`cloud-development`** — `.claude/hooks/session-start.sh` + `.claude/settings.json` install `dotnet-sdk-10.0` and warm NuGet for `Tests/SignalCli.Tests`; `docs/cloud-development.md` documents the workflow and what's deliberately skipped (runtime-packages, vulnerability audit). Already drafted in this change.
+- **`rpc-back-pressure`** — `System.Threading.Channels.Channel<JsonRpcNotificationRaw>` between stdout reader and notification fan-out; **`JsonRpcClient` becomes `IAsyncDisposable` only** (the sync-over-async bridge `DisposeAsync().AsTask().GetAwaiter().GetResult()` is removed); request serialization composes via `Utf8JsonWriter` directly instead of `SerializeToElement` + `Serialize` two-pass.
+- **`state-machine-thread-safety`** — `ProcessStateManager.UpdateState` snapshots state under the lock, then `OnNext`-s outside it; `_disposed` flips via `Interlocked` everywhere.
+- **`subscription-race-safety`** — `SignalEventService.SubscribeAsync` reservation placeholder; orphan `subscribeReceive` on signal-cli no longer possible.
+- **`hosting-modernization`** — `SignalCliHealthMonitor` becomes a `BackgroundService`; startup ordering between `SignalCliHostedService` and `JsonRpcClientHostedService` becomes explicit through `IHostedLifecycleService`; `SignalCliHostedService` gains `IAsyncDisposable`; `ProcessRunner.StartProcessWithHandle` is no longer `Task.FromResult`-wrapped sync work.
+- **`options-validation`** — `Config` registered via `AddOptions<Config>().ValidateDataAnnotations().ValidateOnStart()`; `[Range]`/`[Required]` constraints on every numeric/path field; `Config` becomes fully `init`-only (no `set`); new `services.AddSignalCli(IConfiguration)` overload for `appsettings.json` binding.
+- **`agent-friendly-api`** — public API breaks in one wave (v3.0.0):
+  - `FinishLinkResponse(string Number)` and `SubscribeReceiveResponse(int Id)` PascalCase with `[JsonPropertyName]`.
+  - `Async` suffix on `ListAccountsAsync`, `StartLinkAsync`, `FinishLinkAsync`, `ListGroupsAsync`, `VersionAsync`, `SyncAccountAsync`.
+  - `CancellationToken` removed from options records.
+  - `SignalCliHostedService` sealed; `EnvironmentVariables` becomes `IReadOnlyDictionary`.
+  - `JsonRpcRequest` record body emptied.
+  - `IRecipient` becomes a sealed type hierarchy (no boolean `IsGroup`).
+  - `*EventArgs` records refactored to hold a single `Envelope` reference instead of 10 duplicated string fields.
+  - `Example/Program.cs` rewritten as `async Task Main`.
+- **`high-performance-logging`** — every `_logger.LogXxx` site in `src/SignalCli/Services/**` migrates to `[LoggerMessage]` source-gen; privacy invariant preserved verbatim.
+- **`aot-readiness`** — `<IsAotCompatible>true</IsAotCompatible>`; drop `Nito.AsyncEx` for `SemaphoreSlim`; drop reflection fallback in `SignalJson.Options`; `JsonSourceGenerationMode.Default` (fast-path).
+- **`test-virtualization`** — every wall-clock `Task.Delay` → `FakeTimeProvider`; reflection test helpers → `internal TestSeam`; race tests for the three new safety capabilities; `MockBehavior.Strict` by default; xUnit v2 → v3 + Microsoft.Testing.Platform.
+- **`code-hygiene`** — `SignalEventService` sealed; unused `_rpcClient` field removed; `AtomicCounter` wrap-around behavior documented or eliminated; `ValidateRecipients` single-pass; bare log-and-rethrow patterns either removed or enriched with context; `Config.BuildClasspath` caches its directory scan.
+- **`cloud-development`** — `.claude/hooks/session-start.sh` + `.claude/settings.json` + `docs/cloud-development.md`. **Already drafted in this change.**
 
 ## Capabilities
 
 ### New Capabilities
 
-- `rpc-back-pressure`: channel-mediated decoupling between the stdout reader and notification subscribers.
-- `state-machine-thread-safety`: `OnNext`-outside-lock invariant + atomic disposed-flag for `ProcessStateManager`.
+- `rpc-back-pressure`: channel-mediated fan-out + `IAsyncDisposable`-only JsonRpcClient + single-pass `Utf8JsonWriter` request composition.
+- `state-machine-thread-safety`: `OnNext`-outside-lock + atomic disposed-flag for `ProcessStateManager`.
 - `subscription-race-safety`: atomic reservation pattern in `SignalEventService.SubscribeAsync`.
-- `agent-friendly-api`: public-API conventions (PascalCase, `Async` suffix, CT-as-parameter-not-property, sealed surface).
+- `hosting-modernization`: `BackgroundService` for the health-monitor loop; `IHostedLifecycleService` for explicit startup ordering; `IAsyncDisposable` on `SignalCliHostedService`; sync `ProcessRunner` (no `Task.FromResult`).
+- `options-validation`: `AddOptions<Config>().ValidateDataAnnotations().ValidateOnStart()`; immutable `init`-only `Config`; `IConfiguration` binding overload.
+- `agent-friendly-api`: PascalCase, `Async` suffix, CT-as-parameter, sealed surface, sealed `IRecipient` hierarchy, envelope-by-reference `EventArgs`.
 - `high-performance-logging`: source-generated `LoggerMessage` for every services-layer log call.
 - `aot-readiness`: trim-/AOT-clean library; no reflection fallback in serialization; no `Nito.AsyncEx`.
-- `test-virtualization`: virtual-clock unit tests + xUnit v3/MTP + race-condition coverage.
+- `test-virtualization`: virtual-clock unit tests + xUnit v3/MTP + race-condition coverage + `Strict` mock default.
+- `code-hygiene`: sealed `SignalEventService`; unused field removed; classpath cache; single-pass enumeration; non-bare exception handling; documented or eliminated `AtomicCounter` wrap.
 - `cloud-development`: SessionStart hook + cloud-development.md for Claude Code on the Web.
 
 ### Modified Capabilities

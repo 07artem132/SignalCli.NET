@@ -49,6 +49,32 @@ Every `await` in `src/SignalCli/**` library code SHALL use `.ConfigureAwait(fals
 - **THEN** the cast fails at runtime
 - **AND** the consumer is steered toward `WithEnvironment` for any updates
 
+### Requirement: Recipient discriminator is a sealed type hierarchy
+`IRecipient` SHALL be a sealed hierarchy (`UserRecipient` and `GroupRecipient` as the only allowed implementations) usable in `is`/`switch` expression patterns. The boolean `IsGroup` discriminator SHALL be removed from the public surface; type-pattern matching replaces it. The C# compiler's exhaustiveness analyzer MUST be able to verify a `switch` over `IRecipient` covers all cases.
+
+#### Scenario: Exhaustive pattern match
+- **WHEN** a consumer writes `var label = r switch { UserRecipient u => "user", GroupRecipient g => "group" };`
+- **THEN** the compiler does not warn about a non-exhaustive switch
+- **AND** the boolean `r.IsGroup` is no longer available
+
+#### Scenario: Adding a new recipient kind in a future version
+- **WHEN** a third recipient kind is later introduced into the sealed hierarchy
+- **THEN** every consumer-side `switch (IRecipient)` reports a non-exhaustive warning at the patch line
+- **AND** consumers handle the new kind explicitly
+
+### Requirement: Event payloads share a common envelope reference
+Every `*EventArgs` record raised by `ISignalEventService` SHALL derive from a single `SignalEventArgs` base that holds a reference to the source `JsonMessageEnvelope` (and `Account` + `SubscriptionId`), so per-event records do not duplicate all 10 envelope fields. The new shape is a single reference instead of ten flattened strings (Microsoft *Performance — avoid duplicated allocations*).
+
+#### Scenario: Accessing source metadata
+- **WHEN** a subscriber reads `evt.Source`, `evt.SourceNumber`, `evt.SourceUuid`, `evt.SourceName`, `evt.SourceDevice`, `evt.Timestamp`, `evt.ServerReceivedTimestamp`, `evt.ServerDeliveredTimestamp`
+- **THEN** every value resolves through the shared `evt.Envelope` reference
+- **AND** the per-event record itself holds at most three fields (`Envelope`, `Account`, `SubscriptionId`) plus the payload-specific data
+
+#### Scenario: Allocation profile
+- **GIVEN** the same notification stream as before
+- **WHEN** measured against the prior flattened-field records
+- **THEN** the per-event allocation count drops to ≤ 4 references (envelope + account + subscriptionId + payload-specific)
+
 ### Requirement: Example program demonstrates correct async usage
 `Example/SignalCli.Example/Program.cs` SHALL:
 - declare `static async Task Main(string[] args)`,

@@ -33,3 +33,32 @@ On `DisposeAsync`, the JSON-RPC client SHALL complete the channel writer, await 
 - **THEN** every notification already accepted into the channel is delivered to current subscribers
 - **AND** no notification is delivered after the `Subject` completes
 - **AND** no `UnobservedTaskException` is raised
+
+### Requirement: JsonRpcClient is async-disposable only
+`JsonRpcClient` SHALL implement `IAsyncDisposable` and SHALL NOT additionally implement `IDisposable`. The sync-over-async bridge (`DisposeAsync().AsTask().GetAwaiter().GetResult()`) SHALL NOT exist on this type (Microsoft *Common async/await bugs* — never use `.Result`/`.Wait()`/`.GetAwaiter().GetResult()`).
+
+#### Scenario: DI container disposes the client
+- **GIVEN** the DI container holds the `JsonRpcClient` as a singleton via `JsonRpcClientHostedService`
+- **WHEN** the host shuts down
+- **THEN** `IAsyncDisposable.DisposeAsync` is awaited (the consumer already does an `is IAsyncDisposable` check)
+- **AND** no `IDisposable.Dispose` is invoked
+
+#### Scenario: A consumer calls Dispose anyway
+- **WHEN** legacy consumer code calls `client.Dispose()` (synchronous)
+- **THEN** the type does not compile because `IDisposable` is not implemented
+- **AND** the consumer is steered to `await client.DisposeAsync()` at compile time
+
+### Requirement: Outbound requests serialize without intermediate JsonElement
+JSON-RPC requests SHALL be composed directly to the output writer (`Utf8JsonWriter` against `pair.StandardInput`), without first serializing the user's `TRequest` to a `JsonElement` and then re-serializing the whole `JsonRpcRequest` to a string. The result MUST be identical to the previous two-pass implementation byte-for-byte (modulo non-semantic whitespace, which is already disabled).
+
+#### Scenario: Request payload format is unchanged
+- **GIVEN** the same `TRequest` and `method`/`id` arguments
+- **WHEN** a request is sent under the new single-pass writer
+- **THEN** the written JSON has the same key order (`"jsonrpc"`, `"method"`, `"params"`, `"id"`) and the same `"params"` shape as before
+- **AND** signal-cli accepts the request identically
+
+#### Scenario: Allocation profile improves
+- **GIVEN** a benchmark that sends 10 000 small requests
+- **WHEN** the new path runs vs the prior `SerializeToElement` + `Serialize` path
+- **THEN** the new path allocates strictly fewer `JsonDocument`/`string` instances per request
+- **AND** the test does not regress in throughput

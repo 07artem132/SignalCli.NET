@@ -42,6 +42,20 @@ The unit-test project SHALL migrate from `xunit 2.x` / `xunit.runner.visualstudi
 - **THEN** MTP executes the suite
 - **AND** the test count, names, and outcomes match the pre-migration baseline (modulo new race tests)
 
+### Requirement: Mocks are Strict by default in the test suite
+`MockBehavior.Strict` SHALL be used for `Mock<T>` instances across `Tests/SignalCli.Tests/**`. Any unmocked call to a Strict mock makes the test fail loudly — preventing the silent regressions that `MockBehavior.Loose` allows (an unexpected call returns `default(T)`).
+
+#### Scenario: Unexpected invocation on a strict mock
+- **GIVEN** a test that mocks `ISignalCliClient` with `MockBehavior.Strict`
+- **WHEN** the SUT calls a method that the test did not `Setup`
+- **THEN** the test fails with `MockException` naming the unexpected call
+- **AND** the contributor is guided to add the missing `Setup` (or to delete the SUT's unexpected call)
+
+#### Scenario: Exception to the rule is justified inline
+- **WHEN** a specific test legitimately needs Loose behavior (e.g., the SUT iterates a long list of optional methods)
+- **THEN** the `MockBehavior.Loose` argument is present at the construction site
+- **AND** a comment names the reason
+
 ### Requirement: Hosted-service fixtures use IAsyncLifetime
 Test bases that instantiate hosted services for fixtures SHALL implement `IAsyncLifetime` so `StartAsync`/`StopAsync` are awaited, not block-waited.
 

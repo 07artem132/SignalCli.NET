@@ -179,6 +179,50 @@ Event IDs are namespaced by service (2xxx = SignalService, 3xxx = JsonRpcClient,
 
 Synchronous-blocking mode (per `session-start-hook` skill default): a Claude session waits ~30-60s on first start but never hits "where's dotnet?" surprises. Switch to `{"async": true}` only if startup latency becomes the dominant cost.
 
+### 9. `hosting-modernization`
+
+**Problem (Audit B1, B3, B4, C1, A1):** several hosted-service patterns predate the .NET 8/10 additions.
+
+- `SignalCliHealthMonitor` hand-rolls `Task.Run(MonitorLoop)` instead of inheriting `BackgroundService` (MS *Worker Services in .NET*).
+- Startup ordering between `SignalCliHostedService` and `JsonRpcClientHostedService` relies on registration order rather than `IHostedLifecycleService.StartedAsync` (MS *Generic Host*).
+- `SignalCliHostedService.Dispose` is sync-only despite holding a child process, Rx subjects, and a timer CTS.
+- `ProcessRunner.StartProcessWithHandle` allocates `Task` via `Task.FromResult` for purely synchronous work.
+- `JsonRpcClient.Dispose()` is the sync-over-async bridge `DisposeAsync().AsTask().GetAwaiter().GetResult()` (MS *Common async/await bugs*) — a regression introduced when `IAsyncDisposable` was added.
+
+**Approach:** mechanical. `BackgroundService` for the monitor; `IHostedLifecycleService` on the two hosted services with the dependency expressed in `StartedAsync`; `IAsyncDisposable` on `SignalCliHostedService`; `ProcessRunner` returns sync or `ValueTask` with `ValueTask.FromResult`; `JsonRpcClient` drops `IDisposable` from its declared interfaces. The DI consumer already does `is IAsyncDisposable` (`JsonRpcClientHostedService.StopAsync`), so the public contract change is invisible to it.
+
+### 10. `options-validation`
+
+**Problem (Audit B5, B7):** `Config` is registered as a plain singleton (`services.AddSingleton(config)`); no validation; mixed `init` and `set` properties; no way to bind from `IConfiguration`.
+
+**Approach (MS *Options pattern in .NET*):**
+
+```csharp
+services.AddOptions<Config>()
+    .Configure(configure ?? (_ => { }))
+    .ValidateDataAnnotations()
+    .Validate(c => c.JvmModeRequiresLibDir(), "LibDirectory required in JVM mode")
+    .ValidateOnStart();
+services.AddSingleton(sp => sp.GetRequiredService<IOptions<Config>>().Value);
+```
+
+Plus `[Range]`/`[Required]` annotations on every `Config` field; full `init`-only migration; new `services.AddSignalCli(IConfiguration)` overload that binds the section through the same pipeline.
+
+### 11. `code-hygiene`
+
+**Problem (Audit C3, C4, C5, C7, C8, C9, C10, P4):** a cluster of small chores accumulated across the previous remediation. Individually each is a 🟢 finding; together they remove ~40 lines and one analyzer-detectable bug class.
+
+**Approach:** mechanical, one PR per cluster if needed:
+
+- `SignalEventService` → `sealed`.
+- Delete unused `_rpcClient` field + its assignment.
+- `AtomicCounter` — either annotate the wrap-around with a `// WHY:` comment OR widen to `long`.
+- Drop `CultureInfo.InvariantCulture` from the request-id `ToString()` (digits are culture-invariant; not buying anything).
+- `SignalMessage.ValidateRecipients` — materialize once at entry; subsequent code consumes the list.
+- `SendUnifiedMessageAsync(23 args)` → internal `record UnifiedSendRequest(...)`.
+- Audit `catch (Exception ex) { _logger.LogError(...); throw; }` sites — delete (caller logs) or enrich (method/account context).
+- `Config.BuildClasspath` caches `Directory.GetFiles` result.
+
 ## Severity rubric
 
 Inherited from `comprehensive-code-audit`:
