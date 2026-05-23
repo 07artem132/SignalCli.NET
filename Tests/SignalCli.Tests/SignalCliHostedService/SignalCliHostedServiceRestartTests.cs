@@ -196,7 +196,10 @@ public class SignalCliHostedServiceRestartTests : SignalCliHostedServiceTestsBas
         cts.Cancel();
 
         // Act & Assert
-        await Assert.ThrowsAsync<OperationCanceledException>(
+        // post-modernize-tuning §6.2: після переходу з Nito.AsyncEx.AsyncLock на SemaphoreSlim
+        // SemaphoreSlim.WaitAsync(cancelled-token) кидає TaskCanceledException (підклас
+        // OperationCanceledException). Використовуємо ThrowsAnyAsync, щоб ловити обидва.
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => service.ForceRestartAsync(cts.Token));
     }
 

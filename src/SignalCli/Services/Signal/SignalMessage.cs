@@ -61,7 +61,12 @@ namespace SignalCli.Services.Signal
             string? storyAuthor,
             CancellationToken cancellationToken = default)
         {
-            ValidateRecipients(recipients);
+            // post-modernize-tuning §8c.5 (audit C9): single-pass materialization —
+            // якщо викликач передав stateful IEnumerable (зчитує файл, ітерує DB),
+            // ми обходимо джерело РІВНО ОДИН раз. Інакше ValidateRecipients + 2× Where
+            // = 3 ітерації, що для side-effect'ивних джерел — баг.
+            var recipientList = recipients as IReadOnlyList<IRecipient> ?? recipients.ToList();
+            ValidateRecipients(recipientList);
 
             // A.10: switch по enum-у замість порівняння рядків.
             List<string> parsedTextStyles = [];
@@ -71,13 +76,13 @@ namespace SignalCli.Services.Signal
                 (message, parsedTextStyles) = parser.Parse();
             }
 
-            // Розділяємо отримувачів на звичайних (користувачів) і групових
-            var userRecipients = recipients.Where(r => !r.IsGroup)
-                .Select(r => r.Identifier)
-                .ToList();
-            var groupRecipients = recipients.Where(r => r.IsGroup)
-                .Select(r => r.Identifier)
-                .ToList();
+            // §8c.5: single-pass split на users vs groups; уникаємо двох окремих Where-проходів.
+            List<string> userRecipients = [];
+            List<string> groupRecipients = [];
+            foreach (var r in recipientList)
+            {
+                (r.IsGroup ? groupRecipients : userRecipients).Add(r.Identifier);
+            }
             if (groupRecipients.Count > 1)
             {
                 throw new ArgumentException("Для групових повідомлень допускається лише один отримувач",

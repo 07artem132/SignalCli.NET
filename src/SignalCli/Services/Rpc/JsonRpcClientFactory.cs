@@ -14,7 +14,8 @@ namespace SignalCli.Services.Rpc;
 /// D.4: приймає <see cref="IOptions{SignalCliOptions}"/> замість legacy <c>Config</c>;
 /// читає <c>options.Value</c> один раз у конструкторі (опції immutable).
 /// </remarks>
-internal class JsonRpcClientFactory : IJsonRpcClientFactory
+// post-modernize-tuning §8c.14 (audit N17): sealed — інхеріт не підтримується.
+internal sealed class JsonRpcClientFactory : IJsonRpcClientFactory
 {
     private readonly ILogger<JsonRpcClient> _logger;
     private readonly IStreamPairProvider _streamPairProvider;

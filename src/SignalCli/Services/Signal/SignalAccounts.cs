@@ -7,7 +7,8 @@ using SignalCli.Models.Signal.Accounts;
 namespace SignalCli.Services.Signal;
 
 // A.13: IDisposable прибрано — клас не тримає жодних ресурсів, порожній Dispose() лише плутав.
-internal class SignalAccounts(
+// post-modernize-tuning §8c.14 (audit N17): sealed — інхеріт не підтримується.
+internal sealed class SignalAccounts(
     ISignalCliClient signalCliClient,
     ILogger<SignalAccounts> logger)
     : ISignalAccounts

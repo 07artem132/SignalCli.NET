@@ -44,4 +44,17 @@ internal static partial class JsonRpcClientLog
 
     [LoggerMessage(EventId = 320, Level = LogLevel.Trace, Message = "Відправлено JSON-RPC запит: {Json}")]
     public static partial void SentRequest(ILogger logger, string json);
+
+    // audit A3 / §1: помилки back-pressure-каналу нотифікацій.
+    [LoggerMessage(EventId = 330, Level = LogLevel.Error,
+        Message = "Підписник на нотифікацію кинув виняток у потоці fan-out — продовжуємо")]
+    public static partial void NotificationDispatchFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 331, Level = LogLevel.Error,
+        Message = "Споживач каналу нотифікацій впав — потік сповіщень зупинено")]
+    public static partial void NotificationConsumerCrashed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 332, Level = LogLevel.Warning,
+        Message = "Очікування завершення споживача каналу нотифікацій перевищило таймаут — продовжуємо disposal")]
+    public static partial void NotificationConsumerStopTimeout(ILogger logger);
 }

@@ -34,14 +34,17 @@ namespace SignalCli.Services.Signal;
 /// + Dispose попередньої підписки) — другий-одночасний писач неможливий.
 /// </para>
 /// </remarks>
-internal class SignalEventService(
+// post-modernize-tuning §8c.1 (audit C5/N17): sealed — інхеріт не підтримується.
+internal sealed class SignalEventService(
     ILogger<SignalEventService> logger,
     IJsonRpcClientProvider rpcClientProvider,
     ISignalCliClient signalCliClient)
     : ISignalEventService, IDisposable
 {
     private readonly ILogger<SignalEventService> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    private  IJsonRpcClient? _rpcClient;
+    // post-modernize-tuning §8c.2 (audit C4): _rpcClient field removed — використовуємо
+    // _rpcClientProvider.Client напряму при потребі (поточний RPC-клієнт може
+    // змінитися після рестарту процесу; кешувати посилання — баг-prone).
     private readonly ISignalCliClient _signalCliClient = signalCliClient ?? throw new ArgumentNullException(nameof(signalCliClient));
     private readonly IJsonRpcClientProvider _rpcClientProvider = rpcClientProvider ?? throw new ArgumentNullException(nameof(rpcClientProvider));
 
@@ -92,7 +95,9 @@ internal class SignalEventService(
     // у TryWrite (раз на 100 дропів — щоб не спамити).
     private long _droppedCount;
 
-    private bool _disposed;
+    // post-modernize-tuning §2.4: Interlocked.Exchange-based disposal flag.
+    private int _disposedFlag;
+    private bool _disposed => Volatile.Read(ref _disposedFlag) != 0;
 
     // AsObservable() приховує Subject: споживач не може зробити downcast і самостійно
     // викликати OnNext/OnError/OnCompleted на наших потоках подій.
@@ -539,8 +544,7 @@ internal class SignalEventService(
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        if (Interlocked.Exchange(ref _disposedFlag, 1) != 0) return;
 
         // Спершу припиняємо приймати нові нотифікації, потім завершуємо потоки подій.
         _notificationSubscription?.Dispose();
@@ -581,8 +585,10 @@ internal class SignalEventService(
         var oldSub = Interlocked.Exchange(ref _notificationSubscription, null);
         oldSub?.Dispose();
 
-        _rpcClient = _rpcClientProvider.Client;
-        _notificationSubscription = _rpcClient.Notifications.Subscribe(OnNotificationReceived);
+        // §8c.2: читаємо .Client раз тут (вже після того як rpc-провайдер ініціалізував його
+        // в порядку hosted-service startup), але НЕ зберігаємо у полі — клієнт міг бути
+        // disposнутим до Dispose() через рестарт процесу.
+        _notificationSubscription = _rpcClientProvider.Client.Notifications.Subscribe(OnNotificationReceived);
         return Task.CompletedTask;
     }
 

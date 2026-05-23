@@ -7,7 +7,8 @@ using SignalCli.Models.Signal.Groups;
 namespace SignalCli.Services.Signal;
 
 // A.13: IDisposable прибрано — клас не тримає жодних ресурсів.
-internal class SignalGroups(
+// post-modernize-tuning §8c.14 (audit N17): sealed — інхеріт не підтримується.
+internal sealed class SignalGroups(
     ISignalCliClient signalCliClient,
     ILogger<SignalGroups> logger)
     : ISignalGroups
@@ -17,6 +18,8 @@ internal class SignalGroups(
 
     public async Task<ListGroupsResponse> ListGroups(string account, CancellationToken cancellationToken = default)
     {
+        // post-modernize-tuning §8c.11 (audit N5): validate at the boundary.
+        ArgumentException.ThrowIfNullOrEmpty(account);
         SignalGroupsLog.ListGroupsRequested(_logger);
 
         try

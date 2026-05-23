@@ -84,6 +84,20 @@ public sealed class SignalCliOptions
     [Range(1, 86400)]
     public int RestartWindowSeconds { get; set; } = 60;
 
+    /// <summary>
+    /// audit A3 / §1: ємність bounded-каналу між stdout-читачем і fan-out-споживачем
+    /// JSON-RPC сповіщень у <c>JsonRpcClient</c>.
+    /// </summary>
+    /// <remarks>
+    /// Якщо споживач (через <c>_notificationSubject.OnNext</c>) повільний, канал
+    /// заповнюється — наступний <c>WriteAsync</c> чекає. Це back-pressure до самого
+    /// stdout-reader-а: повільний підписник не дозволить нагромаджувати повідомлення
+    /// у пам'яті. <see cref="System.Threading.Channels.BoundedChannelFullMode.Wait"/>.
+    /// За замовчуванням 1024.
+    /// </remarks>
+    [Range(1, 1_000_000)]
+    public int NotificationChannelCapacity { get; set; } = 1024;
+
     /// <summary>Змінні середовища, що передаються процесу signal-cli.</summary>
     public IDictionary<string, string> EnvironmentVariables { get; set; } = new Dictionary<string, string>();
 

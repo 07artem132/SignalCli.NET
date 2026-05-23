@@ -190,7 +190,7 @@ public class JsonRpcClientTests
     }
 
     [Fact]
-    public void ProcessMessage_WhenNotification_ShouldPushToNotifications()
+    public async Task ProcessMessage_WhenNotification_ShouldPushToNotifications()
     {
         // Arrange
         var client = CreateClient();
@@ -210,6 +210,11 @@ public class JsonRpcClientTests
         CallProcessMessage(client, notificationJson);
 
         // Assert
+        // post-modernize-tuning §1 (audit A3): нотифікація проходить через bounded Channel
+        // → fan-out у consumer-Task'у. Чекаємо до 1с поки споживач доставить event.
+        var deadline = DateTime.UtcNow.AddSeconds(1);
+        while (received.Count == 0 && DateTime.UtcNow < deadline)
+            await Task.Yield();
         Assert.Single(received);
         Assert.Equal("subscribe", received[0].Method);
         Assert.Equal(0, received[0].Params.Subscription);
@@ -321,14 +326,18 @@ public class JsonRpcClientTests
         await Assert.ThrowsAsync<TaskCanceledException>(() => first);
     }
 
-    // Допоміжний метод для приватного ProcessMessage(...)
+    // Допоміжний метод для приватного ProcessMessageAsync(...).
+    // post-modernize-tuning §1 (audit A3): метод тепер async, бо нотифікації йдуть через
+    // bounded Channel замість inline OnNext. Викликаємо синхронно через .GetAwaiter().GetResult()
+    // — у тестовому контексті без SyncContext це безпечно.
     private static void CallProcessMessage(JsonRpcClient client, string json)
     {
         var methodInfo = typeof(JsonRpcClient)
-            .GetMethod("ProcessMessage",
+            .GetMethod("ProcessMessageAsync",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
-        methodInfo!.Invoke(client, new object[] { json });
+        var task = (Task)methodInfo!.Invoke(client, new object[] { json, CancellationToken.None })!;
+        task.GetAwaiter().GetResult();
     }
 
     private class TestResponse

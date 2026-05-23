@@ -3,7 +3,6 @@ using System.Reactive.Subjects;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Nito.AsyncEx;
 using SignalCli.Interfaces.SignalCli;
 using SignalCli.Logging;
 using SignalCli.Models;
@@ -29,14 +28,18 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
     // Використовується для таймера вікна стабільності рестартів (раніше — сирий Task.Run+Task.Delay).
     private readonly TimeProvider _timeProvider;
 
-    private readonly AsyncLock _operationLock = new AsyncLock();
+    // post-modernize-tuning §6.2 (audit B2): SemaphoreSlim замість Nito.AsyncEx.AsyncLock —
+    // trim/AOT-safe + стандартний .NET-патерн. Семантика identична: 1-permit async section.
+    private readonly SemaphoreSlim _operationLock = new(1, 1);
 
     // Поля для управління процесом
     private IProcess? _currentProcess;
     // Тримаємо посилання на пару потоків ВИКЛЮЧНО для звільнення ресурсу в CleanupProcess.
     // Єдине джерело істини про стан/потоки — ProcessStateManager.
     private StreamPair? _currentStreamPair;
-    private bool _disposed;
+    // post-modernize-tuning §2.4: Interlocked.Exchange-based disposal flag.
+    private int _disposedFlag;
+    private bool _disposed => Volatile.Read(ref _disposedFlag) != 0;
     private bool _stopping;
     // _restartCount має читатися/писатися лише під _operationLock — щоб B.5 (windowed
     // budget) узгоджувалося із гонкою між ForceRestartAsync і OnProcessExited.
@@ -98,10 +101,13 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         {
             // Запускаємо процес (перший старт) — під операційним локом, щоб
             // конкурентний OnProcessExited не міг перезапустити в той самий момент.
-            using (await _operationLock.LockAsync(cancellationToken))
+            // §6.2: SemaphoreSlim-locking pattern (1-permit), той самий контракт що AsyncLock.
+            await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
             {
                 await StartProcessInternalAsyncNoLock(cancellationToken).ConfigureAwait(false);
             }
+            finally { _operationLock.Release(); }
             SignalCliHostedServiceLog.Started(_logger);
         }
         catch (Exception ex)
@@ -126,7 +132,9 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
 
         try
         {
-            using (await _operationLock.LockAsync(cancellationToken))
+            // §6.2: SemaphoreSlim-locking pattern (1-permit), той самий контракт що AsyncLock.
+            await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
             {
                 var currentState = _stateManager.CurrentState;
                 if (currentState != ProcessState.Running && currentState != ProcessState.Starting)
@@ -137,6 +145,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
                 // Зупиняємо процес
                 await StopProcessInternalAsyncNoLock(cancellationToken).ConfigureAwait(false);
             }
+            finally { _operationLock.Release(); }
             SignalCliHostedServiceLog.Stopped(_logger);
         }
         catch (Exception ex)
@@ -191,7 +200,8 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             return;
         }
 
-        using (await _operationLock.LockAsync(cancellationToken))
+        await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
             if (_disposed || _stopping)
             {
@@ -227,6 +237,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             // 3) Перезапуск
             await StartProcessInternalAsyncNoLock(cancellationToken).ConfigureAwait(false);
         }
+        finally { _operationLock.Release(); }
     }
 
     #endregion
@@ -445,7 +456,8 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
     {
         try
         {
-            using (await _operationLock.LockAsync().ConfigureAwait(false))
+            await _operationLock.WaitAsync().ConfigureAwait(false);
+            try
             {
                 if (_disposed) return;
                 if (!ReferenceEquals(_restartWindowTimer, firingTimer)) return;
@@ -457,6 +469,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
                     _restartCount = 0;
                 }
             }
+            finally { _operationLock.Release(); }
         }
         catch (Exception ex)
         {
@@ -510,7 +523,8 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         if (_disposed) return;
         if (_stopping) return; // умисна зупинка
 
-        using (await _operationLock.LockAsync().ConfigureAwait(false))
+        await _operationLock.WaitAsync().ConfigureAwait(false);
+        try
         {
             // Повторна перевірка під локом — стан міг змінитися, поки чекали.
             if (_disposed) return;
@@ -554,6 +568,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
                 SignalCliHostedServiceLog.AutoRestartFailed(_logger, ex);
             }
         }
+        finally { _operationLock.Release(); }
     }
 
     #endregion
@@ -565,8 +580,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
     /// </summary>
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        if (Interlocked.Exchange(ref _disposedFlag, 1) != 0) return;
         GC.SuppressFinalize(this);
 
         SignalCliHostedServiceLog.Disposing(_logger);

@@ -15,7 +15,11 @@ namespace SignalCli.Serialization;
 /// Метадані генеруються на етапі компіляції (швидший старт, менше памʼяті, trim-safe).
 /// Вкладені типи (наприклад усі Json*-типи з Envelope) генератор підхоплює автоматично.
 /// </summary>
-[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Metadata)]
+// post-modernize-tuning §6.6 (audit B6): GenerationMode = Default дає і metadata, і fast-path
+// серіалізацію — згенерований код може писати JSON напряму через Utf8JsonWriter без обходу
+// JsonTypeInfo, що дає помітний перфоманс-приріст для гарячих write-шляхів (Microsoft
+// "Reflection vs source generation" — Default is faster than Metadata-only).
+[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Default)]
 // JSON-RPC
 [JsonSerializable(typeof(JsonRpcRequest))]
 [JsonSerializable(typeof(JsonRpcResponse))]

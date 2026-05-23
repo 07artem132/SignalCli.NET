@@ -215,6 +215,10 @@ public class Config
         };
     }
 
+    // post-modernize-tuning §8c.10 (audit C10): кеш classpath після першого Directory.GetFiles —
+    // signal-cli може перезапускатися багато разів за сесію, а каталог JAR'ів не змінюється.
+    private string? _cachedClasspath;
+
     /// <summary>
     /// Будує рядок classpath для JVM на основі JAR-файлів.
     /// </summary>
@@ -222,6 +226,8 @@ public class Config
     /// <exception cref="FileNotFoundException">Виникає, якщо JAR-файли не знайдено.</exception>
     private string BuildClasspath()
     {
+        if (_cachedClasspath != null) return _cachedClasspath;
+
         var libPath = Path.Combine(AppHome, LibDirectory);
         var jarFiles = Directory.GetFiles(libPath, "*.jar");
         if (jarFiles.Length == 0)
@@ -230,7 +236,8 @@ public class Config
         }
 
         var separator = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ";" : ":";
-        return string.Join(separator, jarFiles);
+        _cachedClasspath = string.Join(separator, jarFiles);
+        return _cachedClasspath;
     }
 
     /// <summary>

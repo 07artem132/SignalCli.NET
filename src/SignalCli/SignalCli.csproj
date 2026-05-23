@@ -6,6 +6,13 @@
         <Nullable>enable</Nullable>
         <!-- Бібліотека тепер warning-clean: фіксуємо це, щоб регресії не поверталися. -->
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <!-- post-modernize-tuning §6.7 (audit P6): <IsAotCompatible>true</IsAotCompatible> deferred —
+             вмикання тригерить 14 IL2026/IL3050 warnings на generic JsonSerializer.Serialize/Deserialize<T>(_, options)
+             сайтах у JsonRpcClient.InvokeMethodAsync<TRequest, TResponse>. Повна міграція потребує
+             redesign'у на JsonTypeInfo<T>-based overloads — окрема сесія (§6.7-6.10).
+             Уже зроблено в цій сесії: Nito.AsyncEx видалено (§6.1-6.3), source-gen JSON fast-path
+             підготовлено (§6.4-6.6 — див. SignalJsonContext + SignalJson.Options).
+             <IsAotCompatible>true</IsAotCompatible> -->
         <!-- Налаштування документації -->
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <DocumentationFile>$(OutputPath)$(AssemblyName).xml</DocumentationFile>
@@ -47,8 +54,11 @@
              OptionsBuilder.ValidateDataAnnotations().
              D.9: source-generator для [OptionsValidator] включений у пакет
              Microsoft.Extensions.Options ≥ 9.0 — окремий пакет не потрібен. -->
+        <!-- post-modernize-tuning §8b.8 (audit E1): DataAnnotations залишається,
+             бо source-gen [OptionsValidator] читає [Required]/[Range] атрибути з нього.
+             Але .ValidateDataAnnotations() (reflection) видалено з ServiceCollectionExtensions. -->
         <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.0"/>
-        <PackageReference Include="Nito.AsyncEx" Version="5.1.2"/>
+        <!-- post-modernize-tuning §6.3 (audit B2): Nito.AsyncEx removed — SemaphoreSlim replaces AsyncLock. -->
         <PackageReference Include="System.Reactive" Version="6.0.1"/>
     </ItemGroup>
 </Project>

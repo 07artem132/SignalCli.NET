@@ -7,7 +7,8 @@ using SignalCli.Models.Signal.Devices;
 namespace SignalCli.Services.Signal;
 
 // A.13: IDisposable прибрано — клас не тримає жодних ресурсів.
-internal class SignalDevices(
+// post-modernize-tuning §8c.14 (audit N17): sealed — інхеріт не підтримується.
+internal sealed class SignalDevices(
     ISignalCliClient signalCliClient,
     ILogger<SignalDevices> logger)
     : ISignalDevices
@@ -17,6 +18,8 @@ internal class SignalDevices(
 
     public async Task<StartLinkResponse> StartLink(CancellationToken cancellationToken = default)
     {
+        // post-modernize-tuning §8c.13 (audit N16): entry-level log symmetric з ListAccounts.
+        SignalDevicesLog.StartLinkRequested(_logger);
         try
         {
             var response = await _signalCliClient
@@ -41,6 +44,12 @@ internal class SignalDevices(
 
     public async Task<FinishLinkResponse> FinishLink(string deviceLinkUri, string deviceName, CancellationToken cancellationToken = default)
     {
+        // post-modernize-tuning §8c.11 (audit N5): validate inputs at the boundary —
+        // ArgumentException for null/empty замість 400-class signal-cli-помилки після RPC.
+        ArgumentException.ThrowIfNullOrEmpty(deviceLinkUri);
+        ArgumentException.ThrowIfNullOrEmpty(deviceName);
+
+        SignalDevicesLog.FinishLinkRequested(_logger, deviceName);
         try
         {
             var response = await _signalCliClient

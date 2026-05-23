@@ -1340,6 +1340,19 @@
             Вікно стабільності (секунди), після якого лічильник перезапусків скидається в 0.
             </summary>
         </member>
+        <member name="P:SignalCli.Models.SignalCliOptions.NotificationChannelCapacity">
+            <summary>
+            audit A3 / §1: ємність bounded-каналу між stdout-читачем і fan-out-споживачем
+            JSON-RPC сповіщень у <c>JsonRpcClient</c>.
+            </summary>
+            <remarks>
+            Якщо споживач (через <c>_notificationSubject.OnNext</c>) повільний, канал
+            заповнюється — наступний <c>WriteAsync</c> чекає. Це back-pressure до самого
+            stdout-reader-а: повільний підписник не дозволить нагромаджувати повідомлення
+            у пам'яті. <see cref="F:System.Threading.Channels.BoundedChannelFullMode.Wait"/>.
+            За замовчуванням 1024.
+            </remarks>
+        </member>
         <member name="P:SignalCli.Models.SignalCliOptions.EnvironmentVariables">
             <summary>Змінні середовища, що передаються процесу signal-cli.</summary>
         </member>
@@ -4605,6 +4618,13 @@
             </param>
             <remarks>D.4: приймає типовану <see cref="T:SignalCli.Models.SignalCliOptions"/> замість legacy <c>Config</c>.</remarks>
         </member>
+        <member name="M:SignalCli.Services.Rpc.JsonRpcClient.NotificationConsumerLoopAsync">
+            <summary>
+            audit A3 / §1: окремий споживач каналу нотифікацій. Працює в одному Task'у
+            (SingleReader=true) і викликає <c>_notificationSubject.OnNext</c>. Будь-який
+            синхронний exception підписника не повинен зривати цикл — ловимо й логуємо.
+            </summary>
+        </member>
         <member name="P:SignalCli.Services.Rpc.JsonRpcClient.Notifications">
             <summary>
             Потік повідомлень (нотифікацій) від JSON-RPC сервера.
@@ -4634,11 +4654,18 @@
             </summary>
             <param name="pair">Пара потоків для читання.</param>
         </member>
-        <member name="M:SignalCli.Services.Rpc.JsonRpcClient.ProcessMessage(System.String)">
+        <member name="M:SignalCli.Services.Rpc.JsonRpcClient.ProcessMessageAsync(System.String,System.Threading.CancellationToken)">
             <summary>
             Обробляє отримане JSON-повідомлення.
             </summary>
+            <remarks>
+            audit A3 / §1: для нотифікацій fan-out іде через bounded-канал
+            (<see cref="F:SignalCli.Services.Rpc.JsonRpcClient._notificationChannel"/>) — повільний підписник створює back-pressure
+            до stdout-циклу через очікування на <c>WriteAsync</c>. Відповіді (з id) залишаються
+            синхронними — лише <c>tcs.TrySetResult</c>, без потенціалу блокування.
+            </remarks>
             <param name="jsonLine">JSON-рядок для обробки.</param>
+            <param name="cancellationToken">Токен скасування — пов'язаний із stdout-циклом.</param>
         </member>
         <member name="M:SignalCli.Services.Rpc.JsonRpcClient.InvokeMethodAsync``2(System.String,``1,System.Threading.CancellationToken)">
             <summary>
@@ -4768,6 +4795,15 @@
             Атомарно оновлює стан процесу і публікує новий знімок у потік <see cref="P:SignalCli.Services.SignalCli.ProcessStateManager.ProcessState"/>.
             Запізнілі виклики після <see cref="M:SignalCli.Services.SignalCli.ProcessStateManager.Dispose"/> тихо ігноруються (F25/B.25).
             </summary>
+            <remarks>
+            post-modernize-tuning §2.1-2.3 (audit A2): знімок стану робиться під <see cref="F:SignalCli.Services.SignalCli.ProcessStateManager._lock"/>,
+            але <c>OnNext</c> викликається <b>поза</b> локом — це усуває ризик re-entrancy
+            deadlock із синхронним Rx-підписником, що міг би повернутися назад у
+            <see cref="M:SignalCli.Services.SignalCli.ProcessStateManager.UpdateState(SignalCli.Models.SignalCli.ProcessState,SignalCli.Models.SignalCli.StreamPair,System.Exception)"/> (<see cref="T:System.Threading.Lock"/> не реентрантний,
+            на відміну від <c>Monitor</c>). Disposal-race window: між зняттям _lock і
+            викликом OnNext паралельний <see cref="M:SignalCli.Services.SignalCli.ProcessStateManager.Dispose"/> міг встигнути закрити
+            Subject — ловимо <see cref="T:System.ObjectDisposedException"/> і логуємо.
+            </remarks>
             <param name="newState">Новий стан процесу.</param>
             <param name="streamPair">Поточна пара потоків (за наявності — для Running).</param>
             <param name="error">Помилка, що супроводжує перехід (для Failed).</param>

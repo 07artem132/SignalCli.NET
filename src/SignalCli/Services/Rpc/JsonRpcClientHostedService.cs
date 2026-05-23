@@ -17,7 +17,9 @@ internal sealed class JsonRpcClientHostedService : IHostedService, IJsonRpcClien
     private readonly IJsonRpcClientFactory _factory;
     private readonly SignalCliHostedService _signalCliHostedService;
     private IJsonRpcClient? _client;
-    private bool _disposed;
+    // post-modernize-tuning §2.4: Interlocked.Exchange-based disposal flag.
+    private int _disposedFlag;
+    private bool _disposed => Volatile.Read(ref _disposedFlag) != 0;
 
     /// <summary>
     /// Створює новий екземпляр хостованого сервісу JSON-RPC клієнта.
@@ -105,8 +107,7 @@ internal sealed class JsonRpcClientHostedService : IHostedService, IJsonRpcClien
     /// </summary>
     public async ValueTask DisposeAsync()
     {
-        if (_disposed) return;
-        _disposed = true;
+        if (Interlocked.Exchange(ref _disposedFlag, 1) != 0) return;
 
         try
         {

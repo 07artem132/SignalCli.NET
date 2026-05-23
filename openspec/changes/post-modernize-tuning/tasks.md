@@ -5,22 +5,22 @@
 
 ## 1. RPC back-pressure (capability `rpc-back-pressure`)
 
-- [ ] 1.1 (A3) Add `Config.NotificationChannelCapacity` (default 1024)
-- [ ] 1.2 (A3) Create `Channel<JsonRpcNotificationRaw>` in `JsonRpcClient` with `BoundedChannelOptions { SingleReader=true, SingleWriter=true, FullMode=Wait }`
-- [ ] 1.3 (A3) Stdout reader loop becomes parse-then-`await WriteAsync` — no `OnNext` inline
-- [ ] 1.4 (A3) Channel-consumer `Task` runs the fan-out (`_notificationSubject.OnNext`)
-- [ ] 1.5 (A3) `DisposeAsync` completes the channel writer, awaits the consumer, then completes/disposes the subject
-- [ ] 1.6 (A3) Test: 1000-message burst with a 50ms/message slow subscriber — reader never blocks; messages arrive in order
+- [x] 1.1 (A3) Add `SignalCliOptions.NotificationChannelCapacity` (default 1024, `[Range(1,1_000_000)]`)
+- [x] 1.2 (A3) Create `Channel<JsonRpcNotification<SubscriptionEventArgs>>` in `JsonRpcClient` with `BoundedChannelOptions { SingleReader=true, SingleWriter=true, FullMode=Wait }` — capacity from options
+- [x] 1.3 (A3) Stdout reader loop becomes parse-then-`await WriteAsync` — `ProcessMessage` → `ProcessMessageAsync(line, ct)`; no `OnNext` inline
+- [x] 1.4 (A3) Channel-consumer `Task` runs the fan-out: `NotificationConsumerLoopAsync` reads `ReadAllAsync` and calls `_notificationSubject.OnNext` with try/catch boundary so a synchronous subscriber exception doesn't kill the loop
+- [x] 1.5 (A3) `DisposeAsync` calls `_notificationChannel.Writer.TryComplete()`, awaits `_notificationConsumerTask` (with 5s timeout — log `NotificationConsumerStopTimeout` on miss), then completes/disposes the subject
+- [ ] 1.6 (A3) Test: 1000-message burst with a 50ms/message slow subscriber — reader never blocks; messages arrive in order **(deferred — needs slow-subscriber fixture in JsonRpcClientTests; existing `ProcessMessage_WhenNotification_ShouldPushToNotifications` updated to poll-await the channel consumer)**
 - [x] 1.7 (audit N4) `JsonRpcClient` constructor accepts `TimeProvider? timeProvider = null` (defaults to `TimeProvider.System`); the `new CancellationTokenSource(_requestTimeout)` site at `JsonRpcClient.cs:361` switches to `new CancellationTokenSource(_requestTimeout, _timeProvider)` (the .NET 8+ overload). `JsonRpcClientFactory` also propagates `TimeProvider`. DI registers `TimeProvider` via `services.TryAddSingleton(TimeProvider.System)` in `RegisterCoreServices`.
 - [ ] 1.8 (audit N4) Test: `FakeTimeProvider.Advance(RequestTimeoutSeconds + 1)` virtualizes the timeout path; `InvokeMethodAsync` faults with `TimeoutException` without any wall-clock wait. **(Deferred — JsonRpcClient mock-wiring + Subject<StreamPair>-based setup is heavyweight; tracked separately.)**
 
 ## 2. State-machine thread safety (capability `state-machine-thread-safety`)
 
-- [ ] 2.1 (A2) `ProcessStateManager.UpdateState`: snapshot under lock, emit `OnNext` outside lock
-- [ ] 2.2 (A2) `_disposed` becomes `Volatile.Write`/`Volatile.Read`-safe; lock-free `Dispose` short-circuit
-- [ ] 2.3 (A2) Catch `ObjectDisposedException` from `OnNext` (documented disposal race window)
-- [ ] 2.4 (C2) `_disposed` in `SignalCliHostedService`, `JsonRpcClient`, `JsonRpcClientHostedService`, `SignalEventService` switched to `Interlocked.Exchange`-based `int`
-- [ ] 2.5 (A2) Test: synchronous Rx subscriber that re-enters `UpdateState` completes within 2s virtual time (deadlock guard)
+- [x] 2.1 (A2) `ProcessStateManager.UpdateState`: snapshot under lock, emit `OnNext` outside lock
+- [x] 2.2 (A2) `_disposed` becomes `int` with `Volatile.Read`/`Interlocked.Exchange`; lock-free short-circuit at the top of `UpdateState`
+- [x] 2.3 (A2) Catch `ObjectDisposedException` from `OnNext` (documented disposal race window — between exit-of-lock and OnNext call)
+- [x] 2.4 (C2) `_disposed` in `SignalCliHostedService`, `JsonRpcClient`, `JsonRpcClientHostedService`, `SignalEventService` switched to `Interlocked.Exchange`-based `int` with `Volatile.Read` accessor
+- [ ] 2.5 (A2) Test: synchronous Rx subscriber that re-enters `UpdateState` completes within 2s virtual time (deadlock guard) **(deferred — needs reentrancy fixture; behavior validated by code review: System.Threading.Lock not held during OnNext)**
 
 ## 3. Subscription race safety (capability `subscription-race-safety`)
 
@@ -81,17 +81,17 @@
 
 ## 6. AOT readiness (capability `aot-readiness`)
 
-- [ ] 6.1 (B2) `JsonRpcClient._sendLock`: `Nito.AsyncEx.AsyncLock` → `SemaphoreSlim(1, 1)`
-- [ ] 6.2 (B2) `SignalCliHostedService._operationLock`: `AsyncLock` → `SemaphoreSlim(1, 1)`
-- [ ] 6.3 (B2) Drop `Nito.AsyncEx` PackageReference from `SignalCli.csproj`
-- [ ] 6.4 (P6) Drop `DefaultJsonTypeInfoResolver` from `SignalJson.Options.TypeInfoResolver` — leave only `SignalJsonContext.Default`
-- [ ] 6.5 (P6) Audit all `JsonSerializer.Serialize`/`Deserialize`/`SerializeToElement` call sites for `TRequest`/`TResponse` types not in `SignalJsonContext`; add any missing
-- [ ] 6.6 (B6) `[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Default)]` (or `Serialization` per-type) for fast-path emission
-- [ ] 6.7 (P6) `<IsAotCompatible>true</IsAotCompatible>` in `SignalCli.csproj`
-- [ ] 6.8 (P6) Resolve any IL2026/IL2104 warnings surfaced by the AOT analyzer (annotate with `RequiresUnreferencedCode` only as last resort)
-- [ ] 6.9 (P6) `dotnet publish -c Release /p:PublishAot=true` from a probe app succeeds (smoke test only, not added to CI yet)
-- [ ] 6.10 Migrate anonymous-type test usages off the (now-removed) reflection fallback: `JsonRpcClientTests.cs:106,128,150,174` and `JsonSerializationTests.cs:20` — pick Option A (concrete DTO registered in `SignalJsonContext`) or Option B (`SignalJson.OptionsForTests` exposed via `[InternalsVisibleTo]` with `DefaultJsonTypeInfoResolver`). Production options stay source-gen-only.
-- [ ] 6.11 Update `CLAUDE.md` rule 6 — remove "(which combines the source-gen resolver with a reflection fallback)" and state "source-generated context only; every serializable type MUST be registered in `SignalJsonContext`"
+- [x] 6.1 (B2) `JsonRpcClient._sendLock`: `Nito.AsyncEx.AsyncLock` → `SemaphoreSlim(1, 1)` with `WaitAsync/Release` pattern
+- [x] 6.2 (B2) `SignalCliHostedService._operationLock`: `AsyncLock` → `SemaphoreSlim(1, 1)` (4 lock sites + 1 callback)
+- [x] 6.3 (B2) Drop `Nito.AsyncEx` PackageReference from `SignalCli.csproj`
+- [ ] 6.4 (P6) Drop `DefaultJsonTypeInfoResolver` from `SignalJson.Options.TypeInfoResolver` — leave only `SignalJsonContext.Default`. **(Deferred — needs §6.10 first; 5 tests use anonymous types via reflection fallback.)**
+- [ ] 6.5 (P6) Audit all `JsonSerializer.Serialize`/`Deserialize`/`SerializeToElement` call sites for `TRequest`/`TResponse` types not in `SignalJsonContext`; add any missing. **(Tracked under §6.12 reflection-based context-registration test.)**
+- [x] 6.6 (B6) `[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Default)]` for fast-path emission (metadata + fast-path; was Metadata-only)
+- [ ] 6.7 (P6) `<IsAotCompatible>true</IsAotCompatible>` in `SignalCli.csproj` **(Deferred — enabling produces 14 IL2026/IL3050 warnings on generic `JsonSerializer.Serialize/Deserialize<T>(_, options)` sites in `JsonRpcClient.InvokeMethodAsync<TRequest, TResponse>`. Full migration needs redesign onto `JsonTypeInfo<T>`-based overloads — separate session.)**
+- [ ] 6.8 (P6) Resolve any IL2026/IL2104 warnings surfaced by the AOT analyzer (annotate with `RequiresUnreferencedCode` only as last resort) **(Paired with §6.7.)**
+- [ ] 6.9 (P6) `dotnet publish -c Release /p:PublishAot=true` from a probe app succeeds (smoke test only, not added to CI yet) **(Paired with §6.7.)**
+- [ ] 6.10 Migrate anonymous-type test usages off the (now-removed) reflection fallback: `JsonRpcClientTests.cs:106,128,150,174` and `JsonSerializationTests.cs:20` — pick Option A (concrete DTO registered in `SignalJsonContext`) or Option B (`SignalJson.OptionsForTests` exposed via `[InternalsVisibleTo]` with `DefaultJsonTypeInfoResolver`). Production options stay source-gen-only. **(Paired with §6.4.)**
+- [ ] 6.11 Update `CLAUDE.md` rule 6 — remove "(which combines the source-gen resolver with a reflection fallback)" and state "source-generated context only; every serializable type MUST be registered in `SignalJsonContext`" **(Paired with §6.4.)**
 - [ ] 6.12 (audit N8) New test `Tests/SignalCli.Tests/JsonContextRegistrationTests.cs`: reflectively enumerates every call site of `ISignalCliClient.InvokeMethodAsync<TRequest, TResponse>` in `src/SignalCli/Services/Signal/**` (and the matching `JsonSerializer.SerializeToElement` site in `JsonRpcClient.InvokeMethodAsync`), then asserts each `TRequest` and `TResponse` is present in `SignalJsonContext.Default.GetTypeInfo(...)`. Prevents the next "tihko {}" silent-empty-params regression once the reflection fallback is removed.
 
 ## 7. Test virtualization (capability `test-virtualization`)
@@ -147,23 +147,23 @@
 
 ## 8c. Code hygiene (capability `code-hygiene`)
 
-- [ ] 8c.1 (C5) `SignalEventService` becomes `sealed internal`
-- [ ] 8c.2 (C4) Remove the unused `_rpcClient` field in `SignalEventService`; remove its assignment in `StartAsync`; route through `_rpcClientProvider.Client` everywhere
-- [ ] 8c.3 (C3) `AtomicCounter.Increment` — either (a) add a `// WHY:` comment explaining the wrap-to-zero CAS, or (b) widen to `long` and let consumers format with `ToString()` — request id stays `string` either way
-- [ ] 8c.4 (P4) Drop the `CultureInfo.InvariantCulture` argument from the request-id `ToString()` in `JsonRpcClient` (digits 0-9 are culture-invariant)
-- [ ] 8c.5 (C9) `SignalMessage.ValidateRecipients` materializes the `IEnumerable<IRecipient>` exactly once at entry; all subsequent code consumes the materialized list
-- [ ] 8c.6 (C7) `SendUnifiedMessageAsync` 23-parameter signature → internal `UnifiedSendRequest` record DTO; public `Send*Async` builders unchanged
-- [ ] 8c.7 (C8) Audit and remove the `catch (Exception ex) { _logger.LogError(ex, "..."); throw; }` bare patterns from `SignalService`, `SignalMessage`, `SignalAccounts`, `SignalDevices`, `SignalGroups`, `JsonRpcClientHostedService`; either delete the catch or enrich with method/account context
-- [ ] 8c.8 (C10) `Config.BuildClasspath` caches the joined classpath after the first call; cache invalidates only on `Config` mutation (which is no-op after `init`-only migration)
+- [x] 8c.1 (C5) `SignalEventService` becomes `sealed internal`
+- [x] 8c.2 (C4) Remove the unused `_rpcClient` field in `SignalEventService`; remove its assignment in `StartAsync`; route through `_rpcClientProvider.Client` everywhere
+- [ ] 8c.3 (C3) `AtomicCounter.Increment` — either (a) add a `// WHY:` comment explaining the wrap-to-zero CAS, or (b) widen to `long` and let consumers format with `ToString()` — request id stays `string` either way **(deferred — minor; `AtomicCounter` is one-liner, comment can go in follow-up)**
+- [ ] ~~8c.4 (P4)~~ **Reverted — CA1305 analyzer rejects `int.ToString()` without an explicit `IFormatProvider`. Keeping `InvariantCulture` argument is the right call. Task closed without change.**
+- [x] 8c.5 (C9) `SignalMessage.ValidateRecipients` materializes the `IEnumerable<IRecipient>` exactly once at entry via `as IReadOnlyList<IRecipient> ?? recipients.ToList()`; user/group split is a single `foreach`, no double-pass `Where(...)` anymore
+- [ ] 8c.6 (C7) `SendUnifiedMessageAsync` 23-parameter signature → internal `UnifiedSendRequest` record DTO; public `Send*Async` builders unchanged **(deferred — cosmetic; functionality intact)**
+- [ ] 8c.7 (C8) Audit and remove the `catch (Exception ex) { _logger.LogError(ex, "..."); throw; }` bare patterns from `SignalService`, `SignalMessage`, `SignalAccounts`, `SignalDevices`, `SignalGroups`, `JsonRpcClientHostedService`; either delete the catch or enrich with method/account context **(deferred — broad sweep; behavior intact)**
+- [x] 8c.8 (C10) `Config.BuildClasspath` caches the joined classpath after the first call (`_cachedClasspath` field; lazy-init); `Directory.GetFiles` invoked once per `Config` instance regardless of restart count
 - [ ] 8c.9 Test: stateful enumerator passed to `Send*Async` → enumerated exactly once
 - [ ] 8c.10 Test: classpath build called twice → `Directory.GetFiles` invoked once
-- [ ] 8c.11 (N5) `SignalDevices.FinishLinkAsync(deviceLinkUri, deviceName, ct)` and `SignalGroups.ListGroupsAsync(account, ct)` — `ArgumentException.ThrowIfNullOrEmpty(...)` on each string input at the start of the method
-- [ ] 8c.12 (N8) Remove `IDisposable` from `SignalAccounts`, `SignalDevices`, `SignalGroups`, `SignalMessage` (Dispose bodies are empty no-ops — declaring the interface only confuses DI and readers)
-- [ ] 8c.13 (N16) `SignalDevices.StartLinkAsync`/`FinishLinkAsync` — add `_logger.LogDebug(...)` entry record symmetric with `SignalAccounts.ListAccounts`/`SignalGroups.ListGroups`
-- [ ] 8c.14 (N17) Mark these classes `sealed`: `ProcessWrapper`, `ProcessFactory`, `JsonRpcClientFactory`, `SignalAccounts`, `SignalDevices`, `SignalGroups` (also `SignalEventService` per §8c.1)
-- [ ] 8c.15 (N18) `StreamPair` becomes `public sealed class`; `Dispose()` gets `if (_disposed) return; _disposed = true;` guard
-- [ ] 8c.16 (N13) `README.md` dependency table — add `JetBrains.Annotations` row (currently missing)
-- [ ] 8c.17 (N21) `tasks.md` §9.2 — replace "152" with the current actual count from `dotnet test` before this change starts (drift from earlier audit)
+- [x] 8c.11 (N5) `SignalDevices.FinishLinkAsync(deviceLinkUri, deviceName, ct)` and `SignalGroups.ListGroupsAsync(account, ct)` — `ArgumentException.ThrowIfNullOrEmpty(...)` on each string input at the start of the method
+- [x] 8c.12 (N8) `IDisposable` already removed from `SignalAccounts`, `SignalDevices`, `SignalGroups`, `SignalMessage` (A.13 in 2.1.0; verified — sealed-pass §8c.14 confirmed no `IDisposable` declared)
+- [x] 8c.13 (N16) `SignalDevices.StartLink`/`FinishLink` — entry `Debug` log via `SignalDevicesLog.StartLinkRequested`/`FinishLinkRequested(deviceName)` (events 822/823)
+- [x] 8c.14 (N17) Marked sealed: `ProcessWrapper`, `ProcessFactory`, `JsonRpcClientFactory`, `SignalAccounts`, `SignalDevices`, `SignalGroups`, `SignalEventService` (already done in §8c.1)
+- [ ] 8c.15 (N18) `StreamPair` becomes `public sealed class`; `Dispose()` gets `if (_disposed) return; _disposed = true;` guard **(deferred — needs verification of StreamPair already-sealed status)**
+- [ ] 8c.16 (N13) `README.md` dependency table — add `JetBrains.Annotations` row (currently missing) **(deferred — docs-only)**
+- [x] 8c.17 (N21) `tasks.md` §9.2 — updated to "180 (baseline) + audit augments" — done in earlier commit
 - [ ] 8c.18 Update `CLAUDE.md` rule 7 — replace "If you change a pinned version, update the hash in **both** the `.ps1` and `.sh`" with "Update `<SignalCliSha256>`/`<JreSha256>` in the relevant csproj; the scripts read the value as an argument" (paired with `supply-chain-hardening` §8d.4)
 - [x] 8c.19 (audit N7) `Models/Config.cs` — class annotated `[Obsolete("Use SignalCliOptions + AddSignalCli(Action<SignalCliOptions>?); will be removed in 3.0.", error: false)]`. Internal compat-shims (`SignalCliOptions.ToConfig`, `SignalCliOptionsExtensions.ToOptions`/`ToIOptions`) wrapped in `#pragma warning disable CS0618` blocks (they too die in 3.0). Tests using `Config` directly produce CS0618 warnings (test project doesn't have `TreatWarningsAsErrors=true`) — acceptable until §4 migrates them.
 - [x] 8c.20 (audit N14) `SignalEventService` class-header XMLDoc documents the `SingleWriter = true` invariant + link to `ChannelOptions.SingleWriter` docs + describes the idempotent-StartAsync that maintains it.

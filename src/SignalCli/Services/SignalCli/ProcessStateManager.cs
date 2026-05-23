@@ -19,7 +19,10 @@ public sealed class ProcessStateManager : IProcessStateNotifier, IDisposable
     private ProcessStateInfo _currentStateInfo;
     // C# 13 / .NET 9+: System.Threading.Lock — швидший за Monitor на object (див. IDE0330).
     private readonly System.Threading.Lock _lock = new();
-    private bool _disposed;
+    // post-modernize-tuning §2.2: _disposed — int + Interlocked.Exchange, щоб мати
+    // lock-free short-circuit у UpdateState ще до взяття _lock; це знімає ризик
+    // re-entrancy deadlock із синхронним Rx-підписником (System.Threading.Lock не reentrant).
+    private int _disposed; // 0 = alive, 1 = disposed
 
     private readonly ILogger<ProcessStateManager> _logger;
 
@@ -75,28 +78,53 @@ public sealed class ProcessStateManager : IProcessStateNotifier, IDisposable
     /// Атомарно оновлює стан процесу і публікує новий знімок у потік <see cref="ProcessState"/>.
     /// Запізнілі виклики після <see cref="Dispose"/> тихо ігноруються (F25/B.25).
     /// </summary>
+    /// <remarks>
+    /// post-modernize-tuning §2.1-2.3 (audit A2): знімок стану робиться під <see cref="_lock"/>,
+    /// але <c>OnNext</c> викликається <b>поза</b> локом — це усуває ризик re-entrancy
+    /// deadlock із синхронним Rx-підписником, що міг би повернутися назад у
+    /// <see cref="UpdateState"/> (<see cref="System.Threading.Lock"/> не реентрантний,
+    /// на відміну від <c>Monitor</c>). Disposal-race window: між зняттям _lock і
+    /// викликом OnNext паралельний <see cref="Dispose"/> міг встигнути закрити
+    /// Subject — ловимо <see cref="ObjectDisposedException"/> і логуємо.
+    /// </remarks>
     /// <param name="newState">Новий стан процесу.</param>
     /// <param name="streamPair">Поточна пара потоків (за наявності — для Running).</param>
     /// <param name="error">Помилка, що супроводжує перехід (для Failed).</param>
     public void UpdateState(ProcessState newState, StreamPair? streamPair = null, Exception? error = null)
     {
-        // F25 (B.25): Dispose і UpdateState мають серіалізуватися — інакше OnNext
-        // може потрапити в уже задиспоужений BehaviorSubject (-> ObjectDisposedException).
-        // Тримаємо _lock на час OnNext (Rx-підписники з нашої програми відпрацьовують
-        // швидко й не блокують одне одного на цьому самому локі).
+        // §2.2: lock-free short-circuit ще до взяття _lock — економимо contention
+        // та усуваємо ризик деадлоку через одночасний Dispose, що захопив _lock.
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            ProcessStateManagerLog.UpdateStateAfterDispose(_logger, newState);
+            return;
+        }
+
+        ProcessStateInfo snapshot;
         lock (_lock)
         {
-            if (_disposed)
+            if (Volatile.Read(ref _disposed) != 0)
             {
-                // Тихо ігноруємо запізнілі переходи, щоб не зривати ні викликача,
-                // ні фоновий handler (наприклад, OnProcessExited після Dispose).
                 ProcessStateManagerLog.UpdateStateAfterDispose(_logger, newState);
                 return;
             }
 
             _currentStateInfo = new ProcessStateInfo(newState, streamPair, error);
+            snapshot = _currentStateInfo;
             ProcessStateManagerLog.StateChanged(_logger, newState);
-            _stateSubject.OnNext(_currentStateInfo);
+        }
+
+        // §2.1: OnNext поза локом — синхронний Rx-підписник може робити що завгодно,
+        // включно з зворотним викликом UpdateState; ми не тримаємо лок, тож reentrancy ok.
+        // §2.3: можливий race — між exit-локу і OnNext паралельний Dispose міг встигнути.
+        try
+        {
+            _stateSubject.OnNext(snapshot);
+        }
+        catch (ObjectDisposedException)
+        {
+            // Документована вузька гонка: Dispose між exit-локу і OnNext. Тихо ігноруємо.
+            ProcessStateManagerLog.UpdateStateAfterDispose(_logger, newState);
         }
     }
 
@@ -115,13 +143,14 @@ public sealed class ProcessStateManager : IProcessStateNotifier, IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
-        // F25 (B.25): беремо ТОЙ САМИЙ лок, що й UpdateState, щоб конкурентний
-        // UpdateState не міг викликати OnNext на задиспоуженому Subject.
-        lock (_lock)
-        {
-            if (_disposed) return;
-            _disposed = true;
-            _stateSubject.Dispose();
-        }
+        // §2.2/§2.4: Interlocked.Exchange гарантує, що тільки один Dispose-виклик
+        // реально дійде до disposal. _disposed уже стає 1 ДО взяття _lock, тож
+        // конкурентний UpdateState побачить його через Volatile.Read короткий шлях.
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        // Беремо _lock коротко — щоб усі UpdateState'и, що вже зайшли в lock-section
+        // (взяли snapshot, але ще не викликали OnNext), завершили snapshot-частину
+        // і ми не disposнули посеред неї.
+        lock (_lock) { /* sync barrier */ }
+        _stateSubject.Dispose();
     }
 }
