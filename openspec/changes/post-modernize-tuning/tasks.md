@@ -66,16 +66,16 @@
 
 ## 5. High-performance logging (capability `high-performance-logging`)
 
-- [ ] 5.1 (P1) Add `static partial class Log` for each service (one file per service) under `Services/**/Log.<Service>.cs`
-- [ ] 5.2 (P1) Migrate `JsonRpcClient` log calls (8 sites) — events 3xxx
-- [ ] 5.3 (P1) Migrate `SignalCliHostedService` log calls (~20 sites) — events 4xxx
-- [ ] 5.4 (P1) Migrate `SignalCliHealthMonitor` log calls — events 5xxx
-- [ ] 5.5 (P1) Migrate `ProcessStateManager` log calls — events 6xxx
-- [ ] 5.6 (P1) Migrate `SignalEventService` log calls — events 7xxx
-- [ ] 5.7 (P1) Migrate `SignalService`/`SignalMessage`/`SignalAccounts`/`SignalDevices`/`SignalGroups` log calls — events 2xxx
-- [ ] 5.8 (P2) Wrap `string.Join(", ", response)` (`SignalAccounts.cs:43`) and analogous expensive args in `if (_logger.IsEnabled(LogLevel.Trace))` guards (or migrate to `LoggerMessage` which generates the guard)
-- [ ] 5.9 `.editorconfig`: enable `CA1848`, `CA1873` analyzers at `warning` severity
-- [ ] 5.10 Regression test: `PrivacyLoggingTests` still passes verbatim — no PII appears above `Trace`
+- [x] 5.1 (P1) Add `static partial class Log` for each service — done in 2.1.0 (`agent-friendly-modernization` source-generated-logging). 12 files under `src/SignalCli/Logging/*Log.cs` (file-name convention chosen: `<Service>Log.cs` за рангом класу замість `Log.<Service>.cs` — symmetrical із class-name).
+- [x] 5.2 (P1) `JsonRpcClient` log calls — done; `JsonRpcClientLog` (EventId-блок 300–399).
+- [x] 5.3 (P1) `SignalCliHostedService` log calls — done; `SignalCliHostedServiceLog` (EventId-блок 100–199).
+- [x] 5.4 (P1) `SignalCliHealthMonitor` log calls — done; `SignalCliHealthMonitorLog` (EventId-блок 200–299).
+- [x] 5.5 (P1) `ProcessStateManager` log calls — done; `ProcessStateManagerLog` (EventId-блок 900–999, shared із `ProcessRunnerLog`).
+- [x] 5.6 (P1) `SignalEventService` log calls — done; `SignalEventServiceLog` (EventId-блок 500–599).
+- [x] 5.7 (P1) `SignalService`/`SignalMessage`/`SignalAccounts`/`SignalDevices`/`SignalGroups` log calls — done; `SignalServiceLog` (600–699), `SignalMessageLog` (700–799), `SignalAccountsLog`/`SignalDevicesLog`/`SignalGroupsLog` (800–899). **EventId-блоки відрізняються від draft'ового плану (2xxx/3xxx/4xxx) — фінальна нумерація задокументована в CLAUDE.md "Logging" rule.**
+- [x] 5.8 (P2) `string.Join(", ", response)` у `SignalAccounts.ListAccountsAsync` + `SignalGroups.ListGroupsAsync` обгорнуто в `if (_logger.IsEnabled(LogLevel.Trace)) { ... }`. `[LoggerMessage]`-generated IsEnabled-guard живе всередині методу — eager-evaluation на call-site site все одно платить ціну, тож manual guard потрібен. Без нього `response.Count` × allocation-per-call навіть на Info-level.
+- [x] 5.9 `.editorconfig`: `CA1848` → `warning` (primary intent — блокує regression на direct `_logger.Log*`); `CA1873` → `suggestion` (analyzer не розпізнає manual `IsEnabled`-guards як safety-net, тож `warning`-rівень спричиняв би 4 фейлово-позитивні build-error'и, включно з false-positive на `Math.Max`-intrinsic). Trade-off задокументовано в `.editorconfig`-коментарі.
+- [x] 5.10 Regression test: `PrivacyLoggingTests` пройшов (192/192 unit-тестів зелено після §5.8+§5.9). `ObservabilityPrivacyTests` теж — попутно виправлено concurrent-enumeration flake (lock+snapshot pattern на `_capturedActivities`/`_capturedMeasurements`, бо `ActivityListener`/`MeterListener`-callback'и приходять із background-потоків паралельних тестів).
 - [x] 5.11 (audit N13) `JsonRpcClient.InvokeMethodAsync` opens a `BeginScope` at the top: `using var scope = _logger.BeginScope(new Dictionary<string,object> { ["RpcMethod"] = method, ["RpcRequestId"] = requestId });` — every nested `JsonRpcClientLog.*` call within the request lifecycle inherits these properties.
 - [ ] 5.12 (audit N13) Test: scope capture via `FakeLogger`. **(Deferred — needs FakeLogger DI setup in JsonRpcClientTests; scope behavior validated manually by inspecting LogScope on captured entries.)**
 

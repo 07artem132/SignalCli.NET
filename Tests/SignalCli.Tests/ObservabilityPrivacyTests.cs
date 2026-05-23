@@ -33,6 +33,10 @@ public sealed class ObservabilityPrivacyTests : IDisposable
     private const string SeedBody = "ПРИВІТ-АУДИТ-СЕКРЕТНЕ-ТІЛО-2026";
     private const string SeedPath = "/home/audit/secret-attachment.bin";
 
+    // ActivityListener/MeterListener реєструються глобально — callback'и можуть приходити
+    // з потоків паралельних тестів, що використовують той самий ActivitySource/Meter.
+    // Lock + snapshot pattern: всі writes під lock, читання enumerate'ить копію.
+    private readonly Lock _captureLock = new();
     private readonly List<Activity> _capturedActivities = [];
     private readonly List<(string Instrument, object? Value, IReadOnlyList<KeyValuePair<string, object?>> Tags)> _capturedMeasurements = [];
     private readonly ActivityListener _activityListener;
@@ -46,7 +50,7 @@ public sealed class ObservabilityPrivacyTests : IDisposable
         {
             ShouldListenTo = src => src.Name == "SignalCli.NET",
             Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
-            ActivityStopped = activity => _capturedActivities.Add(activity),
+            ActivityStopped = activity => { lock (_captureLock) { _capturedActivities.Add(activity); } },
         };
         ActivitySource.AddActivityListener(_activityListener);
 
@@ -65,10 +69,16 @@ public sealed class ObservabilityPrivacyTests : IDisposable
     }
 
     private void OnLongMeasurement(Instrument instrument, long value, ReadOnlySpan<KeyValuePair<string, object?>> tags, object? state)
-        => _capturedMeasurements.Add((instrument.Name, value, tags.ToArray()));
+    {
+        var snapshot = tags.ToArray();
+        lock (_captureLock) { _capturedMeasurements.Add((instrument.Name, value, snapshot)); }
+    }
 
     private void OnDoubleMeasurement(Instrument instrument, double value, ReadOnlySpan<KeyValuePair<string, object?>> tags, object? state)
-        => _capturedMeasurements.Add((instrument.Name, value, tags.ToArray()));
+    {
+        var snapshot = tags.ToArray();
+        lock (_captureLock) { _capturedMeasurements.Add((instrument.Name, value, snapshot)); }
+    }
 
     private static SignalEventService CreateEventService(out Subject<JsonRpcNotification<SubscriptionEventArgs>> notifications, int subId = 7)
     {
@@ -93,7 +103,9 @@ public sealed class ObservabilityPrivacyTests : IDisposable
         await service.SubscribeAsync(SeedPhone);
 
         // Activity для subscribe-операції має зʼявитися (ми зареєстрували listener).
-        Assert.Contains(_capturedActivities, a => a.OperationName == SignalCliDiagnostics.SubscribeActivityName);
+        Activity[] activitiesSnapshot;
+        lock (_captureLock) { activitiesSnapshot = [.. _capturedActivities]; }
+        Assert.Contains(activitiesSnapshot, a => a.OperationName == SignalCliDiagnostics.SubscribeActivityName);
 
         // Перевіряємо КОЖЕН тег КОЖНОЇ activity на присутність seed-PII.
         AssertNoPiiInActivityTags();
@@ -152,7 +164,9 @@ public sealed class ObservabilityPrivacyTests : IDisposable
 
         // І додатково перевіряємо, що теги дійсно з low-cardinality enum-набору.
         var knownTagKeys = new HashSet<string> { "method", "status", "trigger", "event_type" };
-        foreach (var (_, _, tags) in _capturedMeasurements)
+        (string Instrument, object? Value, IReadOnlyList<KeyValuePair<string, object?>> Tags)[] snapshot;
+        lock (_captureLock) { snapshot = [.. _capturedMeasurements]; }
+        foreach (var (_, _, tags) in snapshot)
         {
             foreach (var tag in tags)
             {
@@ -164,7 +178,9 @@ public sealed class ObservabilityPrivacyTests : IDisposable
 
     private void AssertNoPiiInActivityTags()
     {
-        foreach (var activity in _capturedActivities)
+        Activity[] snapshot;
+        lock (_captureLock) { snapshot = [.. _capturedActivities]; }
+        foreach (var activity in snapshot)
         {
             foreach (var tag in activity.TagObjects)
             {
@@ -185,7 +201,9 @@ public sealed class ObservabilityPrivacyTests : IDisposable
 
     private void AssertNoPiiInMeterTags()
     {
-        foreach (var (_, _, tags) in _capturedMeasurements)
+        (string Instrument, object? Value, IReadOnlyList<KeyValuePair<string, object?>> Tags)[] snapshot;
+        lock (_captureLock) { snapshot = [.. _capturedMeasurements]; }
+        foreach (var (_, _, tags) in snapshot)
         {
             foreach (var tag in tags)
             {

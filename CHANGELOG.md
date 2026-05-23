@@ -60,6 +60,9 @@
 - `JetBrains.Annotations` PackageReference `PrivateAssets="all"` — більше не leak у consumer dependency graph.
 - `Example/Program.cs` повністю переписаний на `async Task Main`/`await host.StopAsync()`/awaited `SendTextMessageAsync` — LLM-агенти, що копіюють приклад, успадковують правильні async-патерни.
 - Forward-slash MSBuild paths у `SignalCli.runtime.csproj` і `SignalCli.Native.targets` — Linux-збірки runtime-пакетів більше не ламаються тихо.
+- **(round 8)** Logging-perf analyzer rules: `CA1848 → warning` (блокує regression на direct `_logger.Log*` — кожна нова log-callsite має йти через `[LoggerMessage]`); `CA1873 → suggestion` (analyzer не розпізнає manual `IsEnabled`-guards, тож `warning`-рівень дає false-positives на legitimate Trace-only eager-eval сайтах). Trade-off задокументовано в `.editorconfig`.
+- **(round 8)** Manual `if (_logger.IsEnabled(LogLevel.Trace))` guards над `string.Join(", ", response)` у `SignalAccounts.ListAccountsAsync` + `SignalGroups.ListGroupsAsync` — `[LoggerMessage]`-внутрішній IsEnabled живе всередині generated-methоду, тож callsite-level allocation платилася на КОЖНОМУ виклику (навіть Info-level). Економить N × string-allocation на listAccounts/listGroups.
+- **(round 8)** `ObservabilityPrivacyTests` flake-fix: lock-snapshot pattern для `_capturedActivities`/`_capturedMeasurements`. ActivityListener/MeterListener реєструються глобально на ActivitySource/Meter, тож callback'и можуть прилітати з потоків паралельних тестів — `List<T>` не thread-safe → `Collection was modified` intermittent. Всі writes тепер під `Lock`, читачі enumerate'ять snapshot.
 
 ## [2.1.0] — неопубліковано
 

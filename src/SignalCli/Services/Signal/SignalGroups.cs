@@ -38,7 +38,12 @@ internal sealed class SignalGroups(
         // ПРИВАТНІСТЬ (F5): Group/Member записи в response містять PII (members, назви, IDs);
         // на Information — лише кількість, повні деталі — Trace.
         SignalGroupsLog.ListGroupsOk(_logger, response.Count);
-        SignalGroupsLog.ListGroupsTrace(_logger, string.Join(", ", response));
+        // §5.8: eager-evaluation of `string.Join` happens before the gen-call site;
+        // the generated IsEnabled-guard runs too late to skip the allocation.
+        if (_logger.IsEnabled(LogLevel.Trace))
+        {
+            SignalGroupsLog.ListGroupsTrace(_logger, string.Join(", ", response));
+        }
 
         return response;
     }

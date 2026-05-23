@@ -39,7 +39,12 @@ internal sealed class SignalAccounts(
         // ПРИВАТНІСТЬ (F5): на Information логуємо лише кількість; Account-record містить
         // номер телефону/UUID, тож деталі — лише на Trace.
         SignalAccountsLog.ListAccountsOk(_logger, response.Count);
-        SignalAccountsLog.ListAccountsTrace(_logger, string.Join(", ", response));
+        // §5.8: `string.Join` оцінюється eagerly — `[LoggerMessage]` IsEnabled-guard всередині
+        // методу не рятує від allocations на gen-call site. Обгортаємо вручну.
+        if (_logger.IsEnabled(LogLevel.Trace))
+        {
+            SignalAccountsLog.ListAccountsTrace(_logger, string.Join(", ", response));
+        }
 
         return response;
     }

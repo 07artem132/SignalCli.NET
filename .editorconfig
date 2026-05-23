@@ -90,11 +90,21 @@ dotnet_naming_rule.members_pascal.severity = suggestion
 # Analyzer severity triage (justified)
 # =========================================================
 
-# Logging-performance rules: LoggerMessage source-gen delegates are a perf
-# optimization for high-throughput hot paths; overkill for a wrapper library's
-# diagnostic logging. Opt-in, not mandated here.
-dotnet_diagnostic.CA1848.severity = none
-dotnet_diagnostic.CA1873.severity = none
+# Logging-performance rules: every callsite in `src/SignalCli/**` already goes
+# through `[LoggerMessage]` source-gen (zero direct `_logger.Log*` calls remain
+# after agent-friendly-modernization 2.1.0).
+#
+# CA1848 (use LoggerMessage delegates) → `warning`: blocks any future direct
+# `_logger.LogX` call from sliding back in. Primary intent of §5.9.
+#
+# CA1873 (avoid expensive log args) → `suggestion`: the analyzer flags
+# `string.Join`/`GetRawText`/etc. inside `[LoggerMessage]` calls even when the
+# callsite is manually wrapped in `if (_logger.IsEnabled(LogLevel.Trace)) { ... }`
+# — it can't see the surrounding guard. Keeping as suggestion gives the IDE
+# hint without forcing per-call `#pragma` noise. Manual guards remain the
+# standard for Trace-only expensive eval (SignalAccounts/SignalGroups).
+dotnet_diagnostic.CA1848.severity = warning
+dotnet_diagnostic.CA1873.severity = suggestion
 # *EventArgs types are deliberate event payloads carried through observables.
 dotnet_diagnostic.CA1711.severity = none
 
