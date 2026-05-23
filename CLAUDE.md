@@ -20,6 +20,10 @@ dotnet test Tests/SignalCli.Tests/SignalCli.Tests.csproj --collect:"XPlat Code C
 - The `SignalCli.runtime` project downloads signal-cli on first build (network required); subsequent builds are skipped via an MSBuild `Exists` gate. The `SignalCli.runtime.native` and `SignalCli.runtime.jre.*` projects similarly download their payloads (native binary / Temurin JRE), so a clean `dotnet build SignalCli.sln` pulls several hundred MB once. To iterate quickly on the library, build/test `src/SignalCli` + `Tests/SignalCli.Tests` directly.
 - Prefer running tests after every meaningful change; the hosted-service/health-monitor suites are the safety net for process-lifecycle changes.
 
+## Cloud development
+
+For Claude Code on the Web sessions, see [`docs/cloud-development.md`](docs/cloud-development.md). A `SessionStart` hook (`.claude/hooks/session-start.sh`) installs `dotnet-sdk-10.0` and pre-warms NuGet for `Tests/SignalCli.Tests` — runs only when `CLAUDE_CODE_REMOTE=true`, so local workflows are untouched.
+
 ## Architecture (key types)
 
 - `SignalCliHostedService` — launches/stops/restarts signal-cli; implements `IStreamPairProvider`.
