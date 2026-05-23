@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using JetBrains.Annotations;
+using SignalCli.Serialization;
 
 namespace SignalCli.Models.Signal.Groups;
 
@@ -38,13 +39,14 @@ internal sealed class ListGroupsResponseConverter : JsonConverter<ListGroupsResp
     {
         if (reader.TokenType != JsonTokenType.StartArray)
             throw new JsonException("Очікувався JSON-масив для ListGroupsResponse.");
-        var list = JsonSerializer.Deserialize<List<Group>>(ref reader, options)
+        // §6.7: AOT-safe — `JsonSerializer.Deserialize<T>(ref reader, JsonTypeInfo<T>)`.
+        var list = JsonSerializer.Deserialize(ref reader, SignalJsonContext.Default.ListGroup)
                    ?? [];
         return new ListGroupsResponse(list);
     }
 
     public override void Write(Utf8JsonWriter writer, ListGroupsResponse value, JsonSerializerOptions options)
-        => JsonSerializer.Serialize(writer, (List<Group>)value.Items, options);
+        => JsonSerializer.Serialize(writer, (List<Group>)value.Items, SignalJsonContext.Default.ListGroup);
 }
 
 /// <summary>

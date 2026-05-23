@@ -1,8 +1,10 @@
+using System.Text.Json.Serialization.Metadata;
 using Microsoft.Extensions.Logging;
 using SignalCli.Interfaces.Rpc;
 using SignalCli.Interfaces.SignalCli;
 using SignalCli.Logging;
 using SignalCli.Models.SignalCli;
+using SignalCli.Serialization;
 
 namespace SignalCli.Services.Signal;
 
@@ -21,6 +23,8 @@ internal class SignalService : ISignalCliClient
     public async Task<TResponse> InvokeMethodAsync<TRequest, TResponse>(
         string method,
         TRequest parameters,
+        JsonTypeInfo<TRequest> requestTypeInfo,
+        JsonTypeInfo<TResponse> responseTypeInfo,
         CancellationToken cancellationToken = default) where TResponse : notnull
     {
             try
@@ -29,8 +33,9 @@ internal class SignalService : ISignalCliClient
                 // номери телефонів та вкладення. Логуємо лише назву методу.
                 SignalServiceLog.InvokeMethod(_logger, method);
 
+                // §6.7: forward source-gen TypeInfo'и далі по chain'у — AOT-safe.
                 var response = await _rpcClient.Client
-                    .InvokeMethodAsync<TRequest, TResponse>(method, parameters, cancellationToken)
+                    .InvokeMethodAsync(method, parameters, requestTypeInfo, responseTypeInfo, cancellationToken)
                     .ConfigureAwait(false);
 
                 if (response is null)
@@ -56,7 +61,12 @@ internal class SignalService : ISignalCliClient
         // span-error. Дублювати "version failed" без додавання context'у — шум.
         SignalServiceLog.VersionRequested(_logger);
 
-        var response = await InvokeMethodAsync<VersionParameters, VersionResponse>("version", new(), cancellationToken).ConfigureAwait(false);
+        var response = await InvokeMethodAsync(
+            "version",
+            new VersionParameters(),
+            SignalJsonContext.Default.VersionParameters,
+            SignalJsonContext.Default.VersionResponse,
+            cancellationToken).ConfigureAwait(false);
 
         if (response == null)
         {

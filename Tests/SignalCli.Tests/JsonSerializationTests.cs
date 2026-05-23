@@ -11,7 +11,13 @@ namespace SignalCli.Tests;
 /// </summary>
 public class JsonSerializationTests
 {
-    private static readonly JsonSerializerOptions Opt = SignalJson.Options;
+    // post-modernize-tuning §6.10: тест-only OptionsForTests із reflection-fallback —
+    // дозволяє анонімні типи (`new { account = ... }`) у round-trip тестах. Production-
+    // код не може цього робити (Options тепер source-gen-only). Властивість анотована
+    // [RequiresUnreferencedCode]/[RequiresDynamicCode]; для тестів пригнічуємо.
+#pragma warning disable IL2026, IL3050
+    private static readonly JsonSerializerOptions Opt = SignalJson.OptionsForTests;
+#pragma warning restore IL2026, IL3050
 
     [Fact]
     public void Request_SerializesCamelCase_AndOmitsNulls()

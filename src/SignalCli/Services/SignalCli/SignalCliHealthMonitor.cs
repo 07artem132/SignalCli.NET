@@ -7,6 +7,7 @@ using SignalCli.Interfaces.Rpc;
 using SignalCli.Logging;
 using SignalCli.Models;
 using SignalCli.Models.SignalCli;
+using SignalCli.Serialization;
 
 namespace SignalCli.Services.SignalCli;
 
@@ -183,9 +184,11 @@ public sealed class SignalCliHealthMonitor : BackgroundService
             // Отримуємо готовий клієнт
             var client = _clientProvider.Client;
             // Викликаємо "version"
-            var response = await client.InvokeMethodAsync<VersionParameters, VersionResponse>(
+            var response = await client.InvokeMethodAsync(
                 "version",
                 new VersionParameters(),
+                SignalJsonContext.Default.VersionParameters,
+                SignalJsonContext.Default.VersionResponse,
                 localCts.Token
             ).ConfigureAwait(false);
             // Якщо відповіли без помилки і є поле Version, значить все ок

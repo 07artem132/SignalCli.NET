@@ -25,6 +25,8 @@
 
     <ItemGroup>
         <Using Include="Xunit"/>
+        <!-- post-modernize-tuning §6.7: JsonTypeInfo<T> усюди в mock-Setup'ах і direct calls. -->
+        <Using Include="System.Text.Json.Serialization.Metadata"/>
     </ItemGroup>
 
     <ItemGroup>

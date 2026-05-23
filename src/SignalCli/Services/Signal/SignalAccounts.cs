@@ -3,6 +3,7 @@ using SignalCli.Interfaces.Signal;
 using SignalCli.Interfaces.SignalCli;
 using SignalCli.Logging;
 using SignalCli.Models.Signal.Accounts;
+using SignalCli.Serialization;
 
 namespace SignalCli.Services.Signal;
 
@@ -25,9 +26,11 @@ internal sealed class SignalAccounts(
         SignalAccountsLog.ListAccountsRequested(_logger);
 
         var response = await _signalCliClient
-            .InvokeMethodAsync<ListAccountsParameters, ListAccountsResponse>(
+            .InvokeMethodAsync(
                 "listAccounts",
                 new ListAccountsParameters(),
+                SignalJsonContext.Default.ListAccountsParameters,
+                SignalJsonContext.Default.ListAccountsResponse,
                 cancellationToken).ConfigureAwait(false);
 
         if (response == null)
@@ -55,9 +58,11 @@ internal sealed class SignalAccounts(
         SignalAccountsLog.SyncAccountRequested(_logger);
 
         var response = await _signalCliClient
-            .InvokeMethodAsync<SyncAccountsParameters, SyncAccountsResponse>(
+            .InvokeMethodAsync(
                 "sendSyncRequest",
                 new SyncAccountsParameters(),
+                SignalJsonContext.Default.SyncAccountsParameters,
+                SignalJsonContext.Default.SyncAccountsResponse,
                 cancellationToken).ConfigureAwait(false);
 
         if (response == null)

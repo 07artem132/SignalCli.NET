@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using JetBrains.Annotations;
+using SignalCli.Serialization;
 
 namespace SignalCli.Models.Signal.Accounts;
 
@@ -42,13 +43,14 @@ internal sealed class ListAccountsResponseConverter : JsonConverter<ListAccounts
     {
         if (reader.TokenType != JsonTokenType.StartArray)
             throw new JsonException("Очікувався JSON-масив для ListAccountsResponse.");
-        var list = JsonSerializer.Deserialize<List<Account>>(ref reader, options)
+        // §6.7: AOT-safe — `JsonSerializer.Deserialize<T>(ref reader, JsonTypeInfo<T>)`.
+        var list = JsonSerializer.Deserialize(ref reader, SignalJsonContext.Default.ListAccount)
                    ?? [];
         return new ListAccountsResponse(list);
     }
 
     public override void Write(Utf8JsonWriter writer, ListAccountsResponse value, JsonSerializerOptions options)
-        => JsonSerializer.Serialize(writer, (List<Account>)value.Items, options);
+        => JsonSerializer.Serialize(writer, (List<Account>)value.Items, SignalJsonContext.Default.ListAccount);
 }
 
 /// <summary>

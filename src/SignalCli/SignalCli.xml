@@ -250,6 +250,12 @@
             </code>
             </example>
             <para>Реєстрація ідемпотентна — повторні виклики не дублюють хост-сервіси.</para>
+            <para>
+            <b>AOT-warning:</b> `OptionsBuilder.Bind&lt;TOptions&gt;(IConfiguration)` тягне
+            <c>Microsoft.Extensions.Configuration.Binder</c>, що використовує reflection. Для
+            AOT-deploy'у користуйтеся `AddSignalCli(Action&lt;SignalCliOptions&gt;)`-overload'ом
+            (повністю reflection-free).
+            </para>
             </remarks>
         </member>
         <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.&lt;G&gt;$7B30185E57B8298C6754F16C0BCF4773.AddSignalCli(System.Action{SignalCli.Models.Config})">
@@ -414,29 +420,42 @@
             Підтримує типізовані запити та відповіді через узагальнені параметри.
             </remarks>
         </member>
-        <member name="M:SignalCli.Interfaces.Rpc.IJsonRpcSender.InvokeMethodAsync``2(System.String,``0,System.Threading.CancellationToken)">
+        <member name="M:SignalCli.Interfaces.Rpc.IJsonRpcSender.InvokeMethodAsync``2(System.String,``0,System.Text.Json.Serialization.Metadata.JsonTypeInfo{``0},System.Text.Json.Serialization.Metadata.JsonTypeInfo{``1},System.Threading.CancellationToken)">
             <summary>
-            Асинхронно викликає метод JSON-RPC.
+            Асинхронно викликає метод JSON-RPC. AOT-сумісна signature: викликач передає
+            source-generated <see cref="T:System.Text.Json.Serialization.Metadata.JsonTypeInfo`1"/>-метадані для запиту й відповіді.
             </summary>
             <typeparam name="TRequest">Тип об'єкта запиту.</typeparam>
             <typeparam name="TResponse">Тип об'єкта відповіді.</typeparam>
             <param name="method">Назва методу, який потрібно викликати.</param>
             <param name="parameters">Параметри для виклику методу.</param>
+            <param name="requestTypeInfo">
+            Source-gen метадані для серіалізації <typeparamref name="TRequest"/>. Беруться з
+            <c>SignalJsonContext.Default.&lt;TypeName&gt;</c>.
+            </param>
+            <param name="responseTypeInfo">
+            Source-gen метадані для десеріалізації <typeparamref name="TResponse"/>.
+            </param>
             <param name="cancellationToken">Токен скасування операції.</param>
             <returns>Типізована відповідь від сервера.</returns>
-            <exception cref="T:System.ArgumentNullException">Виникає, якщо parameters дорівнює null.</exception>
+            <exception cref="T:System.ArgumentNullException">Виникає, якщо <paramref name="parameters"/>, <paramref name="requestTypeInfo"/> або <paramref name="responseTypeInfo"/> дорівнюють null.</exception>
             <exception cref="T:System.InvalidOperationException">Виникає при помилці десеріалізації відповіді.</exception>
             <exception cref="T:SignalCli.Exceptions.JsonRpcException">Виникає, якщо сервер повернув помилку.</exception>
             <exception cref="T:System.OperationCanceledException">Виникає, якщо операцію скасовано.</exception>
             <remarks>
-            post-modernize-tuning §4.27 (audit N11): порядок generic-параметрів узгоджено
-            з `JsonSerializer.Deserialize&lt;TValue&gt;` — запит спершу, відповідь другою.
+            post-modernize-tuning §6.7 (audit P6): public-signature змінено для AOT-сумісності.
+            Раніше метод викликав <c>JsonSerializer.SerializeToElement&lt;T&gt;(_, options)</c> й
+            <c>Deserialize&lt;T&gt;(_, options)</c>, які тягли reflection-based resolver (IL2026/IL3050).
+            Тепер metadata-провайдер передається явно — `&lt;IsAotCompatible&gt;true&lt;/IsAotCompatible&gt;`
+            білдиться без warning'ів.
             </remarks>
             <example>
             <code>
-            var response = await jsonRpcSender.InvokeMethodAsync&lt;VersionParameters, VersionResponse&gt;(
+            var response = await jsonRpcSender.InvokeMethodAsync(
                 "version",
                 new VersionParameters(),
+                SignalJsonContext.Default.VersionParameters,
+                SignalJsonContext.Default.VersionResponse,
                 cancellationToken);
             </code>
             </example>
@@ -543,21 +562,26 @@
             Надає можливість взаємодії з Signal месенджером через його CLI інтерфейс.
             </summary>
         </member>
-        <member name="M:SignalCli.Interfaces.SignalCli.ISignalCliClient.InvokeMethodAsync``2(System.String,``0,System.Threading.CancellationToken)">
+        <member name="M:SignalCli.Interfaces.SignalCli.ISignalCliClient.InvokeMethodAsync``2(System.String,``0,System.Text.Json.Serialization.Metadata.JsonTypeInfo{``0},System.Text.Json.Serialization.Metadata.JsonTypeInfo{``1},System.Threading.CancellationToken)">
             <summary>
             Асинхронно викликає вказаний метод Signal CLI з переданими параметрами.
+            AOT-сумісна signature: викликач передає source-generated <see cref="T:System.Text.Json.Serialization.Metadata.JsonTypeInfo`1"/>
+            для запиту й відповіді.
             </summary>
             <typeparam name="TRequest">Тип об'єкта запиту.</typeparam>
             <typeparam name="TResponse">Тип об'єкта відповіді.</typeparam>
             <param name="method">Назва методу Signal CLI, який потрібно викликати.</param>
             <param name="parameters">Параметри для виклику методу.</param>
+            <param name="requestTypeInfo">Source-gen метадані для серіалізації запиту (з <c>SignalJsonContext.Default</c>).</param>
+            <param name="responseTypeInfo">Source-gen метадані для десеріалізації відповіді.</param>
             <param name="cancellationToken">Токен скасування для переривання операції.</param>
             <returns>Об'єкт відповіді від Signal CLI.</returns>
             <remarks>
-            post-modernize-tuning §4.27 (audit N11): порядок generic-параметрів узгоджено
-            з `JsonSerializer.Deserialize&lt;TValue&gt;` — запит спершу, відповідь другою.
-            Сумісність-shim неможливий: C# overload-resolution не розрізняє методи
-            з однаковим runtime-сигнатурою, що відрізняються лише порядком typeparam'ів.
+            post-modernize-tuning §6.7 (audit P6): public-signature змінено для AOT-сумісності.
+            Раніше метод тягнув reflection через `<see cref="T:System.Text.Json.JsonSerializer"/>` generic-overload'и;
+            тепер metadata-провайдер є явним аргументом. Це **breaking** — попередній shape з 3-ма
+            аргументами видалено (overload-resolution не розрізняє методи лише за наявністю опціональних
+            параметрів через double-default-conflict).
             </remarks>
         </member>
         <member name="M:SignalCli.Interfaces.SignalCli.ISignalCliClient.VersionAsync(System.Threading.CancellationToken)">
@@ -4340,15 +4364,44 @@
             Спільні налаштування System.Text.Json для протоколу signal-cli JSON-RPC.
             </summary>
             <remarks>
+            <para>
+            post-modernize-tuning §6.4 (audit P6): production-options використовують **виключно**
+            source-generated <see cref="P:SignalCli.Serialization.SignalJsonContext.Default"/>-резолвер. Reflection-fallback
+            (<see cref="T:System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver"/>) <b>видалено</b>. Кожен тип, що крос-уйде
+            JSON-кордон, МАЄ бути зареєстрований у <see cref="T:SignalCli.Serialization.SignalJsonContext"/> через
+            <c>[JsonSerializable(typeof(T))]</c>; інакше <see cref="T:System.Text.Json.JsonSerializer"/> кине
+            <see cref="T:System.NotSupportedException"/> на runtime (захист — <c>JsonContextRegistrationTests</c> §6.12).
+            </para>
+            <para>
+            Це робить <c>SignalCli.csproj</c> повністю AOT-сумісним: жодного reflection-emit на
+            JSON-шляху, <c>&lt;IsAotCompatible&gt;true&lt;/IsAotCompatible&gt;</c> проходить без
+            IL2026/IL3050 warnings із цього модуля.
+            </para>
+            <para>
             Newtonsoft за замовчуванням робив case-insensitive біндинг — відтворюємо це.
             Null-значення не пишемо (signal-cli очікує відсутні поля, а не null).
             Рядкові enum обробляються через атрибут [JsonConverter] на самих enum.
+            </para>
             </remarks>
         </member>
         <member name="F:SignalCli.Serialization.SignalJson.Options">
             <summary>
             Єдиний екземпляр налаштувань серіалізації (потокобезпечний після створення).
             </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJson.OptionsForTests">
+            <summary>
+            post-modernize-tuning §6.10 (audit P6): test-only options-instance із reflection-fallback.
+            Дозволяє тестам використовувати анонімні типи (<c>new { Hello = "world" }</c>) як payload.
+            </summary>
+            <remarks>
+            Production-код НЕ повинен використовувати це — він зобовʼязаний працювати через
+            <see cref="F:SignalCli.Serialization.SignalJson.Options"/> і реєструвати всі типи в <see cref="T:SignalCli.Serialization.SignalJsonContext"/>.
+            Видимий лише для <c>SignalCli.Tests</c> через <c>[InternalsVisibleTo]</c>.
+            Атрибути <see cref="T:System.Diagnostics.CodeAnalysis.RequiresUnreferencedCodeAttribute"/>/<see cref="T:System.Diagnostics.CodeAnalysis.RequiresDynamicCodeAttribute"/>
+            сигналізують AOT-аналізатору, що цей шлях небезпечний; consumer'и (тести) приймають це
+            явно. Атрибути валідні на методах, не на полях — тому property-getter.
+            </remarks>
         </member>
         <member name="T:SignalCli.Serialization.SignalJsonContext">
             <summary>
@@ -4897,7 +4950,7 @@
             <param name="options">Конфігурація — для отримання <see cref="P:SignalCli.Models.SignalCliOptions.RequestTimeoutSeconds"/>.</param>
             <param name="timeProvider">
             audit N4: опціональний постачальник часу для <c>CancellationTokenSource(timeout, TimeProvider)</c>
-            у <see cref="M:SignalCli.Services.Rpc.JsonRpcClient.InvokeMethodAsync``2(System.String,``0,System.Threading.CancellationToken)"/>. За замовчуванням <see cref="P:System.TimeProvider.System"/>; у тестах
+            у <see cref="M:SignalCli.Services.Rpc.JsonRpcClient.InvokeMethodAsync``2(System.String,``0,System.Text.Json.Serialization.Metadata.JsonTypeInfo{``0},System.Text.Json.Serialization.Metadata.JsonTypeInfo{``1},System.Threading.CancellationToken)"/>. За замовчуванням <see cref="P:System.TimeProvider.System"/>; у тестах
             підставляється <c>FakeTimeProvider</c> — щоб віртуально провертати таймаут.
             </param>
             <remarks>D.4: приймає типовану <see cref="T:SignalCli.Models.SignalCliOptions"/> замість legacy <c>Config</c>.</remarks>
@@ -4951,14 +5004,16 @@
             <param name="jsonLine">JSON-рядок для обробки.</param>
             <param name="cancellationToken">Токен скасування — пов'язаний із stdout-циклом.</param>
         </member>
-        <member name="M:SignalCli.Services.Rpc.JsonRpcClient.InvokeMethodAsync``2(System.String,``0,System.Threading.CancellationToken)">
+        <member name="M:SignalCli.Services.Rpc.JsonRpcClient.InvokeMethodAsync``2(System.String,``0,System.Text.Json.Serialization.Metadata.JsonTypeInfo{``0},System.Text.Json.Serialization.Metadata.JsonTypeInfo{``1},System.Threading.CancellationToken)">
             <summary>
             Асинхронно викликає вказаний метод JSON-RPC з переданими параметрами.
             </summary>
-            <typeparam name="TResponse">Тип об'єкта відповіді.</typeparam>
             <typeparam name="TRequest">Тип об'єкта запиту.</typeparam>
+            <typeparam name="TResponse">Тип об'єкта відповіді.</typeparam>
             <param name="method">Назва методу, який потрібно викликати.</param>
             <param name="parameters">Параметри для виклику методу.</param>
+            <param name="requestTypeInfo">Source-gen метадані для серіалізації запиту.</param>
+            <param name="responseTypeInfo">Source-gen метадані для десеріалізації відповіді.</param>
             <param name="cancellationToken">Токен скасування для переривання операції.</param>
             <returns>Об'єкт відповіді від сервера JSON-RPC.</returns>
             <exception cref="T:System.ObjectDisposedException">Виникає, якщо об'єкт був утилізований.</exception>

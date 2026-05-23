@@ -38,10 +38,7 @@ public abstract class SignalCliHealthMonitorTestBase : IDisposable
         JsonRpcClientMock = new Mock<IJsonRpcClient>();
         // За замовчуванням — успішний "Ping"
         JsonRpcClientMock
-            .Setup(c => c.InvokeMethodAsync<VersionParameters, VersionResponse>(
-                It.IsAny<string>(),
-                It.IsAny<VersionParameters>(),
-                It.IsAny<CancellationToken>()))
+            .Setup(c => c.InvokeMethodAsync<VersionParameters, VersionResponse>(It.IsAny<string>(), It.IsAny<VersionParameters>(), It.IsAny<JsonTypeInfo<VersionParameters>>(), It.IsAny<JsonTypeInfo<VersionResponse>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new VersionResponse("test-version"));
 
         _clientProviderMock = new Mock<IJsonRpcClientProvider>();

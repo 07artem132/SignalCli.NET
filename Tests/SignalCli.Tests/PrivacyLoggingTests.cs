@@ -23,8 +23,7 @@ public class PrivacyLoggingTests
         var response = new ListAccountsResponse([new Account(phoneNumber)]);
 
         var client = new Mock<ISignalCliClient>();
-        client.Setup(c => c.InvokeMethodAsync<ListAccountsParameters, ListAccountsResponse>(
-                "listAccounts", It.IsAny<ListAccountsParameters>(), It.IsAny<CancellationToken>()))
+        client.Setup(c => c.InvokeMethodAsync<ListAccountsParameters, ListAccountsResponse>("listAccounts", It.IsAny<ListAccountsParameters>(), It.IsAny<JsonTypeInfo<ListAccountsParameters>>(), It.IsAny<JsonTypeInfo<ListAccountsResponse>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(response);
 
         var logger = new Mock<ILogger<SignalAccounts>>();
@@ -74,8 +73,7 @@ public class PrivacyLoggingTests
         ]);
 
         var client = new Mock<ISignalCliClient>();
-        client.Setup(c => c.InvokeMethodAsync<ListGroupsParameters, ListGroupsResponse>(
-                "listGroups", It.IsAny<ListGroupsParameters>(), It.IsAny<CancellationToken>()))
+        client.Setup(c => c.InvokeMethodAsync<ListGroupsParameters, ListGroupsResponse>("listGroups", It.IsAny<ListGroupsParameters>(), It.IsAny<JsonTypeInfo<ListGroupsParameters>>(), It.IsAny<JsonTypeInfo<ListGroupsResponse>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(response);
 
         var logger = new Mock<ILogger<SignalGroups>>();

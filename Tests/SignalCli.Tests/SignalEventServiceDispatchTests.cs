@@ -26,8 +26,7 @@ public class SignalEventServiceDispatchTests
         var provider = new Mock<IJsonRpcClientProvider>();
         provider.Setup(p => p.Client).Returns(rpcClient.Object);
         signalCli = new Mock<ISignalCliClient>();
-        signalCli.Setup(c => c.InvokeMethodAsync<SubscribeReceiveParameters, JsonElement>(
-                It.IsAny<string>(), It.IsAny<SubscribeReceiveParameters>(), It.IsAny<CancellationToken>()))
+        signalCli.Setup(c => c.InvokeMethodAsync<SubscribeReceiveParameters, JsonElement>(It.IsAny<string>(), It.IsAny<SubscribeReceiveParameters>(), It.IsAny<JsonTypeInfo<SubscribeReceiveParameters>>(), It.IsAny<JsonTypeInfo<JsonElement>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(JsonSerializer.SerializeToElement(SubId));
         return new SignalEventService(Mock.Of<ILogger<SignalEventService>>(), provider.Object, signalCli.Object);
     }
@@ -100,8 +99,7 @@ public class SignalEventServiceDispatchTests
         Assert.Equal(SubId, second.Id);
         Assert.Equal(SubId, third.Id);
         // subscribeReceive викликаний РІВНО ОДИН раз — другий і третій ішли коротким шляхом.
-        rpc.Verify(c => c.InvokeMethodAsync<SubscribeReceiveParameters, JsonElement>(
-            "subscribeReceive", It.IsAny<SubscribeReceiveParameters>(), It.IsAny<CancellationToken>()),
+        rpc.Verify(c => c.InvokeMethodAsync<SubscribeReceiveParameters, JsonElement>("subscribeReceive", It.IsAny<SubscribeReceiveParameters>(), It.IsAny<JsonTypeInfo<SubscribeReceiveParameters>>(), It.IsAny<JsonTypeInfo<JsonElement>>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -116,9 +114,8 @@ public class SignalEventServiceDispatchTests
         await service.StartAsync(CancellationToken.None);
 
         // Невелика затримка у моку — щоб усі 10 викликачів встигли зайти у lock-section.
-        rpc.Setup(c => c.InvokeMethodAsync<SubscribeReceiveParameters, JsonElement>(
-                "subscribeReceive", It.IsAny<SubscribeReceiveParameters>(), It.IsAny<CancellationToken>()))
-            .Returns(async (string _, SubscribeReceiveParameters _, CancellationToken _) =>
+        rpc.Setup(c => c.InvokeMethodAsync<SubscribeReceiveParameters, JsonElement>("subscribeReceive", It.IsAny<SubscribeReceiveParameters>(), It.IsAny<JsonTypeInfo<SubscribeReceiveParameters>>(), It.IsAny<JsonTypeInfo<JsonElement>>(), It.IsAny<CancellationToken>()))
+            .Returns(async (string _, SubscribeReceiveParameters _, JsonTypeInfo<SubscribeReceiveParameters> _, JsonTypeInfo<JsonElement> _, CancellationToken _) =>
             {
                 await Task.Delay(50).ConfigureAwait(false);
                 return JsonSerializer.SerializeToElement(SubId);
@@ -132,8 +129,7 @@ public class SignalEventServiceDispatchTests
         // Усі 10 повернули один і той самий ID.
         Assert.All(results, r => Assert.Equal(SubId, r.Id));
         // RPC викликано РІВНО ОДИН раз (reservation placeholder зупинив 9 інших).
-        rpc.Verify(c => c.InvokeMethodAsync<SubscribeReceiveParameters, JsonElement>(
-            "subscribeReceive", It.IsAny<SubscribeReceiveParameters>(), It.IsAny<CancellationToken>()),
+        rpc.Verify(c => c.InvokeMethodAsync<SubscribeReceiveParameters, JsonElement>("subscribeReceive", It.IsAny<SubscribeReceiveParameters>(), It.IsAny<JsonTypeInfo<SubscribeReceiveParameters>>(), It.IsAny<JsonTypeInfo<JsonElement>>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 

@@ -4,6 +4,7 @@ using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using SignalCli.Diagnostics;
@@ -354,7 +355,8 @@ internal sealed class JsonRpcClient : IJsonRpcClient
                     : idToken.GetRawText();
                 if (!string.IsNullOrEmpty(id) && _pendingRequests.TryRemove(id, out var tcs))
                 {
-                    var response = rootElement.Deserialize<JsonRpcResponse>(SignalJson.Options);
+                    // §6.7: AOT-safe — `JsonElement.Deserialize<T>(JsonTypeInfo<T>)`.
+                    var response = rootElement.Deserialize(SignalJsonContext.Default.JsonRpcResponse);
                     if (!tcs.TrySetResult(response))
                     {
                         JsonRpcClientLog.TrySetResultFailed(_logger);
@@ -365,7 +367,7 @@ internal sealed class JsonRpcClient : IJsonRpcClient
             }
             else if (rootElement.TryGetProperty("method", out _))
             {
-                var notificationRaw = rootElement.Deserialize<JsonRpcNotificationRaw>(SignalJson.Options);
+                var notificationRaw = rootElement.Deserialize(SignalJsonContext.Default.JsonRpcNotificationRaw);
                 if (notificationRaw != null)
                 {
                     // ПРИВАТНІСТЬ: RawParams містить вміст повідомлення — не логуємо його.
@@ -375,7 +377,7 @@ internal sealed class JsonRpcClient : IJsonRpcClient
 
                     // Далі «до-десеріалізуємо» Params у типізований об'єкт
                     var subscriptionEventArgs =
-                        notificationRaw.Params.Deserialize<SubscriptionEventArgs>(SignalJson.Options);
+                        notificationRaw.Params.Deserialize(SignalJsonContext.Default.SubscriptionEventArgs);
                     if (subscriptionEventArgs == null) return;
                     var typedNotification = new JsonRpcNotification<SubscriptionEventArgs>
                     {
@@ -409,10 +411,12 @@ internal sealed class JsonRpcClient : IJsonRpcClient
     /// <summary>
     /// Асинхронно викликає вказаний метод JSON-RPC з переданими параметрами.
     /// </summary>
-    /// <typeparam name="TResponse">Тип об'єкта відповіді.</typeparam>
     /// <typeparam name="TRequest">Тип об'єкта запиту.</typeparam>
+    /// <typeparam name="TResponse">Тип об'єкта відповіді.</typeparam>
     /// <param name="method">Назва методу, який потрібно викликати.</param>
     /// <param name="parameters">Параметри для виклику методу.</param>
+    /// <param name="requestTypeInfo">Source-gen метадані для серіалізації запиту.</param>
+    /// <param name="responseTypeInfo">Source-gen метадані для десеріалізації відповіді.</param>
     /// <param name="cancellationToken">Токен скасування для переривання операції.</param>
     /// <returns>Об'єкт відповіді від сервера JSON-RPC.</returns>
     /// <exception cref="ObjectDisposedException">Виникає, якщо об'єкт був утилізований.</exception>
@@ -424,6 +428,8 @@ internal sealed class JsonRpcClient : IJsonRpcClient
     public async Task<TResponse> InvokeMethodAsync<TRequest, TResponse>(
         string method,
         TRequest parameters,
+        JsonTypeInfo<TRequest> requestTypeInfo,
+        JsonTypeInfo<TResponse> responseTypeInfo,
         CancellationToken cancellationToken = default)
         where TResponse : notnull
     {
@@ -431,6 +437,8 @@ internal sealed class JsonRpcClient : IJsonRpcClient
 
         if (parameters is null)
             throw new ArgumentNullException(nameof(parameters));
+        ArgumentNullException.ThrowIfNull(requestTypeInfo);
+        ArgumentNullException.ThrowIfNull(responseTypeInfo);
 
         // §8c.4 скасовано: CA1305-аналізатор не визнає що digits 0-9 culture-invariant,
         // тож лишаємо InvariantCulture, але через named-constant — без using.
@@ -458,7 +466,8 @@ internal sealed class JsonRpcClient : IJsonRpcClient
         // ВАЖЛИВО: серіалізуємо параметри за КОНКРЕТНИМ типом TRequest у JsonElement.
         // Інакше STJ серіалізує властивість Params (тип object) як "{}" і всі параметри
         // запиту втрачаються (на відміну від Newtonsoft, який брав runtime-тип).
-        var paramsElement = JsonSerializer.SerializeToElement(parameters, SignalJson.Options);
+        // §6.7: AOT-safe overload `SerializeToElement<T>(value, JsonTypeInfo<T>)` — без reflection.
+        var paramsElement = JsonSerializer.SerializeToElement(parameters, requestTypeInfo);
         var request = new JsonRpcRequest(Method: method, Params: paramsElement, Id: requestId);
 
         var tcs = new TaskCompletionSource<JsonRpcResponse?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -485,7 +494,8 @@ internal sealed class JsonRpcClient : IJsonRpcClient
                     if (response.Error != null)
                         throw new JsonRpcException(response.Error);
 
-                    var typedResult = response.Result.Deserialize<TResponse>(SignalJson.Options);
+                    // §6.7: AOT-safe extension overload `JsonElement.Deserialize<T>(JsonTypeInfo<T>)`.
+                    var typedResult = response.Result.Deserialize(responseTypeInfo);
                     if (typedResult is null)
                         throw new InvalidOperationException($"Не вдалося перетворити JSON-результат на {typeof(TResponse).Name}");
 
@@ -540,8 +550,9 @@ internal sealed class JsonRpcClient : IJsonRpcClient
             var pair = _streamProvider.CurrentStreamPair
                        ?? throw new InvalidOperationException("Немає активної пари потоків");
 
-            // Серіалізація запиту в JSON з використанням System.Text.Json
-            var json = JsonSerializer.Serialize(req, SignalJson.Options);
+            // Серіалізація запиту в JSON з використанням System.Text.Json.
+            // §6.7: AOT-safe — `JsonSerializer.Serialize<T>(value, JsonTypeInfo<T>)`.
+            var json = JsonSerializer.Serialize(req, SignalJsonContext.Default.JsonRpcRequest);
             // signal-cli парсить вхідний JSON через Jackson, у якого
             // StreamReadConstraints.maxStringLength за замовчуванням = 20 000 000 символів.
             // Тому великі вкладення передаються через temp-файли (див. SignalMessage),

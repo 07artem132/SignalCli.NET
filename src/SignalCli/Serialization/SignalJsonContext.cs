@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using SignalCli.Models.Rpc;
 using SignalCli.Models.Signal;
@@ -60,4 +61,8 @@ namespace SignalCli.Serialization;
 // Message
 [JsonSerializable(typeof(SendMessageFullParameters))]
 [JsonSerializable(typeof(SendMessageResponse))]
+// post-modernize-tuning §6.7 (audit P6): JsonElement використовується як TResponse
+// у SignalEventService.SubscribeAsync (signal-cli повертає raw id або помилку); після
+// AOT-міграції потрібен JsonTypeInfo<JsonElement>. Source-gen надає pass-through-typeinfo.
+[JsonSerializable(typeof(JsonElement))]
 internal partial class SignalJsonContext : JsonSerializerContext;

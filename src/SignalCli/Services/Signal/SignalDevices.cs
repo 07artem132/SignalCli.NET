@@ -3,6 +3,7 @@ using SignalCli.Interfaces.Signal;
 using SignalCli.Interfaces.SignalCli;
 using SignalCli.Logging;
 using SignalCli.Models.Signal.Devices;
+using SignalCli.Serialization;
 
 namespace SignalCli.Services.Signal;
 
@@ -22,9 +23,11 @@ internal sealed class SignalDevices(
         // у JsonRpcClient (§11.A.2) уже фіксує тип винятку. Entry-level log залишено.
         SignalDevicesLog.StartLinkRequested(_logger);
         var response = await _signalCliClient
-            .InvokeMethodAsync<StartLinkParameters, StartLinkResponse>(
+            .InvokeMethodAsync(
                 "startLink",
                 new StartLinkParameters(),
+                SignalJsonContext.Default.StartLinkParameters,
+                SignalJsonContext.Default.StartLinkResponse,
                 cancellationToken).ConfigureAwait(false);
 
         if (response == null)
@@ -45,9 +48,11 @@ internal sealed class SignalDevices(
         // §8c.7: bare-catch прибрано.
         SignalDevicesLog.FinishLinkRequested(_logger, deviceName);
         var response = await _signalCliClient
-            .InvokeMethodAsync<FinishLinkParameters, FinishLinkResponse>(
+            .InvokeMethodAsync(
                 "finishLink",
                 new FinishLinkParameters(deviceLinkUri, deviceName),
+                SignalJsonContext.Default.FinishLinkParameters,
+                SignalJsonContext.Default.FinishLinkResponse,
                 cancellationToken).ConfigureAwait(false);
 
         if (response == null)

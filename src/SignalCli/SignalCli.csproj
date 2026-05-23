@@ -6,13 +6,13 @@
         <Nullable>enable</Nullable>
         <!-- Бібліотека тепер warning-clean: фіксуємо це, щоб регресії не поверталися. -->
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-        <!-- post-modernize-tuning §6.7 (audit P6): <IsAotCompatible>true</IsAotCompatible> deferred —
-             вмикання тригерить 14 IL2026/IL3050 warnings на generic JsonSerializer.Serialize/Deserialize<T>(_, options)
-             сайтах у JsonRpcClient.InvokeMethodAsync<TRequest, TResponse>. Повна міграція потребує
-             redesign'у на JsonTypeInfo<T>-based overloads — окрема сесія (§6.7-6.10).
-             Уже зроблено в цій сесії: Nito.AsyncEx видалено (§6.1-6.3), source-gen JSON fast-path
-             підготовлено (§6.4-6.6 — див. SignalJsonContext + SignalJson.Options).
-             <IsAotCompatible>true</IsAotCompatible> -->
+        <!-- post-modernize-tuning §6.7 (audit P6): IsAotCompatible УВІМКНЕНО після redesign'у
+             ISignalCliClient.InvokeMethodAsync<TReq,TResp> на JsonTypeInfo<T>-аргументи
+             (§6.7 raund 14). JsonRpcClient.InvokeMethodAsync тепер використовує AOT-safe
+             overload'и `SerializeToElement(value, JsonTypeInfo<T>)` і
+             `JsonElement.Deserialize<T>(JsonTypeInfo<T>)`. Reflection fallback у SignalJson.Options
+             видалено (§6.4); production-options тримає лише SignalJsonContext.Default. -->
+        <IsAotCompatible>true</IsAotCompatible>
         <!-- Налаштування документації -->
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <DocumentationFile>$(OutputPath)$(AssemblyName).xml</DocumentationFile>

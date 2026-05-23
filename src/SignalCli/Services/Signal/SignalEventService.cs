@@ -13,6 +13,7 @@ using SignalCli.Logging;
 using SignalCli.Models.Rpc;
 using SignalCli.Models.Signal;
 using SignalCli.Models.Signal.Events;
+using SignalCli.Serialization;
 
 namespace SignalCli.Services.Signal;
 
@@ -242,9 +243,11 @@ internal sealed class SignalEventService(
         try
         {
             var responseToken = await _signalCliClient
-                .InvokeMethodAsync<SubscribeReceiveParameters, JsonElement>(
+                .InvokeMethodAsync(
                     "subscribeReceive",
                     new SubscribeReceiveParameters(account),
+                    SignalJsonContext.Default.SubscribeReceiveParameters,
+                    SignalJsonContext.Default.JsonElement,
                     cancellationToken).ConfigureAwait(false);
 
             int subscriptionId = responseToken.GetInt32();
@@ -296,9 +299,11 @@ internal sealed class SignalEventService(
         }
 
         var resp = await _signalCliClient
-            .InvokeMethodAsync<UnsubscribeReceiveParameters, UnsubscribeReceiveResponse>(
+            .InvokeMethodAsync(
                 "unsubscribeReceive",
                 new UnsubscribeReceiveParameters(subscriptionId),
+                SignalJsonContext.Default.UnsubscribeReceiveParameters,
+                SignalJsonContext.Default.UnsubscribeReceiveResponse,
                 cancellationToken).ConfigureAwait(false);
 
         lock (_subscriptionsLock)

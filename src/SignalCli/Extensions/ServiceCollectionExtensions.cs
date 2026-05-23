@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using JetBrains.Annotations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -77,7 +78,15 @@ public static class ServiceCollectionExtensions
         /// </code>
         /// </example>
         /// <para>Реєстрація ідемпотентна — повторні виклики не дублюють хост-сервіси.</para>
+        /// <para>
+        /// <b>AOT-warning:</b> `OptionsBuilder.Bind&lt;TOptions&gt;(IConfiguration)` тягне
+        /// <c>Microsoft.Extensions.Configuration.Binder</c>, що використовує reflection. Для
+        /// AOT-deploy'у користуйтеся `AddSignalCli(Action&lt;SignalCliOptions&gt;)`-overload'ом
+        /// (повністю reflection-free).
+        /// </para>
         /// </remarks>
+        [RequiresUnreferencedCode("Calls Microsoft.Extensions.Configuration.Binder which uses reflection on SignalCliOptions members. Use AddSignalCli(Action<SignalCliOptions>) for AOT scenarios.")]
+        [RequiresDynamicCode("Calls Microsoft.Extensions.Configuration.Binder which may generate dynamic code at runtime. Use AddSignalCli(Action<SignalCliOptions>) for AOT scenarios.")]
         public IServiceCollection AddSignalCli(IConfiguration configurationSection)
         {
             ArgumentNullException.ThrowIfNull(configurationSection);
@@ -173,6 +182,8 @@ public static class ServiceCollectionExtensions
     /// post-modernize-tuning §8b.3: інший шлях конфігурації — Bind із <see cref="IConfiguration"/>-секції.
     /// Усі решта валідаційних правил такі самі (cross-field + source-gen).
     /// </summary>
+    [RequiresUnreferencedCode("Bind uses reflection.")]
+    [RequiresDynamicCode("Bind may generate dynamic code.")]
     private static void ConfigureOptionsFromConfiguration(IServiceCollection services, IConfiguration section)
     {
         var builder = services.AddOptions<SignalCliOptions>().Bind(section);

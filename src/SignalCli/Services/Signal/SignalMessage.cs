@@ -4,6 +4,7 @@ using SignalCli.Interfaces.Signal;
 using SignalCli.Interfaces.SignalCli;
 using SignalCli.Logging;
 using SignalCli.Models.Signal.Message;
+using SignalCli.Serialization;
 using SignalCli.Services.FileSystem;
 using SignalCli.Utilities;
 
@@ -169,7 +170,11 @@ namespace SignalCli.Services.Signal
             try
             {
                 var response = await _signalCliClient
-                    .InvokeMethodAsync<SendMessageFullParameters, SendMessageResponse>("send", parameters,
+                    .InvokeMethodAsync(
+                        "send",
+                        parameters,
+                        SignalJsonContext.Default.SendMessageFullParameters,
+                        SignalJsonContext.Default.SendMessageResponse,
                         cancellationToken)
                     .ConfigureAwait(false);
 

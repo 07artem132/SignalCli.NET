@@ -28,8 +28,7 @@ public class AsyncEnumerableEventDispatchTests
         var provider = new Mock<IJsonRpcClientProvider>();
         provider.Setup(p => p.Client).Returns(rpcClient.Object);
         var signalCli = new Mock<ISignalCliClient>();
-        signalCli.Setup(c => c.InvokeMethodAsync<SubscribeReceiveParameters, JsonElement>(
-                It.IsAny<string>(), It.IsAny<SubscribeReceiveParameters>(), It.IsAny<CancellationToken>()))
+        signalCli.Setup(c => c.InvokeMethodAsync<SubscribeReceiveParameters, JsonElement>(It.IsAny<string>(), It.IsAny<SubscribeReceiveParameters>(), It.IsAny<JsonTypeInfo<SubscribeReceiveParameters>>(), It.IsAny<JsonTypeInfo<JsonElement>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(JsonSerializer.SerializeToElement(SubId));
         return new SignalEventService(Mock.Of<ILogger<SignalEventService>>(), provider.Object, signalCli.Object);
     }

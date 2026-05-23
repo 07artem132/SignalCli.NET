@@ -3,6 +3,7 @@ using SignalCli.Interfaces.Signal;
 using SignalCli.Interfaces.SignalCli;
 using SignalCli.Logging;
 using SignalCli.Models.Signal.Groups;
+using SignalCli.Serialization;
 
 namespace SignalCli.Services.Signal;
 
@@ -24,9 +25,11 @@ internal sealed class SignalGroups(
         SignalGroupsLog.ListGroupsRequested(_logger);
 
         var response = await _signalCliClient
-            .InvokeMethodAsync<ListGroupsParameters, ListGroupsResponse>(
+            .InvokeMethodAsync(
                 "listGroups",
                 new ListGroupsParameters(account),
+                SignalJsonContext.Default.ListGroupsParameters,
+                SignalJsonContext.Default.ListGroupsResponse,
                 cancellationToken).ConfigureAwait(false);
 
         if (response == null)

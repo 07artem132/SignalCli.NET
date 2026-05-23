@@ -104,8 +104,13 @@ public class JsonRpcClientTests
         // «Включаем» стрим-пару
         PushStreamPair(inputWriter, outputReader, errorReader);
 
-        // Запускаємо запит
-        var invokeTask = client.InvokeMethodAsync<object, object>("testMethod", new { });
+        // Запускаємо запит. §6.10: test-local source-gen context замість anonymous-type'у
+        // (production API більше не приймає reflection-based payload).
+        var invokeTask = client.InvokeMethodAsync(
+            "testMethod",
+            new TestProbeRequest(),
+            TestSerializationContext.Default.TestProbeRequest,
+            TestSerializationContext.Default.TestProbeResponse);
 
         // Act — імітуємо, що стрім-пара зникла
         PushNullStreamPair();
@@ -127,7 +132,11 @@ public class JsonRpcClientTests
         var errorReader = new StreamReader(new MemoryStream());
         PushStreamPair(inputWriter, outputReader, errorReader);
 
-        var invokeTask = client.InvokeMethodAsync<object, object>("test", new { });
+        var invokeTask = client.InvokeMethodAsync(
+            "test",
+            new TestProbeRequest(),
+            TestSerializationContext.Default.TestProbeRequest,
+            TestSerializationContext.Default.TestProbeResponse);
 
         // Act
         // A.6: IJsonRpcClient тепер IAsyncDisposable-only.
@@ -150,10 +159,15 @@ public class JsonRpcClientTests
         PushStreamPair(inputWriter, outputReader, errorReader);
 
         // Запускаємо запит
-        var invokeTask = client.InvokeMethodAsync<object, TestResponse>("someMethod", new { param = 123 });
+        var invokeTask = client.InvokeMethodAsync(
+            "someMethod",
+            new TestProbeRequest(),
+            TestSerializationContext.Default.TestProbeRequest,
+            TestSerializationContext.Default.TestProbeResponse);
 
-        // Імітація «відповіді» з id=1 (якщо лічильник 0 => перший запит → "1")
-        var json = @"{ ""id"": ""1"", ""result"": { ""Foo"": ""bar"" } }";
+        // Імітація «відповіді» з id=1 (якщо лічильник 0 => перший запит → "1").
+        // §6.10: TestProbeResponse(Foo: string) → wire-property "foo" (lowercase).
+        var json = @"{ ""id"": ""1"", ""result"": { ""foo"": ""bar"" } }";
 
         // Викликаємо ProcessMessage(...) через рефлексію, бо він приватний
         CallProcessMessage(client, json);
@@ -174,7 +188,11 @@ public class JsonRpcClientTests
         var errorReader = new StreamReader(new MemoryStream());
         PushStreamPair(inputWriter, outputReader, errorReader);
 
-        var invokeTask = client.InvokeMethodAsync<object, object>("test", new { });
+        var invokeTask = client.InvokeMethodAsync(
+            "test",
+            new TestProbeRequest(),
+            TestSerializationContext.Default.TestProbeRequest,
+            TestSerializationContext.Default.TestProbeResponse);
 
         // Ответ с error
         var response = @"{
@@ -198,11 +216,15 @@ public class JsonRpcClientTests
 
         using var sub = client.Notifications.Subscribe(n => received.Add(n));
 
+        // §6.7: Source-gen контекст вимагає РОВНО ту shape, що оголошена. SubscriptionEventArgs
+        // має обидва ctor-args: subscription + result. Раніше reflection-fallback толерантно
+        // деф'юлтив result=null; тепер передаємо мінімальний result-об'єкт явно.
         var notificationJson = @"{
             ""jsonrpc"": ""2.0"",
             ""method"": ""subscribe"",
             ""params"": {
                 ""subscription"": 0,
+                ""result"": { ""account"": ""+380501234567"" }
             }
         }";
 
@@ -234,7 +256,12 @@ public class JsonRpcClientTests
         PushStreamPair(inputWriter, outputReader, errorReader);
 
         // Act — отправляем запрос
-        _ = client.InvokeMethodAsync<object, JsonElement>("myMethod", new { Hello = "world" });
+        // §6.10: TestProbeRequest з полем `Hello` → wire "hello":"world".
+        _ = client.InvokeMethodAsync(
+            "myMethod",
+            new TestProbeRequest(Hello: "world"),
+            TestSerializationContext.Default.TestProbeRequest,
+            TestSerializationContext.Default.JsonElement);
 
         // Даємо трохи часу, щоб SendRequestAsync встиг записати
         await Task.Delay(50);
@@ -246,7 +273,7 @@ public class JsonRpcClientTests
         using var reader = new StreamReader(inputStream);
         var written = await reader.ReadToEndAsync();
         Assert.Contains(@"""method"":""myMethod""", written);
-        Assert.Contains(@"""Hello"":""world""", written);
+        Assert.Contains(@"""hello"":""world""", written);
 
         // Сирий JSON-запит логуємо лише на Trace (приватність: містить тіло повідомлення).
         _loggerMock.Verify(
@@ -271,7 +298,11 @@ public class JsonRpcClientTests
         var errorReader = new StreamReader(new MemoryStream());
         PushStreamPair(inputWriter, outputReader, errorReader);
 
-        var invokeTask = client.InvokeMethodAsync<object, TestResponse>("silent", new { });
+        var invokeTask = client.InvokeMethodAsync(
+            "silent",
+            new TestProbeRequest(),
+            TestSerializationContext.Default.TestProbeRequest,
+            TestSerializationContext.Default.TestProbeResponse);
 
         // Очікуємо точно TimeoutException у межах кількох таймаутів (бо є тонкі race-вікна).
         var ex = await Assert.ThrowsAsync<TimeoutException>(async () =>
@@ -292,7 +323,12 @@ public class JsonRpcClientTests
         PushStreamPair(inputWriter, outputReader, errorReader);
 
         using var cts = new CancellationTokenSource();
-        var invokeTask = client.InvokeMethodAsync<object, TestResponse>("cancel-me", new { }, cts.Token);
+        var invokeTask = client.InvokeMethodAsync(
+            "cancel-me",
+            new TestProbeRequest(),
+            TestSerializationContext.Default.TestProbeRequest,
+            TestSerializationContext.Default.TestProbeResponse,
+            cts.Token);
         await Task.Delay(50);
         cts.Cancel();
 
@@ -315,7 +351,11 @@ public class JsonRpcClientTests
         PushStreamPair(inputA, outA, errA);
 
         // Pending запит на першій парі.
-        var first = client.InvokeMethodAsync<object, TestResponse>("first", new { });
+        var first = client.InvokeMethodAsync(
+            "first",
+            new TestProbeRequest(),
+            TestSerializationContext.Default.TestProbeRequest,
+            TestSerializationContext.Default.TestProbeResponse);
 
         // Друга пара — push має скасувати pending.
         var inputB = new StreamWriter(new MemoryStream());
@@ -340,8 +380,4 @@ public class JsonRpcClientTests
         task.GetAwaiter().GetResult();
     }
 
-    private class TestResponse
-    {
-        public string Foo { get; set; }
-    }
 }

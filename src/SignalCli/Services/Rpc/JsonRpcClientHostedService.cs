@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using SignalCli.Interfaces.Rpc;
 using SignalCli.Logging;
 using SignalCli.Models.SignalCli;
+using SignalCli.Serialization;
 using SignalCli.Services.SignalCli;
 
 namespace SignalCli.Services.Rpc;
@@ -62,7 +63,12 @@ internal sealed class JsonRpcClientHostedService : IHostedService, IJsonRpcClien
             await _signalCliHostedService.WaitForReadyAsync(cancellationToken).ConfigureAwait(false);
             // A.7: фабрика тепер синхронна — створення клієнта не потребує await.
             _client = _factory.Create();
-            var versionResp = await _client.InvokeMethodAsync<VersionParameters, VersionResponse>("version", new(), cancellationToken).ConfigureAwait(false);
+            var versionResp = await _client.InvokeMethodAsync(
+                "version",
+                new VersionParameters(),
+                SignalJsonContext.Default.VersionParameters,
+                SignalJsonContext.Default.VersionResponse,
+                cancellationToken).ConfigureAwait(false);
             JsonRpcClientHostedServiceLog.Version(_logger, versionResp.Version);
 
             JsonRpcClientHostedServiceLog.StartReady(_logger);
