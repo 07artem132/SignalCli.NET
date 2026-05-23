@@ -26,6 +26,18 @@ if ($existing) {
     exit 0
 }
 
+# post-modernize-tuning §8d.12 (audit N20): Adoptium URL pattern documented.
+# Canonical asset URL (GitHub Releases mirror):
+#   https://github.com/adoptium/temurin{FEATURE}-binaries/releases/download/jdk-{TAG_VER}/
+#     OpenJDK{FEATURE}U-jre_{ARCH}_{OS}_hotspot_{FN_VER}.{EXT}
+# where:
+#   TAG_VER = version with '+' URL-encoded as '%2B' (GitHub release-tag escaping)
+#   FN_VER  = version with '+' replaced by '_' (asset-filename escaping)
+#   EXT     = 'zip' for windows, 'tar.gz' otherwise
+# Alternative API (api.adoptium.net) returns a redirect to the same mirror; we use
+# GitHub directly to avoid the extra hop. If the mirror is ever unreachable, override
+# at consumer side by editing the URL here and re-running the build; or use the
+# Adoptium API: https://api.adoptium.net/v3/binary/version/jdk-{TAG_VER}/{OS}/{ARCH}/jre/hotspot/normal/eclipse
 $tagVer = $Version -replace '\+', '%2B'   # release tag: jdk-25.0.3%2B9
 $fnVer = $Version -replace '\+', '_'      # asset version: 25.0.3_9
 $ext = if ($Os -eq 'windows') { 'zip' } else { 'tar.gz' }

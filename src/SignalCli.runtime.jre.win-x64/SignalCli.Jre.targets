@@ -21,5 +21,13 @@
              Harmless on Windows; required for the macOS JRE launcher. -->
         <Exec Condition="'$(OS)' != 'Windows_NT' and Exists('$(TargetDir)jre/bin/java')"
               Command="chmod -R +x &quot;$(TargetDir)jre/bin&quot;" />
+
+        <!-- post-modernize-tuning §8d.10 (audit N11): post-extract integrity check. Якщо
+             extraction завершилось, але `java.exe` відсутній — це майже завжди corruption
+             (NuGet packed файл без розширення, archive truncated тощо). Кидаємо актуальну
+             error із чітким сповіщенням, замість того щоб залишити користувача з obscure
+             JVM-crash під час bootstrap. -->
+        <Error Condition="!Exists('$(TargetDir)jre/bin/java.exe')"
+               Text="SignalCli.NET.Runtime.Jre.win-x64: extraction completed, але `$(TargetDir)jre/bin/java.exe` відсутній. Можливо, jre.zip пошкоджений у пакеті (видаліть obj/, restore -force) або NuGet corruption (перепакуйте пакет — див. CLAUDE.md rule #8). Без java.exe SignalCli не може стартувати signal-cli у JVM-режимі." />
     </Target>
 </Project>

@@ -18,7 +18,9 @@ internal class ProcessRunner : IProcessRunner
         _processFactory = processFactory;
     }
 
-    public Task<(IProcess Process, StreamPair StreamPair)> StartProcessWithHandle(
+    // post-modernize-tuning §8a.4 (audit B4): ValueTask<T> — реалізація синхронна,
+    // зайва Task.FromResult-обгортка прибрана.
+    public ValueTask<(IProcess Process, StreamPair StreamPair)> StartProcessWithHandle(
         ProcessConfig config,
         CancellationToken cancellationToken = default)
     {
@@ -83,7 +85,7 @@ internal class ProcessRunner : IProcessRunner
                 proc.StandardError
             );
 
-            return Task.FromResult((proc, streams));
+            return ValueTask.FromResult<(IProcess, StreamPair)>((proc, streams));
         }
         catch (Exception ex)
         {

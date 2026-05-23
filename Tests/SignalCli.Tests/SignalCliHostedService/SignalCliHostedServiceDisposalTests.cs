@@ -168,7 +168,9 @@ public class SignalCliHostedServiceDisposalTests : SignalCliHostedServiceTestsBa
     
         ProcessRunnerMock
             .Setup(r => r.StartProcessWithHandle(It.IsAny<ProcessConfig>(), It.IsAny<CancellationToken>()))
-            .Returns(startTaskCompletionSource.Task);
+            // post-modernize-tuning §8a.4: IProcessRunner повертає ValueTask;
+            // обгортаємо існуючий TCS-Task через `new ValueTask<T>(task)`.
+            .Returns(new ValueTask<(IProcess, StreamPair)>(startTaskCompletionSource.Task));
 
         var service = CreateService();
         var startTask = service.StartAsync(CancellationToken.None);
