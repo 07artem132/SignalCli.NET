@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using SignalCli.Extensions;
 using SignalCli.Interfaces.Signal;
 using SignalCli.Interfaces.SignalCli;
+using SignalCli.Models;
 using SignalCli.Models.Signal.Events;
 using SignalCli.Models.Signal.Message;
 
@@ -17,17 +18,17 @@ namespace SignalCli.Example
             using var host = Host.CreateDefaultBuilder(args)
                 .ConfigureServices(services =>
                 {
-                    // Реєстрація основних сервісів Signal CLI
-                    services.AddSignalCli(config =>
+                    // ✨ 2.1.0: типована конфігурація через SignalCliOptions + ValidateOnStart.
+                    services.AddSignalCli((Action<SignalCliOptions>)(o =>
                     {
-                        config.AppHome = Path.Combine(AppDomain.CurrentDomain.BaseDirectory);
-                        config.LibDirectory = "signal-cli/lib";
-                        config.StoragePathCli =
+                        o.AppHome = AppDomain.CurrentDomain.BaseDirectory;
+                        o.LibDirectory = "signal-cli/lib";
+                        o.StoragePathCli =
                             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SignalCliStorageData");
-                        config.MaxRestartAttempts = 3;
-                        config.HealthCheckIntervalSeconds = 40;
-                        config.HealthCheckTimeoutSeconds = 10;
-                    });
+                        o.MaxRestartAttempts = 3;
+                        o.HealthCheckIntervalSeconds = 40;
+                        o.HealthCheckTimeoutSeconds = 10;
+                    }));
                     // Додавання підтримки подій
                     services.AddSignalEvents(); 
                 })

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SignalCli.Interfaces.Rpc;
 using SignalCli.Logging;
 using SignalCli.Models;
@@ -22,7 +23,8 @@ public sealed class SignalCliHealthMonitor : BackgroundService
     private readonly ILogger<SignalCliHealthMonitor> _logger;
     private readonly IJsonRpcClientProvider _clientProvider;
     private readonly SignalCliHostedService _signalCliHostedService;
-    private readonly Config _config;
+    // D.4: типована immutable-конфігурація.
+    private readonly SignalCliOptions _options;
     // G.14 (F14): абстракція часу — у проді System (wall-clock), у тестах
     // FakeTimeProvider, тож інтервал між пінгами стає віртуальним і flake-вільним.
     private readonly TimeProvider _timeProvider;
@@ -33,7 +35,7 @@ public sealed class SignalCliHealthMonitor : BackgroundService
     /// <param name="logger">Логер для запису діагностичної інформації.</param>
     /// <param name="clientProvider">Постачальник JSON-RPC клієнта.</param>
     /// <param name="signalCliHostedService">Хостований сервіс Signal CLI.</param>
-    /// <param name="config">Конфігурація Signal CLI.</param>
+    /// <param name="options">Типована конфігурація через <see cref="IOptions{SignalCliOptions}"/>.</param>
     /// <param name="timeProvider">
     /// Опціональний постачальник часу для <see cref="PeriodicTimer"/> та <c>CancelAfter</c>.
     /// За замовчуванням <see cref="TimeProvider.System"/>; у тестах підставляється
@@ -43,14 +45,15 @@ public sealed class SignalCliHealthMonitor : BackgroundService
         ILogger<SignalCliHealthMonitor> logger,
         IJsonRpcClientProvider clientProvider,
         SignalCliHostedService signalCliHostedService,
-        Config config,
+        IOptions<SignalCliOptions> options,
         TimeProvider? timeProvider = null
     )
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _clientProvider = clientProvider ?? throw new ArgumentNullException(nameof(clientProvider));
         _signalCliHostedService = signalCliHostedService ?? throw new ArgumentNullException(nameof(signalCliHostedService));
-        _config = config ?? throw new ArgumentNullException(nameof(config));
+        ArgumentNullException.ThrowIfNull(options);
+        _options = options.Value;
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
@@ -95,7 +98,7 @@ public sealed class SignalCliHealthMonitor : BackgroundService
     {
         SignalCliHealthMonitorLog.LoopStarted(_logger);
 
-        var interval = TimeSpan.FromSeconds(Math.Max(1, _config.HealthCheckIntervalSeconds));
+        var interval = TimeSpan.FromSeconds(Math.Max(1, _options.HealthCheckIntervalSeconds));
         using var timer = new PeriodicTimer(interval, _timeProvider);
 
         try
@@ -105,7 +108,7 @@ public sealed class SignalCliHealthMonitor : BackgroundService
                 try
                 {
                     var isHealthy = await PingCliAsync(
-                        timeout: TimeSpan.FromSeconds(_config.HealthCheckTimeoutSeconds),
+                        timeout: TimeSpan.FromSeconds(_options.HealthCheckTimeoutSeconds),
                         stoppingToken
                     ).ConfigureAwait(false);
 

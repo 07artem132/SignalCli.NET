@@ -49,10 +49,11 @@ public class JsonRpcClientTests
             LibDirectory = string.Empty,
             RequestTimeoutSeconds = requestTimeoutSeconds
         };
+        // D.4: JsonRpcClient тепер приймає SignalCliOptions; конвертуємо legacy Config.
         return new JsonRpcClient(
             _loggerMock.Object,
             _streamProviderMock.Object,
-            config
+            config.ToOptions()
         );
     }
 

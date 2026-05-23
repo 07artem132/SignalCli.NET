@@ -2,6 +2,7 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Nito.AsyncEx;
 using SignalCli.Interfaces.SignalCli;
 using SignalCli.Logging;
@@ -22,7 +23,8 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
     private readonly ILogger<SignalCliHostedService> _logger;
     private readonly IProcessRunner _processRunner;
     private readonly ProcessStateManager _stateManager;
-    private readonly Config _config;
+    // D.4: типована immutable-конфігурація, читається з IOptions один раз у конструкторі.
+    private readonly SignalCliOptions _options;
     // B.5: абстракція часу — у проді System (wall-clock), у тестах FakeTimeProvider.
     // Використовується для таймера вікна стабільності рестартів (раніше — сирий Task.Run+Task.Delay).
     private readonly TimeProvider _timeProvider;
@@ -55,7 +57,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
     /// <param name="logger">Логер для запису діагностичної інформації.</param>
     /// <param name="processRunner">Запускач зовнішніх процесів.</param>
     /// <param name="stateManager">Менеджер стану процесу.</param>
-    /// <param name="config">Конфігурація Signal CLI.</param>
+    /// <param name="options">Типована конфігурація через <see cref="IOptions{SignalCliOptions}"/>.</param>
     /// <param name="timeProvider">
     /// Опціональний постачальник часу для таймера вікна стабільності рестартів
     /// (<see cref="ScheduleRestartWindowReset"/>). За замовчуванням <see cref="TimeProvider.System"/>;
@@ -65,13 +67,15 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         ILogger<SignalCliHostedService> logger,
         IProcessRunner processRunner,
         ProcessStateManager stateManager,
-        Config config,
+        IOptions<SignalCliOptions> options,
         TimeProvider? timeProvider = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
         _stateManager = stateManager ?? throw new ArgumentNullException(nameof(stateManager));
-        _config = config ?? throw new ArgumentNullException(nameof(config));
+        ArgumentNullException.ThrowIfNull(options);
+        // D.4: читаємо .Value один раз — це тригерить валідацію OptionsValidator на старті.
+        _options = options.Value;
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
@@ -206,19 +210,19 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
 
             // B.5: інкремент під локом — гонка з OnProcessExited неможлива.
             _restartCount++;
-            if (_config.MaxRestartAttempts > 0 && _restartCount > _config.MaxRestartAttempts)
+            if (_options.MaxRestartAttempts > 0 && _restartCount > _options.MaxRestartAttempts)
             {
-                SignalCliHostedServiceLog.ForceRestartBudgetExceeded(_logger, _config.MaxRestartAttempts, _config.RestartWindowSeconds);
+                SignalCliHostedServiceLog.ForceRestartBudgetExceeded(_logger, _options.MaxRestartAttempts, _options.RestartWindowSeconds);
                 return;
             }
 
-            SignalCliHostedServiceLog.ForceRestartAttempt(_logger, _restartCount, _config.MaxRestartAttempts);
+            SignalCliHostedServiceLog.ForceRestartAttempt(_logger, _restartCount, _options.MaxRestartAttempts);
 
             // 1) Зупинка
             await StopProcessInternalAsyncNoLock(cancellationToken).ConfigureAwait(false);
 
             // 2) Невелика затримка (B.5: через _timeProvider — у тестах віртуальний).
-            await Task.Delay(TimeSpan.FromSeconds(_config.RestartDelaySeconds), _timeProvider, cancellationToken).ConfigureAwait(false);
+            await Task.Delay(TimeSpan.FromSeconds(_options.RestartDelaySeconds), _timeProvider, cancellationToken).ConfigureAwait(false);
 
             // 3) Перезапуск
             await StartProcessInternalAsyncNoLock(cancellationToken).ConfigureAwait(false);
@@ -259,7 +263,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
 
         try
         {
-            var procConfig = _config.ToProcessConfig();
+            var procConfig = _options.ToProcessConfig();
             var (proc, streams) = await _processRunner.StartProcessWithHandle(procConfig, cancellationToken).ConfigureAwait(false);
 
             _currentProcess = proc;
@@ -328,7 +332,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
 
                 // B.9: замість фіксованого Task.Delay чекаємо реального виходу процесу
                 // через WaitForExitAsync + linkedCts(timeout) — швидко за нормального exit.
-                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(_config.StopTimeoutSeconds));
+                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(_options.StopTimeoutSeconds));
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
                 try
                 {
@@ -341,7 +345,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
 
                 if (!_currentProcess.HasExited)
                 {
-                    SignalCliHostedServiceLog.ProcessKillTimeout(_logger, _config.StopTimeoutSeconds);
+                    SignalCliHostedServiceLog.ProcessKillTimeout(_logger, _options.StopTimeoutSeconds);
                     _currentProcess.Kill(entireProcessTree: true);
                 }
             }
@@ -394,7 +398,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
     private void ScheduleRestartWindowReset()
     {
         CancelRestartWindowTimer();
-        var window = TimeSpan.FromSeconds(Math.Max(1, _config.RestartWindowSeconds));
+        var window = TimeSpan.FromSeconds(Math.Max(1, _options.RestartWindowSeconds));
         // Якірний об'єкт — щоб callback міг переконатися, що таймер не змінено.
         var localTimer = new TimerSlot();
         ITimer timer = _timeProvider.CreateTimer(
@@ -447,7 +451,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
 
                 if (_restartCount > 0)
                 {
-                    SignalCliHostedServiceLog.RestartCountReset(_logger, Math.Max(1, _config.RestartWindowSeconds), _restartCount);
+                    SignalCliHostedServiceLog.RestartCountReset(_logger, Math.Max(1, _options.RestartWindowSeconds), _restartCount);
                     _restartCount = 0;
                 }
             }
@@ -521,7 +525,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             _stateManager.UpdateState(ProcessState.Failed);
             CleanupProcess();
 
-            if (_config.MaxRestartAttempts <= 0)
+            if (_options.MaxRestartAttempts <= 0)
             {
                 SignalCliHostedServiceLog.AutoRestartDisabled(_logger);
                 return;
@@ -530,17 +534,17 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             // B.5: під локом. B.4: лічильник скидатиметься таймером вікна стабільності
             // (ScheduleRestartWindowReset), коли наступний старт проживе RestartWindowSeconds.
             _restartCount++;
-            if (_restartCount > _config.MaxRestartAttempts)
+            if (_restartCount > _options.MaxRestartAttempts)
             {
-                SignalCliHostedServiceLog.AutoRestartBudgetExceeded(_logger, _config.MaxRestartAttempts, _config.RestartWindowSeconds);
+                SignalCliHostedServiceLog.AutoRestartBudgetExceeded(_logger, _options.MaxRestartAttempts, _options.RestartWindowSeconds);
                 return;
             }
 
-            SignalCliHostedServiceLog.AutoRestartAttempt(_logger, _restartCount, _config.MaxRestartAttempts);
+            SignalCliHostedServiceLog.AutoRestartAttempt(_logger, _restartCount, _options.MaxRestartAttempts);
             try
             {
                 // B.5: через _timeProvider для консистентності з ForceRestartAsync.
-                await Task.Delay(TimeSpan.FromSeconds(_config.RestartDelaySeconds), _timeProvider, CancellationToken.None).ConfigureAwait(false);
+                await Task.Delay(TimeSpan.FromSeconds(_options.RestartDelaySeconds), _timeProvider, CancellationToken.None).ConfigureAwait(false);
                 await StartProcessInternalAsyncNoLock(CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception ex)

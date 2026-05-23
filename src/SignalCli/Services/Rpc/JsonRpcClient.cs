@@ -54,14 +54,15 @@ internal sealed class JsonRpcClient : IJsonRpcClient
     /// </summary>
     /// <param name="logger">Логер для запису діагностичної інформації.</param>
     /// <param name="streamProvider">Постачальник потоків для взаємодії з зовнішнім процесом.</param>
-    /// <param name="config">Конфігурація — для отримання <see cref="Config.RequestTimeoutSeconds"/>.</param>
-    public JsonRpcClient(ILogger<JsonRpcClient> logger,
+    /// <param name="options">Конфігурація — для отримання <see cref="SignalCliOptions.RequestTimeoutSeconds"/>.</param>
+    /// <remarks>D.4: приймає типовану <see cref="SignalCliOptions"/> замість legacy <c>Config</c>.</remarks>
+    internal JsonRpcClient(ILogger<JsonRpcClient> logger,
         IStreamPairProvider streamProvider,
-        Config config)
+        SignalCliOptions options)
     {
         _logger = logger;
         _streamProvider = streamProvider;
-        var timeoutSeconds = Math.Max(1, config?.RequestTimeoutSeconds ?? 30);
+        var timeoutSeconds = Math.Max(1, options?.RequestTimeoutSeconds ?? 30);
         _requestTimeout = TimeSpan.FromSeconds(timeoutSeconds);
 
         // Коли StreamPair змінюється — скидаємо всі pendingRequests і перезапускаємо читачів.

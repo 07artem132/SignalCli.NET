@@ -17,7 +17,7 @@
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <Authors>07artem132</Authors>
         <PackageId>SignalCli.NET</PackageId>
-        <Version>2.0.0</Version>
+        <Version>2.1.0</Version>
         <PackageProjectUrl>https://github.com/07artem132/SignalCli.NET</PackageProjectUrl>
         <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
         <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
@@ -26,8 +26,8 @@
         <Description>SignalCli.NET — .NET-обгортка для signal-cli, яка забезпечує зручний та зрозумілий API для інтеграції месенджера Signal у ваші .NET-застосунки.</Description>
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-        <AssemblyVersion>2.0.0</AssemblyVersion>
-        <FileVersion>2.0.0</FileVersion>
+        <AssemblyVersion>2.1.0</AssemblyVersion>
+        <FileVersion>2.1.0</FileVersion>
     </PropertyGroup>
     <ItemGroup>
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
@@ -44,7 +44,9 @@
         <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0"/>
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0"/>
         <!-- D.1: DataAnnotations для типізованої валідації SignalCliOptions через
-             OptionsBuilder.ValidateDataAnnotations(). -->
+             OptionsBuilder.ValidateDataAnnotations().
+             D.9: source-generator для [OptionsValidator] включений у пакет
+             Microsoft.Extensions.Options ≥ 9.0 — окремий пакет не потрібен. -->
         <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.0"/>
         <PackageReference Include="Nito.AsyncEx" Version="5.1.2"/>
         <PackageReference Include="System.Reactive" Version="6.0.1"/>

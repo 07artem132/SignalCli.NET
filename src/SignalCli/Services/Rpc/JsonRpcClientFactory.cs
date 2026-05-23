@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SignalCli.Interfaces.Rpc;
 using SignalCli.Interfaces.SignalCli;
 using SignalCli.Logging;
@@ -9,32 +10,30 @@ namespace SignalCli.Services.Rpc;
 /// <summary>
 /// Фабрика для створення екземплярів IJsonRpcClient.
 /// </summary>
+/// <remarks>
+/// D.4: приймає <see cref="IOptions{SignalCliOptions}"/> замість legacy <c>Config</c>;
+/// читає <c>options.Value</c> один раз у конструкторі (опції immutable).
+/// </remarks>
 internal class JsonRpcClientFactory : IJsonRpcClientFactory
 {
     private readonly ILogger<JsonRpcClient> _logger;
     private readonly IStreamPairProvider _streamPairProvider;
-    private readonly Config _config;
+    private readonly SignalCliOptions _options;
 
-    /// <summary>
-    /// Створює новий екземпляр фабрики JSON-RPC клієнтів.
-    /// </summary>
-    /// <param name="logger">Логер для запису діагностичної інформації.</param>
-    /// <param name="streamPairProvider">Постачальник потоків для взаємодії з зовнішнім процесом.</param>
-    /// <param name="config">Конфігурація — використовується для отримання таймауту запитів.</param>
     public JsonRpcClientFactory(
         ILogger<JsonRpcClient> logger,
         IStreamPairProvider streamPairProvider,
-        Config config)
+        IOptions<SignalCliOptions> options)
     {
         _logger = logger;
         _streamPairProvider = streamPairProvider;
-        _config = config;
+        _options = options.Value;
     }
 
     /// <inheritdoc />
     public IJsonRpcClient Create()
     {
-        var client = new JsonRpcClient(_logger, _streamPairProvider, _config);
+        var client = new JsonRpcClient(_logger, _streamPairProvider, _options);
         JsonRpcClientHostedServiceLog.FactoryClientCreated(_logger);
         return client;
     }

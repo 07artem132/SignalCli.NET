@@ -133,19 +133,20 @@ using SignalCli.Extensions;
 using var host = Host.CreateDefaultBuilder(args)
     .ConfigureServices(services =>
     {
-        // Реєстрація основних сервісів Signal CLI
-        services.AddSignalCli(config =>
+        // Реєстрація основних сервісів Signal CLI.
+        // ✨ 2.1.0: рекомендований overload — типована конфігурація через
+        //          SignalCliOptions з DataAnnotations + ValidateOnStart.
+        //          Помилки конфігу видно одразу на host.StartAsync(), а не у
+        //          ToProcessConfig() пізніше.
+        services.AddSignalCli((Action<SignalCliOptions>)(o =>
         {
-            config.AppHome = Path.Combine(AppDomain.CurrentDomain.BaseDirectory);
-            config.LibDirectory = "SignalCli/lib";
-            config.StoragePathCli = Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory,
-                "SignalCliStorageData");
-
-            config.MaxRestartAttempts = 3;
-            config.HealthCheckIntervalSeconds = 40;
-            config.HealthCheckTimeoutSeconds = 10;
-        });
+            o.AppHome = AppContext.BaseDirectory;
+            o.LibDirectory = "SignalCli/lib";
+            o.StoragePathCli = Path.Combine(AppContext.BaseDirectory, "SignalCliStorageData");
+            o.MaxRestartAttempts = 3;
+            o.HealthCheckIntervalSeconds = 40;
+            o.HealthCheckTimeoutSeconds = 10;
+        }));
 
         // Додавання підтримки подій
         services.AddSignalEvents();
@@ -162,6 +163,23 @@ using var host = Host.CreateDefaultBuilder(args)
 
 host.Start();
 ```
+
+> 💡 **Альтернатива: `appsettings.json`-секція.** Якщо ви бажаєте binding з конфіг-секції, можна
+> поєднати `AddOptions<>().Bind(...)` зі стандартним `Configuration`-API ASP.NET:
+>
+> ```json
+> { "SignalCli": { "AppHome": "/app", "LibDirectory": "lib", "JavaExecutable": "java", "MaxRestartAttempts": 5 } }
+> ```
+> ```csharp
+> services.AddOptions<SignalCliOptions>()
+>     .Bind(builder.Configuration.GetSection("SignalCli"))
+>     .ValidateDataAnnotations()
+>     .ValidateOnStart();
+> services.AddSignalCli((Action<SignalCliOptions>?)null);  // зареєструє сервіси, не торкаючись Options
+> ```
+
+> 🕰 **Legacy overload `AddSignalCli(Action<Config>?)`** лишається, але позначений `[Obsolete]`
+> і буде видалений у 3.0 — мігруйте на `Action<SignalCliOptions>`.
 
 ### 2. Зв'язування нового пристрою
 
@@ -510,6 +528,24 @@ Console.WriteLine($"Пристрій успішно зв'язано. Номер:
 ```
 
 ### Підписка на повідомлення та автоматична відповідь
+
+> ✨ **2.1.0:** для нового коду рекомендуємо `IAsyncEnumerable<T>`-варіанти (`TextMessagesAsync`,
+> `AttachmentsAsync`, `ReactionAsync`, …) — це стандартний C# `await foreach` з back-pressure
+> (drop-oldest, capacity 1024) і коректним завершенням при `Dispose`. Rx-API (`TextMessages`,
+> …) лишається для broadcast/fan-out-сценаріїв.
+>
+> ```csharp
+> // Async-stream API: один споживач читає кожен елемент.
+> await foreach (var msg in eventService.TextMessagesAsync(stoppingToken))
+> {
+>     Console.WriteLine($"[{DateTime.Now}] {msg.SourceNumber}: {msg.DataMessage.Message}");
+>     await signalMessage.SendTextMessageAsync(
+>         new TextMessageOptions.Builder(msg.Account, [new UserRecipient(msg.SourceUuid)], "Got it!").Build(),
+>         stoppingToken);
+> }
+> ```
+
+Класичний Rx-варіант (без змін у 2.x):
 
 ```csharp
 var eventService = host.Services.GetRequiredService<ISignalEventService>();

@@ -14,24 +14,25 @@ public class OptionsValidationTests
 {
     /// <summary>
     /// Шорткат: побудувати ServiceProvider із заданим конфігуратором SignalCliOptions
-    /// та одразу резолвити Config — це момент, коли валідація має спрацювати.
+    /// та одразу резолвити <c>IOptions&lt;SignalCliOptions&gt;.Value</c> — це момент, коли
+    /// валідація має спрацювати (тригериться при першому доступі до <c>.Value</c>).
     /// </summary>
-    private static Action ResolveConfigWith(Action<SignalCliOptions> mutate)
+    private static Action ResolveOptionsWith(Action<SignalCliOptions> mutate)
     {
         var services = new ServiceCollection();
         services.AddSignalCli(mutate);
         var sp = services.BuildServiceProvider();
-        return () => sp.GetRequiredService<Config>();
+        return () => _ = sp.GetRequiredService<IOptions<SignalCliOptions>>().Value;
     }
 
     [Fact]
-    public void Resolving_Config_With_EmptyAppHome_Throws_OptionsValidationException()
+    public void Resolving_Options_With_EmptyAppHome_Throws_OptionsValidationException()
     {
         // Arrange: AppHome порожній — DataAnnotations [Required] має зловити.
-        var resolve = ResolveConfigWith(o =>
+        var resolve = ResolveOptionsWith(o =>
         {
-            o.GetType().GetProperty(nameof(SignalCliOptions.LibDirectory))!.SetValue(o, "lib");
-            o.GetType().GetProperty(nameof(SignalCliOptions.JavaExecutable))!.SetValue(o, "java");
+            o.LibDirectory = "lib";
+            o.JavaExecutable = "java";
             // AppHome лишаємо порожнім (default = "")
         });
 
@@ -41,15 +42,15 @@ public class OptionsValidationTests
     }
 
     [Fact]
-    public void Resolving_Config_With_NegativeRange_Throws_OptionsValidationException()
+    public void Resolving_Options_With_NegativeRange_Throws_OptionsValidationException()
     {
         // Arrange: MaxRestartAttempts = -5 — [Range(0,100)] має зловити.
-        var resolve = ResolveConfigWith(o =>
+        var resolve = ResolveOptionsWith(o =>
         {
-            o.GetType().GetProperty(nameof(SignalCliOptions.AppHome))!.SetValue(o, "/tmp/signalcli-test");
-            o.GetType().GetProperty(nameof(SignalCliOptions.LibDirectory))!.SetValue(o, "lib");
-            o.GetType().GetProperty(nameof(SignalCliOptions.JavaExecutable))!.SetValue(o, "java");
-            o.GetType().GetProperty(nameof(SignalCliOptions.MaxRestartAttempts))!.SetValue(o, -5);
+            o.AppHome = "/tmp/signalcli-test";
+            o.LibDirectory = "lib";
+            o.JavaExecutable = "java";
+            o.MaxRestartAttempts = -5;
         });
 
         var ex = Assert.Throws<OptionsValidationException>(resolve);
@@ -57,13 +58,13 @@ public class OptionsValidationTests
     }
 
     [Fact]
-    public void Resolving_Config_With_NoExecutable_Throws_OptionsValidationException()
+    public void Resolving_Options_With_NoExecutable_Throws_OptionsValidationException()
     {
         // Arrange: ні Java, ні Native — кастомне правило має зловити.
-        var resolve = ResolveConfigWith(o =>
+        var resolve = ResolveOptionsWith(o =>
         {
-            o.GetType().GetProperty(nameof(SignalCliOptions.AppHome))!.SetValue(o, "/tmp/signalcli-test");
-            o.GetType().GetProperty(nameof(SignalCliOptions.LibDirectory))!.SetValue(o, "lib");
+            o.AppHome = "/tmp/signalcli-test";
+            o.LibDirectory = "lib";
             // JavaExecutable і SignalCliExecutable обидва null/порожні.
         });
 
@@ -73,24 +74,24 @@ public class OptionsValidationTests
     }
 
     [Fact]
-    public void Resolving_Config_With_ValidOptions_Succeeds()
+    public void Resolving_Options_With_ValidValues_Succeeds()
     {
-        // Arrange: коректні опції — резолв має пройти, Config має правильні значення.
+        // Arrange: коректні опції — резолв має пройти, значення правильні.
         var services = new ServiceCollection();
         services.AddSignalCli((Action<SignalCliOptions>)(o =>
         {
-            o.GetType().GetProperty(nameof(SignalCliOptions.AppHome))!.SetValue(o, "/tmp/signalcli-test");
-            o.GetType().GetProperty(nameof(SignalCliOptions.LibDirectory))!.SetValue(o, "lib");
-            o.GetType().GetProperty(nameof(SignalCliOptions.JavaExecutable))!.SetValue(o, "java");
+            o.AppHome = "/tmp/signalcli-test";
+            o.LibDirectory = "lib";
+            o.JavaExecutable = "java";
         }));
         var sp = services.BuildServiceProvider();
 
         // Act
-        var config = sp.GetRequiredService<Config>();
+        var options = sp.GetRequiredService<IOptions<SignalCliOptions>>().Value;
 
         // Assert
-        Assert.Equal("/tmp/signalcli-test", config.AppHome);
-        Assert.Equal("java", config.JavaExecutable);
-        Assert.Equal(3, config.MaxRestartAttempts); // default із SignalCliOptions
+        Assert.Equal("/tmp/signalcli-test", options.AppHome);
+        Assert.Equal("java", options.JavaExecutable);
+        Assert.Equal(3, options.MaxRestartAttempts); // default із SignalCliOptions
     }
 }

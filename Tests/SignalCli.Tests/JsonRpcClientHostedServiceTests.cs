@@ -100,7 +100,7 @@ public class JsonRpcClientHostedServiceTests
             _scsLoggerMock.Object,
             _processRunnerMock.Object,
             _stateManager,
-            _config
+            _config.ToIOptions()
         );
     }
 

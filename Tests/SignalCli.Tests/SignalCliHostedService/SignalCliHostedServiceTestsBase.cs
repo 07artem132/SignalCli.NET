@@ -100,11 +100,12 @@ public abstract class SignalCliHostedServiceTestsBase : IDisposable
     {
         // B.5/B.6: дозволяє тесту підставити FakeTimeProvider для віртуального часу
         // (Task.Delay у ForceRestartAsync та timer вікна стабільності — обидва через _timeProvider).
+        // D.4: legacy Config обгортаємо в IOptions<SignalCliOptions> через internal helper.
         return new Services.SignalCli.SignalCliHostedService(
             LoggerMock.Object,
             ProcessRunnerMock.Object,
             StateManager,
-            Config,
+            Config.ToIOptions(),
             timeProvider
         );
     }

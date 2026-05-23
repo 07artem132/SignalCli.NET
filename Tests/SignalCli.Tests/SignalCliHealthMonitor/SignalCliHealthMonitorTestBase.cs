@@ -107,7 +107,7 @@ public abstract class SignalCliHealthMonitorTestBase : IDisposable
             _loggerServiceMock.Object,
             ProcessRunnerMock.Object,
             StateManager,
-            ServiceConfig
+            ServiceConfig.ToIOptions()
         );
     }
 
@@ -121,7 +121,7 @@ public abstract class SignalCliHealthMonitorTestBase : IDisposable
             LoggerMonitorMock.Object,
             _clientProviderMock.Object,
             hostedService,
-            ServiceConfig,
+            ServiceConfig.ToIOptions(),
             timeProvider
         );
     }

@@ -3,6 +3,87 @@
 Формат заснований на [Keep a Changelog](https://keepachangelog.com/),
 проєкт дотримується [семантичного версіонування](https://semver.org/lang/uk/).
 
+## [2.1.0] — неопубліковано
+
+**Agent-friendly modernization** — п'ять незалежно вмикаємих кластерів, що приводять
+бібліотеку у відповідність до сучасних патернів .NET 10 / C# 14 і підвищують
+discoverability для AI-агентів і людей. Усі зміни (окрім трьох дрібних, явно
+позначених нижче) — additive: старий код продовжує працювати з `[Obsolete]`-warning-ами.
+
+### ✨ Додано
+
+#### Agent-friendly API (cluster A)
+- `ISignalCliClient.VersionAsync(CancellationToken)` — новий метод; старий `Version()`
+  лишається як `[Obsolete]`-shim до 3.0.
+- `ISignalMessage.Send{Text,Attachment,Sticker}MessageAsync` отримали явний параметр
+  `CancellationToken cancellationToken = default` (лінкується з deprecated
+  `options.CancellationToken` через `CreateLinkedTokenSource`).
+- `TextStyleMode` enum замість stringly-typed `string? textMode = "styled"` (internal).
+- `[CallerArgumentExpression]` у валідаторах — `ArgumentException.ParamName` тепер
+  автоматично береться з виразу-аргументу.
+- Усі `TaskCompletionSource<T>.TrySetCanceled` у `JsonRpcClient` тепер передають
+  токен — викликач бачить причину скасування через `OperationCanceledException.CancellationToken`.
+- `AtomicCounter` спрощено: `unchecked Interlocked.Increment` без CAS-reset гілки.
+
+#### Background monitor (cluster B)
+- `SignalCliHealthMonitor` тепер `BackgroundService` із `PeriodicTimer(interval, TimeProvider)`
+  замість ручного `Task.Run` + `while (!ct.IsCancellationRequested) await Task.Delay(...)`.
+- `SignalCliHostedService` приймає опціональний `TimeProvider`; усі `Task.Delay`/таймери
+  всередині пропущені через нього (включно з вікном стабільності рестартів — раніше
+  було сирий `Task.Run` + `Task.Delay`). Тестам можна підкласти `FakeTimeProvider`.
+
+#### Async-stream events (cluster E)
+- `ISignalEventService` розширено десятьма `*Async`-методами
+  (`TextMessagesAsync`, `ReactionAsync`, `AttachmentsAsync`, …), які повертають
+  `IAsyncEnumerable<TEventArgs>` поверх `Channel.CreateBounded<T>(1024, DropOldest)`.
+  Стандартний C# `await foreach`, back-pressure (чого `Subject<T>` не має), drop-oldest
+  при переповненні з лічильником у Debug-логах. Існуючі `IObservable<T>`-API залишаються
+  для fan-out-сценаріїв.
+
+#### Options pattern (cluster D)
+- Новий `SignalCliOptions` (звичайні setter-и + `[Required]`/`[Range]`
+  DataAnnotations) + `AddSignalCli(Action<SignalCliOptions>?)`-overload з
+  `ValidateDataAnnotations() + Validate(...) + ValidateOnStart()`. Помилки конфігу
+  фейляться на старті хоста з `OptionsValidationException` (не на `ToProcessConfig()`).
+- `[OptionsValidator]` source-gen-валідатор: DataAnnotations перевіряються без
+  reflection (AOT-safe).
+- **D.4 повна міграція:** усі внутрішні сервіси
+  (`SignalCliHostedService`, `SignalCliHealthMonitor`, `JsonRpcClientFactory`, `JsonRpcClient`)
+  тепер приймають `IOptions<SignalCliOptions>` замість `Config`.
+- Внутрішні сервіси читають `_options.Value` один раз у конструкторі (immutable).
+
+#### Source-generated logging (cluster C)
+- Усі 109 `ILogger` callsites переведено на `[LoggerMessage]`-`partial`-методи в
+  `src/SignalCli/Logging/*Log.cs` (11 файлів, по одному на сервіс). Фіксовані
+  EventId-блоки за сервісами: 100s — HostedService, 200s — HealthMonitor,
+  300s — JsonRpcClient, 400s — JsonRpcClientHostedService, 500s — SignalEventService,
+  600s — SignalService, 700s — SignalMessage, 800s — Accounts/Devices/Groups,
+  900s — ProcessRunner/ProcessStateManager.
+- Закриває CA1848 (`LoggerMessage`) і CA1873 (`AvoidExpensiveLogging`).
+- `SignalEventService.OnNotificationReceived` тепер обгортає обробку нотифікації
+  в `ILogger.BeginScope` зі структурованими `SubscriptionId`/`Account` —
+  усі downstream-логи успадковують контекст.
+
+### ⚠️ Несумісні зміни (BREAKING)
+- **`IJsonRpcClient` більше не успадковує `IDisposable`** — лише `IAsyncDisposable`.
+  Сторонні споживачі мають використовувати `await using` замість `using`. Прибрано
+  внутрішній sync-over-async `Dispose()` (`DisposeAsync().GetAwaiter().GetResult()`).
+- **Фасади `SignalAccounts`/`SignalDevices`/`SignalGroups`/`SignalService`/`SignalMessage`
+  більше не імплементують `IDisposable`** (вони не тримали ресурсів; порожні `Dispose()`
+  лише плутали). Зовнішні `using (signalAccounts)` тепер не компілюються — приберіть.
+- **`IJsonRpcClientFactory.CreateAsync` → `Create()`** (синхронний). Фабрика не робила
+  async-роботи; фейк-Async-суфікс прибрано.
+- `Microsoft.Extensions.Options.DataAnnotations` 10.0.0 — нова залежність бібліотеки.
+
+### 🛠 Інше
+- `Config` лишається як `[Obsolete]`-shim, що мапиться у `SignalCliOptions` через
+  адаптер. Буде видалений у 3.0.
+- `*Options.CancellationToken` (`TextMessageOptions`, `AttachmentMessageOptions`,
+  `StickerMessageOptions`) та `WithCancellationToken`-білдери позначено `[Obsolete]` —
+  передавайте токен прямо в `Send*Async(options, ct)`. Буде видалено в 3.0.
+- Тести: 173 → 180 (нові `OptionsValidationTests` × 4, `AsyncEnumerableEventDispatchTests` × 3).
+  Усі стабільні; раніше flaky `ForceRestart*Delay*` тести переведено на `FakeTimeProvider`.
+
 ## [2.0.0] — неопубліковано
 
 ### ⚠️ Несумісні зміни (BREAKING)
