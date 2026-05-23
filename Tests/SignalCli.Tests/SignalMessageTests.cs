@@ -42,4 +42,47 @@ public class SignalMessageTests
         Assert.False(File.Exists(passedAttachmentPath));
         Assert.True(string.IsNullOrEmpty(entry.FilePath));
     }
+
+    /// <summary>
+    /// post-modernize-tuning §8c.9 (audit C9): stateful <see cref="IEnumerable{T}"/>-recipient'и
+    /// (зчитують файл, ітерують DB) мають бути enumerated РІВНО ОДИН раз. Регресія до
+    /// "validate + 2× Where" дала б 3 ітерації — для side-effect'ивних джерел це баг.
+    /// </summary>
+    [Fact]
+    public async Task SendTextMessageAsync_StatefulEnumerableRecipients_AreEnumeratedExactlyOnce()
+    {
+        // Підрахунковий лічильник: кожен виклик GetEnumerator() => +1.
+        var enumerationCount = 0;
+        IEnumerable<IRecipient> CountingRecipients()
+        {
+            enumerationCount++;
+            yield return new UserRecipient("+380501234568");
+            yield return new UserRecipient("+380501234569");
+        }
+
+        var signalCli = new Mock<ISignalCliClient>();
+        signalCli
+            .Setup(c => c.InvokeMethodAsync<SendMessageFullParameters, SendMessageResponse>(
+                It.IsAny<string>(), It.IsAny<SendMessageFullParameters>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SendMessageResponse(Results: [], TimeStamp: 1));
+
+        var sut = new SignalMessage(signalCli.Object, Mock.Of<ILogger<SignalMessage>>());
+
+        // Builder приймає List<IRecipient> (eagerly materialized). Щоб протестувати
+        // single-pass-контракт на самому SendUnifiedMessageAsync — підмінюємо приватне
+        // Recipients-property через reflection. Це інтенаціональний test-only shortcut:
+        // production-shлях через Builder завжди приходить вже з матеріалізованим списком.
+        var options = new TextMessageOptions.Builder(
+            account: "+380501234567",
+            recipients: [new UserRecipient("+380501234568")],
+            message: "test").Build();
+        var recipientsProp = typeof(TextMessageOptions).GetProperty("Recipients")!;
+        recipientsProp.SetValue(options, CountingRecipients());
+
+        // Act
+        await sut.SendTextMessageAsync(options);
+
+        // Assert: GetEnumerator виклик ОДИН раз (single-pass materialization).
+        Assert.Equal(1, enumerationCount);
+    }
 }

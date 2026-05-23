@@ -216,4 +216,57 @@ public class ConfigTests
             Directory.Delete(tempDir, recursive: true);
         }
     }
+
+    /// <summary>
+    /// post-modernize-tuning §8c.10 (audit C10): <see cref="Config.BuildClasspath"/> кешує
+    /// результат після першого виклику; повторні <see cref="Config.ToProcessConfig"/>
+    /// не повинні enumerated <see cref="Directory.GetFiles"/> заново.
+    /// Спостережувана поведінка: якщо видалити jar між двома викликами, другий виклик
+    /// все одно поверне той самий classpath (бо взяв його з кеша).
+    /// </summary>
+    [Fact]
+    public void ToProcessConfig_CachesClasspath_SecondCall_DoesNotEnumerateFiles()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+        var libDir = Path.Combine(tempDir, "lib");
+        Directory.CreateDirectory(libDir);
+
+        var jarPath = Path.Combine(libDir, "cached-test.jar");
+        File.WriteAllText(jarPath, "fake jar content");
+
+        try
+        {
+            var config = new Config
+            {
+                AppHome = tempDir,
+                LibDirectory = "lib",
+                JavaExecutable = "java"
+            };
+
+            // 1) перший виклик — кеш заповнюється.
+            var firstPc = config.ToProcessConfig();
+            var firstClasspathArg = firstPc.ArgumentList!
+                .SkipWhile(a => a != "-classpath").Skip(1).First();
+            Assert.Contains("cached-test.jar", firstClasspathArg);
+
+            // 2) ВИДАЛЯЄМО jar — Directory.GetFiles на цій папці тепер поверне 0 файлів.
+            File.Delete(jarPath);
+
+            // 3) другий виклик — якщо кеш працює, отримуємо ТОЙ САМИЙ classpath.
+            //    Якщо кеша нема — поточна імплементація кидає FileNotFoundException
+            //    (бо BuildClasspath перевіряє jarFiles.Length == 0).
+            var secondPc = config.ToProcessConfig();
+            var secondClasspathArg = secondPc.ArgumentList!
+                .SkipWhile(a => a != "-classpath").Skip(1).First();
+
+            Assert.Equal(firstClasspathArg, secondClasspathArg);
+            Assert.Contains("cached-test.jar", secondClasspathArg);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); }
+            catch { /* ok */ }
+        }
+    }
 }
