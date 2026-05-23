@@ -40,6 +40,10 @@ namespace SignalCli.Serialization;
 // Accounts
 [JsonSerializable(typeof(ListAccountsParameters))]
 [JsonSerializable(typeof(ListAccountsResponse))]
+// §4.20 (N10): wrapper-record's converter delegates to List<Account>. Source-gen
+// (як of .NET 7+) не має reflection-fallback, тож inner-collection треба реєструвати окремо.
+[JsonSerializable(typeof(List<Account>))]
+[JsonSerializable(typeof(Account))]
 [JsonSerializable(typeof(SyncAccountsParameters))]
 [JsonSerializable(typeof(SyncAccountsResponse))]
 // Devices
@@ -50,6 +54,9 @@ namespace SignalCli.Serialization;
 // Groups
 [JsonSerializable(typeof(ListGroupsParameters))]
 [JsonSerializable(typeof(ListGroupsResponse))]
+// §4.20 (N10): inner-collection для wrapper-converter'а.
+[JsonSerializable(typeof(List<Group>))]
+[JsonSerializable(typeof(Group))]
 // Message
 [JsonSerializable(typeof(SendMessageFullParameters))]
 [JsonSerializable(typeof(SendMessageResponse))]

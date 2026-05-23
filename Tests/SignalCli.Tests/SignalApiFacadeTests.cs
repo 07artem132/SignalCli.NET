@@ -19,7 +19,8 @@ public class SignalApiFacadeTests
     public async Task ListAccounts_ReturnsResponse()
     {
         var client = Client();
-        var expected = new ListAccountsResponse { new Account("+1") };
+        // post-modernize-tuning §4.20 (audit N10): wrapper-record (Items: IReadOnlyList<Account>).
+        var expected = new ListAccountsResponse([new Account("+1")]);
         client.Setup(c => c.InvokeMethodAsync<ListAccountsParameters, ListAccountsResponse>(
             "listAccounts", It.IsAny<ListAccountsParameters>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expected);
@@ -92,7 +93,8 @@ public class SignalApiFacadeTests
     {
         var client = Client();
         ListGroupsParameters? captured = null;
-        var expected = new ListGroupsResponse();
+        // post-modernize-tuning §4.20 (audit N10): wrapper-record (Items: IReadOnlyList<Group>).
+        var expected = new ListGroupsResponse([]);
         client.Setup(c => c.InvokeMethodAsync<ListGroupsParameters, ListGroupsResponse>(
             "listGroups", It.IsAny<ListGroupsParameters>(), It.IsAny<CancellationToken>()))
             .Callback<string, ListGroupsParameters, CancellationToken>((_, p, _) => captured = p)

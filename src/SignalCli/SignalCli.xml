@@ -155,6 +155,9 @@
         <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.AddSignalCli(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{SignalCli.Models.SignalCliOptions})">
             <inheritdoc cref="M:SignalCli.Extensions.ServiceCollectionExtensions.&lt;G&gt;$7B30185E57B8298C6754F16C0BCF4773.AddSignalCli(System.Action{SignalCli.Models.SignalCliOptions})"/>
         </member>
+        <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.AddSignalCli(Microsoft.Extensions.DependencyInjection.IServiceCollection,Microsoft.Extensions.Configuration.IConfiguration)">
+            <inheritdoc cref="M:SignalCli.Extensions.ServiceCollectionExtensions.&lt;G&gt;$7B30185E57B8298C6754F16C0BCF4773.AddSignalCli(Microsoft.Extensions.Configuration.IConfiguration)"/>
+        </member>
         <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.AddSignalCli(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{SignalCli.Models.Config})">
             <inheritdoc cref="M:SignalCli.Extensions.ServiceCollectionExtensions.&lt;G&gt;$7B30185E57B8298C6754F16C0BCF4773.AddSignalCli(System.Action{SignalCli.Models.Config})"/>
         </member>
@@ -174,6 +177,23 @@
             Cross-field правила (Java XOR Native) лишаються в <c>.Validate(...)</c> — source-gen
             валідатор без проблем виконує custom-lambda поряд із згенерованими перевірками.
             </remarks>
+        </member>
+        <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.ConfigureOptionsFromConfiguration(Microsoft.Extensions.DependencyInjection.IServiceCollection,Microsoft.Extensions.Configuration.IConfiguration)">
+            <summary>
+            post-modernize-tuning §8b.3: інший шлях конфігурації — Bind із <see cref="T:Microsoft.Extensions.Configuration.IConfiguration"/>-секції.
+            Усі решта валідаційних правил такі самі (cross-field + source-gen).
+            </summary>
+        </member>
+        <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.ApplyCommonValidation(Microsoft.Extensions.Options.OptionsBuilder{SignalCli.Models.SignalCliOptions})">
+            <summary>
+            Спільне валідаційне правило для обох overload-ів — Java XOR Native + <c>ValidateOnStart</c>.
+            </summary>
+        </member>
+        <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.RegisterCompiledValidator(Microsoft.Extensions.DependencyInjection.IServiceCollection)">
+            <summary>
+            D.9: компайл-тайм-валідатор (без reflection, AOT-safe) — джерело істини для
+            <c>[Required]</c>/<c>[Range]</c>-перевірок після видалення <c>.ValidateDataAnnotations()</c> (E1).
+            </summary>
         </member>
         <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.CopyFrom(SignalCli.Models.SignalCliOptions,SignalCli.Models.SignalCliOptions)">
             <summary>Поле-в-поле копіювання SignalCliOptions snapshot → інстанс із Options-фреймворку.</summary>
@@ -204,6 +224,32 @@
             некоректні, <c>StartAsync</c> хоста кидає <see cref="T:Microsoft.Extensions.Options.OptionsValidationException"/>.
             </para>
             <para>Реєстрація ідемпотентна.</para>
+            </remarks>
+        </member>
+        <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.&lt;G&gt;$7B30185E57B8298C6754F16C0BCF4773.AddSignalCli(Microsoft.Extensions.Configuration.IConfiguration)">
+            <summary>
+            Додає всі необхідні сервіси для роботи з Signal CLI до контейнера DI
+            з прив'язкою <see cref="T:SignalCli.Models.SignalCliOptions"/> до секції <see cref="T:Microsoft.Extensions.Configuration.IConfiguration"/>.
+            </summary>
+            <param name="configurationSection">
+            Секція конфігурації для прив'язки (наприклад, <c>builder.Configuration.GetSection("SignalCli")</c>).
+            </param>
+            <returns>Колекція сервісів з доданими сервісами Signal CLI.</returns>
+            <remarks>
+            <para>
+            post-modernize-tuning §8b.3: канонічний шлях для <c>appsettings.json</c>-конфігурації.
+            Прив'язує <see cref="T:SignalCli.Models.SignalCliOptions"/> через <c>OptionsBuilder.Bind(section)</c>,
+            потім застосовує ті ж валідаційні правила, що й overload з <see cref="T:System.Action`1"/>
+            (cross-field XOR Java/Native + source-gen <c>SignalCliOptionsValidator</c> + <c>ValidateOnStart</c>).
+            </para>
+            <example>
+            <code>
+            // appsettings.json:
+            // { "SignalCli": { "AppHome": "/var/lib/signal", "JavaExecutable": "/usr/bin/java", ... } }
+            builder.Services.AddSignalCli(builder.Configuration.GetSection("SignalCli"));
+            </code>
+            </example>
+            <para>Реєстрація ідемпотентна — повторні виклики не дублюють хост-сервіси.</para>
             </remarks>
         </member>
         <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.&lt;G&gt;$7B30185E57B8298C6754F16C0BCF4773.AddSignalCli(System.Action{SignalCli.Models.Config})">
@@ -1873,9 +1919,42 @@
             Відповідь на запит списку облікових записів Signal.
             </summary>
             <remarks>
-            Наслідує List&lt;Account&gt; і містить колекцію зареєстрованих облікових
-            записів у локальному сховищі Signal CLI.
+            post-modernize-tuning §4.20 (audit N10): wrapper-record над <see cref="T:System.Collections.Generic.IReadOnlyList`1"/>.
+            Раніше тип успадковував <c>List&lt;Account&gt;</c>, що давало консумеру доступ до
+            деструктивних мутаторів (<c>.Add</c>, <c>.Clear</c>, <c>.Sort</c>) на даних, які
+            прийшли від сервера. Тепер це immutable-projection — мутувати можна тільки через
+            явну побудову нового <see cref="T:SignalCli.Models.Signal.Accounts.ListAccountsResponse"/>. Wire-shape JSON-масиву
+            зберігається через <see cref="T:SignalCli.Models.Signal.Accounts.ListAccountsResponseConverter"/>.
             </remarks>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.ListAccountsResponse.#ctor(System.Collections.Generic.IReadOnlyList{SignalCli.Models.Signal.Accounts.Account})">
+            <summary>
+            Відповідь на запит списку облікових записів Signal.
+            </summary>
+            <remarks>
+            post-modernize-tuning §4.20 (audit N10): wrapper-record над <see cref="T:System.Collections.Generic.IReadOnlyList`1"/>.
+            Раніше тип успадковував <c>List&lt;Account&gt;</c>, що давало консумеру доступ до
+            деструктивних мутаторів (<c>.Add</c>, <c>.Clear</c>, <c>.Sort</c>) на даних, які
+            прийшли від сервера. Тепер це immutable-projection — мутувати можна тільки через
+            явну побудову нового <see cref="T:SignalCli.Models.Signal.Accounts.ListAccountsResponse"/>. Wire-shape JSON-масиву
+            зберігається через <see cref="T:SignalCli.Models.Signal.Accounts.ListAccountsResponseConverter"/>.
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.ListAccountsResponse.Count">
+            <summary>Кількість облікових записів у відповіді.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.ListAccountsResponse.Item(System.Int32)">
+            <summary>Доступ до облікового запису за індексом.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.ListAccountsResponse.GetEnumerator">
+            <inheritdoc/>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Accounts.ListAccountsResponseConverter">
+            <summary>
+            Конвертер, що читає/пише <see cref="T:SignalCli.Models.Signal.Accounts.ListAccountsResponse"/> як плоский JSON-масив
+            (а не як об'єкт із полем <c>Items</c>). Делегує до built-in <c>List&lt;Account&gt;</c>
+            converter'а — джерело істини для source-gen контексту лишається спільним.
+            </summary>
         </member>
         <member name="T:SignalCli.Models.Signal.Accounts.Account">
             <summary>
@@ -3670,19 +3749,39 @@
         </member>
         <member name="T:SignalCli.Models.Signal.Groups.ListGroupsResponse">
             <summary>
-            Відповідь на запит списку груп.
+            Відповідь на запит списку груп Signal.
             </summary>
             <remarks>
-            Наслідує List&lt;Group&gt; і містить колекцію груп з детальною інформацією.
+            post-modernize-tuning §4.20 (audit N10): wrapper-record над <see cref="T:System.Collections.Generic.IReadOnlyList`1"/>.
+            Раніше тип успадковував <c>List&lt;Group&gt;</c>, що давало консумеру деструктивні
+            мутатори на даних, що прийшли від сервера. Wire-shape JSON-масиву зберігається
+            через <see cref="T:SignalCli.Models.Signal.Groups.ListGroupsResponseConverter"/>.
             </remarks>
         </member>
-        <member name="M:SignalCli.Models.Signal.Groups.ListGroupsResponse.#ctor">
+        <member name="M:SignalCli.Models.Signal.Groups.ListGroupsResponse.#ctor(System.Collections.Generic.IReadOnlyList{SignalCli.Models.Signal.Groups.Group})">
             <summary>
-            Відповідь на запит списку груп.
+            Відповідь на запит списку груп Signal.
             </summary>
             <remarks>
-            Наслідує List&lt;Group&gt; і містить колекцію груп з детальною інформацією.
+            post-modernize-tuning §4.20 (audit N10): wrapper-record над <see cref="T:System.Collections.Generic.IReadOnlyList`1"/>.
+            Раніше тип успадковував <c>List&lt;Group&gt;</c>, що давало консумеру деструктивні
+            мутатори на даних, що прийшли від сервера. Wire-shape JSON-масиву зберігається
+            через <see cref="T:SignalCli.Models.Signal.Groups.ListGroupsResponseConverter"/>.
             </remarks>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.ListGroupsResponse.Count">
+            <summary>Кількість груп у відповіді.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.ListGroupsResponse.Item(System.Int32)">
+            <summary>Доступ до групи за індексом.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.ListGroupsResponse.GetEnumerator">
+            <inheritdoc/>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Groups.ListGroupsResponseConverter">
+            <summary>
+            Конвертер, що читає/пише <see cref="T:SignalCli.Models.Signal.Groups.ListGroupsResponse"/> як плоский JSON-масив.
+            </summary>
         </member>
         <member name="T:SignalCli.Models.Signal.Groups.Group">
             <summary>
@@ -4594,6 +4693,16 @@
             </summary>
         </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.ListSingle">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListAccount">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListGroup">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>

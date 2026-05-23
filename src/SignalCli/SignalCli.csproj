@@ -72,6 +72,9 @@
              бо source-gen [OptionsValidator] читає [Required]/[Range] атрибути з нього.
              Але .ValidateDataAnnotations() (reflection) видалено з ServiceCollectionExtensions. -->
         <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.0"/>
+        <!-- post-modernize-tuning §8b.3 (audit B5): IConfiguration overload для AddSignalCli —
+             тягне OptionsBuilder<T>.Bind(IConfigurationSection) extension. -->
+        <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0"/>
         <!-- post-modernize-tuning §6.3 (audit B2): Nito.AsyncEx removed — SemaphoreSlim replaces AsyncLock. -->
         <PackageReference Include="System.Reactive" Version="6.0.1"/>
     </ItemGroup>

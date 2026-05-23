@@ -1,4 +1,5 @@
 using JetBrains.Annotations;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -49,6 +50,43 @@ public static class ServiceCollectionExtensions
                 return services;
 
             ConfigureOptions(services, configureOptions);
+            RegisterCoreServices(services);
+            return services;
+        }
+
+        /// <summary>
+        /// Додає всі необхідні сервіси для роботи з Signal CLI до контейнера DI
+        /// з прив'язкою <see cref="SignalCliOptions"/> до секції <see cref="IConfiguration"/>.
+        /// </summary>
+        /// <param name="configurationSection">
+        /// Секція конфігурації для прив'язки (наприклад, <c>builder.Configuration.GetSection("SignalCli")</c>).
+        /// </param>
+        /// <returns>Колекція сервісів з доданими сервісами Signal CLI.</returns>
+        /// <remarks>
+        /// <para>
+        /// post-modernize-tuning §8b.3: канонічний шлях для <c>appsettings.json</c>-конфігурації.
+        /// Прив'язує <see cref="SignalCliOptions"/> через <c>OptionsBuilder.Bind(section)</c>,
+        /// потім застосовує ті ж валідаційні правила, що й overload з <see cref="Action{SignalCliOptions}"/>
+        /// (cross-field XOR Java/Native + source-gen <c>SignalCliOptionsValidator</c> + <c>ValidateOnStart</c>).
+        /// </para>
+        /// <example>
+        /// <code>
+        /// // appsettings.json:
+        /// // { "SignalCli": { "AppHome": "/var/lib/signal", "JavaExecutable": "/usr/bin/java", ... } }
+        /// builder.Services.AddSignalCli(builder.Configuration.GetSection("SignalCli"));
+        /// </code>
+        /// </example>
+        /// <para>Реєстрація ідемпотентна — повторні виклики не дублюють хост-сервіси.</para>
+        /// </remarks>
+        public IServiceCollection AddSignalCli(IConfiguration configurationSection)
+        {
+            ArgumentNullException.ThrowIfNull(configurationSection);
+
+            if (services.Any(d => d.ServiceType == typeof(IOptions<SignalCliOptions>)
+                                  || d.ServiceType == typeof(SignalCliOptions)))
+                return services;
+
+            ConfigureOptionsFromConfiguration(services, configurationSection);
             RegisterCoreServices(services);
             return services;
         }
@@ -127,14 +165,39 @@ public static class ServiceCollectionExtensions
         var builder = services.AddOptions<SignalCliOptions>();
         if (configureOptions != null)
             builder.Configure(configureOptions);
+        ApplyCommonValidation(builder);
+        RegisterCompiledValidator(services);
+    }
+
+    /// <summary>
+    /// post-modernize-tuning §8b.3: інший шлях конфігурації — Bind із <see cref="IConfiguration"/>-секції.
+    /// Усі решта валідаційних правил такі самі (cross-field + source-gen).
+    /// </summary>
+    private static void ConfigureOptionsFromConfiguration(IServiceCollection services, IConfiguration section)
+    {
+        var builder = services.AddOptions<SignalCliOptions>().Bind(section);
+        ApplyCommonValidation(builder);
+        RegisterCompiledValidator(services);
+    }
+
+    /// <summary>
+    /// Спільне валідаційне правило для обох overload-ів — Java XOR Native + <c>ValidateOnStart</c>.
+    /// </summary>
+    private static void ApplyCommonValidation(OptionsBuilder<SignalCliOptions> builder)
+    {
         builder
             .Validate(
                 o => !string.IsNullOrEmpty(o.JavaExecutable) || !string.IsNullOrEmpty(o.SignalCliExecutable),
                 "Потрібно задати JavaExecutable (для JVM-режиму) АБО SignalCliExecutable (для native-режиму).")
             .ValidateOnStart();
+    }
 
-        // D.9: компайл-тайм-валідатор (без reflection, AOT-safe) — джерело істини для
-        // [Required]/[Range]-перевірок після видалення .ValidateDataAnnotations() (E1).
+    /// <summary>
+    /// D.9: компайл-тайм-валідатор (без reflection, AOT-safe) — джерело істини для
+    /// <c>[Required]</c>/<c>[Range]</c>-перевірок після видалення <c>.ValidateDataAnnotations()</c> (E1).
+    /// </summary>
+    private static void RegisterCompiledValidator(IServiceCollection services)
+    {
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<IValidateOptions<SignalCliOptions>, SignalCliOptionsValidator>());
     }

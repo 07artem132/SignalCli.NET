@@ -19,7 +19,8 @@ public class PrivacyLoggingTests
         // Підставляємо акаунт із номером телефону — він НЕ повинен з'являтися
         // в жодному Information/Warning/Error/Debug записі.
         var phoneNumber = "+380501234567";
-        var response = new ListAccountsResponse { new Account(phoneNumber) };
+        // post-modernize-tuning §4.20 (audit N10): wrapper-record замість List<T>-успадкування.
+        var response = new ListAccountsResponse([new Account(phoneNumber)]);
 
         var client = new Mock<ISignalCliClient>();
         client.Setup(c => c.InvokeMethodAsync<ListAccountsParameters, ListAccountsResponse>(
@@ -52,24 +53,25 @@ public class PrivacyLoggingTests
     {
         // Готуємо «групу» з впізнаваним id; він не має з'являтися в Information.
         var groupId = "groupId-XYZ-abc";
-        var response = new ListGroupsResponse();
-        // Передаємо мінімум обов'язкових позиційних параметрів record-у Group.
-        response.Add(new Group(
-            Id: groupId,
-            Name: "GroupName",
-            Description: null,
-            IsMember: true,
-            IsBlocked: false,
-            MessageExpirationTime: 0,
-            Members: [],
-            PendingMembers: [],
-            RequestingMembers: [],
-            Admins: [],
-            Banned: [],
-            PermissionAddMember: "EVERY_MEMBER",
-            PermissionEditDetails: "EVERY_MEMBER",
-            PermissionSendMessage: "EVERY_MEMBER",
-            GroupInviteLink: null));
+        // post-modernize-tuning §4.20 (audit N10): wrapper-record (Items: IReadOnlyList<Group>).
+        var response = new ListGroupsResponse([
+            new Group(
+                Id: groupId,
+                Name: "GroupName",
+                Description: null,
+                IsMember: true,
+                IsBlocked: false,
+                MessageExpirationTime: 0,
+                Members: [],
+                PendingMembers: [],
+                RequestingMembers: [],
+                Admins: [],
+                Banned: [],
+                PermissionAddMember: "EVERY_MEMBER",
+                PermissionEditDetails: "EVERY_MEMBER",
+                PermissionSendMessage: "EVERY_MEMBER",
+                GroupInviteLink: null),
+        ]);
 
         var client = new Mock<ISignalCliClient>();
         client.Setup(c => c.InvokeMethodAsync<ListGroupsParameters, ListGroupsResponse>(

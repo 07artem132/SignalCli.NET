@@ -95,4 +95,51 @@ public class JsonSerializationTests
         Assert.Equal("2.0", resp.JsonRpc);
         Assert.Equal("7", resp.Id);
     }
+
+    /// <summary>
+    /// post-modernize-tuning §4.20 (audit N10): після конвертації <see cref="Models.Signal.Accounts.ListAccountsResponse"/>
+    /// у wrapper-record над <c>IReadOnlyList&lt;Account&gt;</c> wire-формат МАЄ лишитися плоским JSON-масивом.
+    /// Без custom-конвертера буде <c>{"Items":[...]}</c> — це зламає wire-compatibility з signal-cli.
+    /// </summary>
+    [Fact]
+    public void ListAccountsResponse_RoundTrip_PreservesFlatJsonArrayShape()
+    {
+        const string wireJson = """[{"number":"+380501234567"},{"number":"+380509999999"}]""";
+
+        var response = JsonSerializer.Deserialize<Models.Signal.Accounts.ListAccountsResponse>(wireJson, Opt)!;
+
+        Assert.Equal(2, response.Count);
+        Assert.Equal("+380501234567", response[0].Number);
+        Assert.Equal("+380509999999", response[1].Number);
+
+        var roundtripped = JsonSerializer.Serialize(response, Opt);
+        // Плоский масив, а не {"Items":[...]} — критичне для wire-compat.
+        Assert.StartsWith("[", roundtripped);
+        Assert.EndsWith("]", roundtripped);
+        Assert.DoesNotContain("Items", roundtripped);
+        Assert.Contains("\"number\":\"+380501234567\"", roundtripped);
+    }
+
+    /// <summary>§4.20: те саме для <see cref="Models.Signal.Groups.ListGroupsResponse"/>.</summary>
+    [Fact]
+    public void ListGroupsResponse_RoundTrip_PreservesFlatJsonArrayShape()
+    {
+        const string wireJson =
+            """
+            [{"id":"GROUP-1","name":"Test","description":null,"isMember":true,"isBlocked":false,
+              "messageExpirationTime":0,"members":[],"pendingMembers":[],"requestingMembers":[],
+              "admins":[],"banned":[],"permissionAddMember":"EVERY_MEMBER",
+              "permissionEditDetails":"EVERY_MEMBER","permissionSendMessage":"EVERY_MEMBER",
+              "groupInviteLink":null}]
+            """;
+
+        var response = JsonSerializer.Deserialize<Models.Signal.Groups.ListGroupsResponse>(wireJson, Opt)!;
+
+        Assert.Single(response);
+        Assert.Equal("GROUP-1", response[0].Id);
+
+        var roundtripped = JsonSerializer.Serialize(response, Opt);
+        Assert.StartsWith("[", roundtripped);
+        Assert.DoesNotContain("Items", roundtripped);
+    }
 }

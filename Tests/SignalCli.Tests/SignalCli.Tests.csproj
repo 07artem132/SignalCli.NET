@@ -11,6 +11,11 @@
         <PackageReference Include="coverlet.collector" Version="6.0.2"/>
         <!-- D.6: для BuildServiceProvider() у OptionsValidationTests -->
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0"/>
+        <!-- post-modernize-tuning §8b.3 (audit B5): in-memory IConfiguration для тесту нового overload'а.
+             `AddInMemoryCollection` поставляється з основним Microsoft.Extensions.Configuration —
+             окремого Configuration.Memory пакету на nuget.org немає. -->
+        <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.0"/>
         <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="9.0.0"/>
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1"/>
         <PackageReference Include="Moq" Version="4.20.72" />

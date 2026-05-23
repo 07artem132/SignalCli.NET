@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using SignalCli.Extensions;
@@ -93,5 +94,78 @@ public class OptionsValidationTests
         Assert.Equal("/tmp/signalcli-test", options.AppHome);
         Assert.Equal("java", options.JavaExecutable);
         Assert.Equal(3, options.MaxRestartAttempts); // default із SignalCliOptions
+    }
+
+    /// <summary>
+    /// post-modernize-tuning §8b.3 (audit B5): новий overload <c>AddSignalCli(IConfiguration)</c>
+    /// має прив'язувати <see cref="SignalCliOptions"/> з in-memory-секції так само,
+    /// як <c>Action&lt;SignalCliOptions&gt;</c>-overload.
+    /// </summary>
+    [Fact]
+    public void AddSignalCli_FromConfiguration_BindsAppsettingsValues()
+    {
+        // Arrange: симулюємо `appsettings.json` через MemoryConfigurationProvider.
+        var inMemorySettings = new Dictionary<string, string?>
+        {
+            ["SignalCli:AppHome"] = "/tmp/signalcli-from-config",
+            ["SignalCli:LibDirectory"] = "libdir",
+            ["SignalCli:JavaExecutable"] = "/opt/java",
+            ["SignalCli:MaxRestartAttempts"] = "7",
+            ["SignalCli:RequestTimeoutSeconds"] = "42",
+        };
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(inMemorySettings)
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSignalCli(configuration.GetSection("SignalCli"));
+        var sp = services.BuildServiceProvider();
+
+        // Act
+        var options = sp.GetRequiredService<IOptions<SignalCliOptions>>().Value;
+
+        // Assert: значення зв'язалися; решта — default.
+        Assert.Equal("/tmp/signalcli-from-config", options.AppHome);
+        Assert.Equal("libdir", options.LibDirectory);
+        Assert.Equal("/opt/java", options.JavaExecutable);
+        Assert.Equal(7, options.MaxRestartAttempts);
+        Assert.Equal(42, options.RequestTimeoutSeconds);
+    }
+
+    /// <summary>
+    /// §8b.3: валідаційне правило «Java XOR Native» має спрацювати і для IConfiguration-шляху,
+    /// якщо обидва executable-поля порожні.
+    /// </summary>
+    [Fact]
+    public void AddSignalCli_FromConfiguration_NoExecutable_Throws_OptionsValidationException()
+    {
+        var inMemorySettings = new Dictionary<string, string?>
+        {
+            ["SignalCli:AppHome"] = "/tmp/x",
+            ["SignalCli:LibDirectory"] = "lib",
+            // JavaExecutable + SignalCliExecutable обидва пропущено
+        };
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(inMemorySettings)
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSignalCli(configuration.GetSection("SignalCli"));
+        var sp = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<OptionsValidationException>(
+            () => _ = sp.GetRequiredService<IOptions<SignalCliOptions>>().Value);
+        Assert.Contains("JavaExecutable", ex.Message);
+    }
+
+    /// <summary>
+    /// §8b.3: ArgumentNullException при null-section'і — sanity.
+    /// </summary>
+    [Fact]
+    public void AddSignalCli_NullConfiguration_Throws_ArgumentNullException()
+    {
+        var services = new ServiceCollection();
+        Assert.Throws<ArgumentNullException>(() =>
+            services.AddSignalCli((IConfiguration)null!));
     }
 }
