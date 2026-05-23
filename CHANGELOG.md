@@ -3,6 +3,64 @@
 Формат заснований на [Keep a Changelog](https://keepachangelog.com/),
 проєкт дотримується [семантичного версіонування](https://semver.org/lang/uk/).
 
+## [3.0.0] — неопубліковано (WIP, post-modernize-tuning)
+
+Друга велика хвиля модернізації — фокус на correctness/observability/agent-friendly-API. **Містить breaking changes**, перерахованих нижче.
+Реалізація триває; цей розділ оновлюється у міру викочування кластерів. Див. `openspec/changes/post-modernize-tuning/`.
+
+### ⚠️ Breaking
+
+- `FinishLinkResponse.number` → **`FinishLinkResponse.Number`** (PascalCase property; JSON wire-name збережено через `[JsonPropertyName("number")]`).
+- `SubscribeReceiveResponse.id` → **`SubscribeReceiveResponse.Id`** (так само PascalCase).
+- `BaseSignalEventArgs.Account` тепер `string` (non-nullable). Те ж саме поширено на всі 10 `*EventArgs`-records. Раніше було `string?`, що змушувало кожного підписника null-чекати гарантовано-присутнє значення.
+- `Config.EnvironmentVariables` і `SignalCliOptions.EnvironmentVariables` тепер `IReadOnlyDictionary<string,string>` на читання. Для мутації — `Config.WithEnvironment(IDictionary<string,string>)` (defensive copy + fluent return). Раніше можна було `.Add(key, value)` на shared посилання після DI-capture.
+- `JsonRpcException(string, Exception?)` ctor з нестандартним кодом **-32000** видалено. Замість нього — три CA1032-стандартні ctors: `()`, `(string)`, `(string, Exception)` — усі з канонічним JSON-RPC 2.0 кодом **-32603** ("Internal error"). Консумери, що каталі legacy-конструктор, мають мігрувати на CA1032-ctors або передавати власний `JsonRpcError`.
+- `SignalEventService.SubscribeAsync(account)` тепер **ідемпотентний** — повторні виклики для того самого облікового запису повертають той самий `subscriptionId` без RPC. Раніше другий виклик кидав `InvalidOperationException`. `catch (InvalidOperationException) when (msg.Contains("вже підписаний"))` більше не зловить — операція тепер успіх.
+- `JsonRequired` на always-present полях `Envelope.cs`: `JsonRemoteDelete.RemoteDeleteId`, `Offer.Type`/`Offer.Opaque`, `Answer.Opaque`, `IceUpdate.Opaque`, `Hangup.Type`. Якщо signal-cli колись поверне ці поля з `null` — десеріалізація фолтиться з `JsonException` замість тихо пропустити `null` у non-nullable property.
+- `UserRecipient`/`GroupRecipient` ctor: null → `ArgumentNullException`, empty → `ArgumentException`. Раніше empty теж кидав `ArgumentNullException` (порушення контракту обох типів).
+- `SignalCliHostedService` тепер `sealed` — інхеріт не підтримується.
+- Стандартний шлях `dotnet publish /p:PublishAot=true` ще не enable'нений (deferred — потребує redesign на `JsonTypeInfo<T>` overloads), але всі предумови (drop Nito.AsyncEx, drop `.ValidateDataAnnotations()`, source-gen JSON fast-path) на місці.
+
+### ✨ Додано
+
+#### Observability (capability `observability`)
+- Єдиний `internal static readonly ActivitySource SignalCliDiagnostics.ActivitySource = new("SignalCli.NET", AssemblyVersion)` — спани `rpc.<method>`, `signalcli.process.start`, `signalcli.healthcheck.ping`, `signalcli.subscribe`. Теги: method name, status enum, integer id, exception type name — без PII.
+- Єдиний `internal static readonly Meter SignalCliDiagnostics.Meter = new("SignalCli.NET", AssemblyVersion)`:
+  - `Counter<long> signalcli.rpc.requests` (теги `method`, `status` ∈ {`ok`,`timeout`,`error`})
+  - `Histogram<double> signalcli.rpc.duration` (мс, тег `method`)
+  - `Counter<long> signalcli.process.restarts` (тег `trigger` ∈ {`force`,`crash`,`health`})
+  - `Counter<long> signalcli.events.dropped` (тег `event_type` ∈ 10 значень) — замінює приватний `_droppedCount`.
+  - `ObservableGauge<int> signalcli.subscriptions.active`.
+- Документація: `docs/cloud-development.md` має нову секцію Observability з drop-in OTel-snippet.
+
+#### RPC robustness
+- `SignalCliOptions.NotificationChannelCapacity` (default 1024). Між stdout-парсером і fan-out-споживачем — bounded Channel; повільний підписник створює back-pressure аж до signal-cli.
+- `JsonRpcClient` приймає `TimeProvider` — `CancellationTokenSource(_requestTimeout, _timeProvider)` робить timeout-шлях віртуалізованим у тестах.
+- `SignalCliHostedService.StopProcessInternalAsyncNoLock` теж використовує `CancellationTokenSource(_, _timeProvider)`.
+- `BeginScope(RpcMethod, RpcRequestId)` у `JsonRpcClient.InvokeMethodAsync` — кожний нижчий `JsonRpcClientLog.*` несе structured-properties.
+
+#### Subscription race safety
+- Reservation placeholder pattern у `SignalEventService.SubscribeAsync` через `Dictionary<string, TaskCompletionSource<int>> _pendingSubscribes`. Конкурентні виклики для того самого облікового запису роблять РІВНО 1 RPC; усі N викликачів отримують той самий ID.
+- `ObjectDisposedException.ThrowIf(_disposed, this)` на `SubscribeAsync`/`UnsubscribeAsync` (audit C6).
+
+#### Async-suffix shims (one-major-grace)
+- `ISignalAccounts.ListAccountsAsync`/`SyncAccountAsync`, `ISignalDevices.StartLinkAsync`/`FinishLinkAsync`, `ISignalGroups.ListGroupsAsync` — нові методи + `[Obsolete]` DIM-shims на старі імена ("will be removed in 4.0").
+
+### 🛠 Внутрішнє
+
+- `ProcessStateManager`: snapshot-then-emit (OnNext поза локом — System.Threading.Lock не реентрантний). `_disposed` всюди → `int` з `Interlocked.Exchange` (lock-free disposal short-circuit). Catch `ObjectDisposedException` з OnNext (documented disposal race window).
+- `_disposed` стандартизовано як `int + Interlocked.Exchange` у `SignalCliHostedService`, `JsonRpcClient`, `JsonRpcClientHostedService`, `SignalEventService`.
+- `Nito.AsyncEx` видалено. `JsonRpcClient._sendLock` і `SignalCliHostedService._operationLock` → `SemaphoreSlim(1,1)` з `WaitAsync`/`Release`.
+- `.ValidateDataAnnotations()` видалено з options-pipeline — `[OptionsValidator]` source-gen самостійно перевіряє `[Required]`/`[Range]` без reflection. Знято останній AOT-blocker у options-шляху.
+- `SignalJsonContext.GenerationMode = Default` (fast-path emission + metadata) замість Metadata-only.
+- `SignalEventService`, `ProcessWrapper`, `ProcessFactory`, `JsonRpcClientFactory`, `SignalAccounts`, `SignalDevices`, `SignalGroups` — sealed (CA1052).
+- `Config.BuildClasspath` кешує classpath; `Directory.GetFiles` викликається рівно 1 раз на `Config`-інстанс.
+- `ValidateRecipients`: single-pass materialization + один `foreach` на user/group split (раніше — 3 пройдення).
+- `ArgumentException.ThrowIfNullOrEmpty` boundary checks у `SignalDevices.FinishLinkAsync`/`SignalGroups.ListGroupsAsync`.
+- `JetBrains.Annotations` PackageReference `PrivateAssets="all"` — більше не leak у consumer dependency graph.
+- `Example/Program.cs` повністю переписаний на `async Task Main`/`await host.StopAsync()`/awaited `SendTextMessageAsync` — LLM-агенти, що копіюють приклад, успадковують правильні async-патерни.
+- Forward-slash MSBuild paths у `SignalCli.runtime.csproj` і `SignalCli.Native.targets` — Linux-збірки runtime-пакетів більше не ламаються тихо.
+
 ## [2.1.0] — неопубліковано
 
 **Agent-friendly modernization** — п'ять незалежно вмикаємих кластерів, що приводять

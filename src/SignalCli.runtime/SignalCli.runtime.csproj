@@ -22,7 +22,7 @@
          Ціль пропускається, якщо runtime уже завантажено (щоб офлайн/повторні збірки
          не потребували мережі). Самі скрипти теж роблять ранній вихід. -->
     <Target Name="DownloadSignalCli" BeforeTargets="Build;Pack"
-            Condition="!Exists('$(BaseIntermediateOutputPath)signal-cli\bin')">
+            Condition="!Exists('$(BaseIntermediateOutputPath)signal-cli/bin')">
         <Message Text="🚀 Завантаження signal-cli..." Importance="High" />
         <Exec Condition="'$(OS)' == 'Windows_NT'"
               Command="powershell -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)download-signal-cli.ps1&quot; -OutDir &quot;$(BaseIntermediateOutputPath)signal-cli&quot;" />
@@ -32,10 +32,10 @@
 
     <Target Name="CopySignalCliToBin" AfterTargets="DownloadSignalCli">
         <ItemGroup>
-            <SignalCliBinFiles Include="$(BaseIntermediateOutputPath)signal-cli\**\*" />
+            <SignalCliBinFiles Include="$(BaseIntermediateOutputPath)signal-cli/**/*" />
         </ItemGroup>
         <Copy SourceFiles="@(SignalCliBinFiles)"
-              DestinationFiles="@(SignalCliBinFiles->'$(OutputPath)signal-cli\%(RecursiveDir)%(Filename)%(Extension)')"
+              DestinationFiles="@(SignalCliBinFiles->'$(OutputPath)signal-cli/%(RecursiveDir)%(Filename)%(Extension)')"
               SkipUnchangedFiles="true" />
     </Target>
 
@@ -43,9 +43,9 @@
         <!-- Копіюємо ВСІ файли з розпакованої директорії (BaseIntermediateOutputPath\signal-cli) до пакета -->
         <!-- buildTransitive\... означає, що ці файли будуть розташовані в папці buildTransitive усередині пакета -->
         <!-- Завдяки цьому вони не підключаються як контент напряму і не будуть "Linked" у споживачів -->
-        <None Include="$(BaseIntermediateOutputPath)signal-cli\**\*"
+        <None Include="$(BaseIntermediateOutputPath)signal-cli/**/*"
               Pack="true"
-              PackagePath="buildTransitive\signal-cli\%(RecursiveDir)%(Filename)%(Extension)" />
+              PackagePath="buildTransitive/signal-cli/%(RecursiveDir)%(Filename)%(Extension)" />
 
         <!-- Додаємо окремий .targets-файл, що займатиметься копіюванням у вихідну директорію на боці споживача -->
         <None Include="SignalCli.targets"

@@ -191,10 +191,15 @@ public record JsonSticker(
 /// <summary>
 /// Інформація про віддалене видалення повідомлення.
 /// </summary>
-/// <param name="RemoteDeleteId">Ідентифікатор повідомлення для видалення.</param>
+/// <param name="RemoteDeleteId">Ідентифікатор повідомлення для видалення. Завжди присутній — signal-cli не емітить RemoteDelete без targetSentTimestamp.</param>
+/// <remarks>
+/// post-modernize-tuning §4.17 (audit N3): <c>[JsonRequired]</c> — десеріалізатор кидає
+/// <see cref="System.Text.Json.JsonException"/>, якщо поле відсутнє у wire-JSON; раніше
+/// non-nullable string мовчки приймав null, що далі вибухало NRE у downstream.
+/// </remarks>
 [PublicAPI]
 public record JsonRemoteDelete(
-    [property: JsonPropertyName("remoteDeleteId")] string RemoteDeleteId
+    [property: JsonPropertyName("remoteDeleteId"), JsonRequired] string RemoteDeleteId
 );
 
 /// <summary>
@@ -444,8 +449,9 @@ public record JsonCallMessage(
 [PublicAPI]
 public record Offer(
     [property: JsonPropertyName("id")] long Id,
-    [property: JsonPropertyName("type")] string Type,
-    [property: JsonPropertyName("opaque")] string Opaque
+    // post-modernize-tuning §4.17 (audit N3): always-present у wire-контракті — [JsonRequired]
+    [property: JsonPropertyName("type"), JsonRequired] string Type,
+    [property: JsonPropertyName("opaque"), JsonRequired] string Opaque
 );
 
 /// <summary>
@@ -456,7 +462,8 @@ public record Offer(
 [PublicAPI]
 public record Answer(
     [property: JsonPropertyName("id")] long Id,
-    [property: JsonPropertyName("opaque")] string Opaque
+    // post-modernize-tuning §4.17: always-present у wire-контракті signal-cli.
+    [property: JsonPropertyName("opaque"), JsonRequired] string Opaque
 );
 
 /// <summary>
@@ -477,7 +484,8 @@ public record Busy(
 [PublicAPI]
 public record Hangup(
     [property: JsonPropertyName("id")] long Id,
-    [property: JsonPropertyName("type")] string Type,
+    // post-modernize-tuning §4.17: signal-cli не емітить Hangup без type.
+    [property: JsonPropertyName("type"), JsonRequired] string Type,
     [property: JsonPropertyName("deviceId")] int DeviceId
 );
 
@@ -489,7 +497,8 @@ public record Hangup(
 [PublicAPI]
 public record IceUpdate(
     [property: JsonPropertyName("id")] long Id,
-    [property: JsonPropertyName("opaque")] string Opaque
+    // post-modernize-tuning §4.17: signal-cli не емітить IceUpdate без opaque payload.
+    [property: JsonPropertyName("opaque"), JsonRequired] string Opaque
 );
 
 #endregion

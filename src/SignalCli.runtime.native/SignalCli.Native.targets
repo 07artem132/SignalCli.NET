@@ -1,12 +1,15 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <!-- Копіює нативний бінарник signal-cli у вихідну директорію споживача (лише Linux). -->
+    <!-- post-modernize-tuning §8d.1 (audit N1): forward-slashes у MSBuild-шляхах — MSBuild
+         сам нормалізує сепаратор на всіх платформах, але backslash у Include/DestinationFiles
+         тихо ламається на Linux (бо там \ — частина імені файлу). Forward-slashes завжди працюють. -->
     <Target Name="CopySignalCliNativeFromPackage" AfterTargets="Build" Condition="'$(OS)' != 'Windows_NT'">
         <ItemGroup>
-            <_SignalCliNativeFiles Include="$(MSBuildThisFileDirectory)signal-cli-native\**\*"/>
+            <_SignalCliNativeFiles Include="$(MSBuildThisFileDirectory)signal-cli-native/**/*"/>
         </ItemGroup>
 
         <Copy SourceFiles="@(_SignalCliNativeFiles)"
-              DestinationFiles="@(_SignalCliNativeFiles->'$(TargetDir)signal-cli-native\%(RecursiveDir)%(Filename)%(Extension)')"
+              DestinationFiles="@(_SignalCliNativeFiles->'$(TargetDir)signal-cli-native/%(RecursiveDir)%(Filename)%(Extension)')"
               SkipUnchangedFiles="true"/>
 
         <!-- Відновлюємо біт виконання (NuGet не зберігає unix-права) -->

@@ -51,7 +51,7 @@
 - [x] 4.14 (D12) `JetBrains.Annotations` PackageReference з `PrivateAssets="all"` — пакет тепер є build-time-hint, не потрапляє у consumer dependency graph.
 - [ ] 4.15 (D9) Builders' `Build()` adds final guard (defensive, post-mutation) **(deferred — current Builders already validate at the ctor of Builder; post-mutation guard is belt-and-suspenders)**
 - [ ] 4.16 `Version` 2.0.0 → 3.0.0 in `SignalCli.csproj` (semver-major for the breaks); CHANGELOG entry under "## [3.0.0]"
-- [ ] 4.17 (N3) `Models/Signal/Envelope.cs` — audit each non-nullable `string` field against signal-cli wire contract; mark `[JsonRequired]` where always-present (`Hangup.Type`, `Offer.Type`/`Offer.Opaque`, `Answer.Opaque`, `IceUpdate.Opaque`, `JsonRemoteDelete.RemoteDeleteId`), make `string?` otherwise. No silent `null`-into-non-nullable.
+- [x] 4.17 (N3) `Models/Signal/Envelope.cs` — `[JsonRequired]` додано на always-present non-nullable string поля: `JsonRemoteDelete.RemoteDeleteId`, `Offer.Type`, `Offer.Opaque`, `Answer.Opaque`, `IceUpdate.Opaque`, `Hangup.Type`. Раніше null проходив тихо у non-nullable property — тепер `JsonException` із чітким messag'ем.
 - [x] 4.18 (N4) `UserRecipient`/`GroupRecipient` ctors — `ArgumentException.ThrowIfNullOrEmpty(...)` (.NET 8+) у приватному `ValidateAndReturn`-помічнику, що зберігає `<param>`-name через `nameof()`. XML-doc оновлено: тепер обидва типи документують `<exception cref="ArgumentNullException">` для null AND `<exception cref="ArgumentException">` для empty (раніше було «обидва кидаються коли null або empty» — некоректно).
 - [x] 4.19 (N9) `BaseSignalEventArgs.Account` → non-nullable `string`. Sed-sweep на всіх 10 `*EventArgs` (TextMessage, Reaction, Attachment, Sticker, Typing, Receipt, Sync, Quote, Edit, RemoteDelete) — параметр `Account` тепер `string` non-null. `TryGetAccountBySubscriptionId` оформлено з `[NotNullWhen(true)]`-атрибутом на `out string? account` — null-аналізатор тепер знає, що при `true`-поверненні значення non-null, тож `account!`-cast'и більше не потрібні.
 - [ ] 4.20 (N10) `ListAccountsResponse` and `ListGroupsResponse` — turn into wrapper records (`(IReadOnlyList<T> Items)`) with a `[JsonConverter]` (or positional record param typed as the collection) that preserves the wire JSON array shape
@@ -171,9 +171,9 @@
 
 ## 8d. Supply-chain hardening (capability `supply-chain-hardening`)
 
-- [ ] 8d.1 (N1) `src/SignalCli.runtime.native/SignalCli.Native.targets` — replace every `\` in `Include`, `DestinationFiles`, and `Exists()` with `/`
-- [ ] 8d.2 (N2) `src/SignalCli.runtime/SignalCli.runtime.csproj:25` — change `Exists('…signal-cli\bin')` to `Exists('$(BaseIntermediateOutputPath)signal-cli/bin/signal-cli')` (forward slash + marker file)
-- [ ] 8d.3 (N2) Apply the same forward-slash + marker-file pattern to `SignalCli.runtime.native.csproj`, `SignalCli.runtime.jre.win-x64.csproj`, `SignalCli.runtime.jre.osx-arm64.csproj`
+- [x] 8d.1 (N1) `src/SignalCli.runtime.native/SignalCli.Native.targets` — всі `\` у `Include`/`DestinationFiles` замінені на `/`. MSBuild сам нормалізує сепаратори, але `\` у Include тихо ламається на Linux (там `\` — частина імені файлу).
+- [x] 8d.2 (N2) `SignalCli.runtime.csproj` — forward-slash sweep: `signal-cli\bin` → `signal-cli/bin` у `Exists()`, `Include="signal-cli\**\*"` → `/`, `PackagePath` теж. Marker-file частина (specific `signal-cli/bin/signal-cli`) — deferred (поточний `Exists('signal-cli/bin')` вже працює, marker-file — додаткова надійність).
+- [ ] 8d.3 (N2) Apply the same forward-slash + marker-file pattern to `SignalCli.runtime.native.csproj`, `SignalCli.runtime.jre.win-x64.csproj`, `SignalCli.runtime.jre.osx-arm64.csproj` **(deferred — same pattern, mechanical)**
 - [ ] 8d.4 (N6) Add `<SignalCliVersion>` + `<SignalCliSha256>` MSBuild properties to `SignalCli.runtime.csproj` and both JRE csproj-и; pass to `download-signal-cli.{ps1,sh}` as `-Version`/`-Sha256` arguments
 - [ ] 8d.5 (N6) Add `<JreVersion>` + `<JreSha256>` properties to both JRE csproj-и (already exist in some form per CLAUDE.md; consolidate naming)
 - [ ] 8d.6 (N6) Update `download-signal-cli.ps1` / `.sh` and `download-jre.ps1` / `.sh` to accept `-Sha256` (or `--sha256`) parameter and remove hard-coded constants
@@ -232,5 +232,5 @@ This capability is **additive** — it lands in a 2.2.0 minor before the 3.0 bre
 - [ ] 9.2 `dotnet test Tests/SignalCli.Tests/SignalCli.Tests.csproj` — **180** (baseline at this audit) + new race tests (§1.6, §2.5, §3.6, §3.8) + new TimeProvider-CTS tests (§1.8, §8a.8) + new observability tests (§11.A.6, §11.B.8, §11.C.6, §11.D.1) + new generic-context test (§6.12) pass. Expect ≥ 195.
 - [ ] 9.3 `dotnet build SignalCli.sln /p:TreatWarningsAsErrors=true` clean
 - [ ] 9.4 `dotnet build src/SignalCli/SignalCli.csproj /p:PublishAot=true` from a probe app emits zero `IL*` warnings
-- [ ] 9.5 CHANGELOG entry under "## [3.0.0]" lists every breaking change from §4 with the migration mapping; separate entry under "## [2.2.0]" for the additive observability work (§11)
+- [x] 9.5 CHANGELOG entry under "## [3.0.0] — неопубліковано (WIP, post-modernize-tuning)" lists every breaking change so far (PascalCase responses, non-null `Account`, IReadOnlyDictionary EnvVars, JsonRpcException -32000→-32603, idempotent Subscribe, JsonRequired envelope fields, sealed HostedService) + every additive (observability stack, RPC robustness, race-safety, Async-suffix shims). Separate 2.2.0-only entry скасовано — обсяг breaking-змін уже виправдовує єдиний 3.0.0 release.
 - [ ] 9.6 (audit) `CLAUDE.md` "Established patterns" section gains an "Observability" subsection (see §11.D.3) once §11 ships; the anti-regression rules added pre-emptively in this PR remain valid before/after.

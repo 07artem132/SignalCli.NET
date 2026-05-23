@@ -2371,16 +2371,26 @@
             <summary>
             Інформація про віддалене видалення повідомлення.
             </summary>
-            <param name="RemoteDeleteId">Ідентифікатор повідомлення для видалення.</param>
+            <param name="RemoteDeleteId">Ідентифікатор повідомлення для видалення. Завжди присутній — signal-cli не емітить RemoteDelete без targetSentTimestamp.</param>
+            <remarks>
+            post-modernize-tuning §4.17 (audit N3): <c>[JsonRequired]</c> — десеріалізатор кидає
+            <see cref="T:System.Text.Json.JsonException"/>, якщо поле відсутнє у wire-JSON; раніше
+            non-nullable string мовчки приймав null, що далі вибухало NRE у downstream.
+            </remarks>
         </member>
         <member name="M:SignalCli.Models.Signal.JsonRemoteDelete.#ctor(System.String)">
             <summary>
             Інформація про віддалене видалення повідомлення.
             </summary>
-            <param name="RemoteDeleteId">Ідентифікатор повідомлення для видалення.</param>
+            <param name="RemoteDeleteId">Ідентифікатор повідомлення для видалення. Завжди присутній — signal-cli не емітить RemoteDelete без targetSentTimestamp.</param>
+            <remarks>
+            post-modernize-tuning §4.17 (audit N3): <c>[JsonRequired]</c> — десеріалізатор кидає
+            <see cref="T:System.Text.Json.JsonException"/>, якщо поле відсутнє у wire-JSON; раніше
+            non-nullable string мовчки приймав null, що далі вибухало NRE у downstream.
+            </remarks>
         </member>
         <member name="P:SignalCli.Models.Signal.JsonRemoteDelete.RemoteDeleteId">
-            <summary>Ідентифікатор повідомлення для видалення.</summary>
+            <summary>Ідентифікатор повідомлення для видалення. Завжди присутній — signal-cli не емітить RemoteDelete без targetSentTimestamp.</summary>
         </member>
         <member name="T:SignalCli.Models.Signal.JsonSharedContact">
             <summary>
