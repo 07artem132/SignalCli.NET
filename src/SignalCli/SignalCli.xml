@@ -884,7 +884,7 @@
             <example>
             <code>
             var textOptions = new TextMessageOptions.Builder("+380501234567", 
-                                     new[] { new UserRecipient("+380501234567") }, 
+                                     [new UserRecipient("+380501234567")], 
                                      "Привіт, світ!")
                                      .UseStyle()
                                      .Build();
@@ -922,7 +922,7 @@
             <example>
             <code>
             var attachmentOptions = new AttachmentMessageOptions.Builder("+380501234567", 
-                                           new[] { new UserRecipient("+380501234567") }, 
+                                           [new UserRecipient("+380501234567")], 
                                            attachmentsList)
                                            .WithMessage("Привіт, світ з вкладенням!")
                                            .Build();
@@ -959,7 +959,7 @@
             <example>
             <code>
             var stickerOptions = new StickerMessageOptions.Builder("+380501234567", 
-                                     new[] { new UserRecipient("+380501234567") }, 
+                                     [new UserRecipient("+380501234567")], 
                                      "stickerPackId:stickerId")
                                      .Build();
             var result = await signalMessage.SendStickerAsync(stickerOptions);
@@ -3019,7 +3019,7 @@
             Використовується як базовий клас для спеціалізованих подій.
             </remarks>
             <param name="SubscriptionId">Ідентифікатор підписки, через яку отримано подію.</param>
-            <param name="Account">Ідентифікатор облікового запису одержувача.</param>
+            <param name="Account">Ідентифікатор облікового запису одержувача. Завжди заповнений: <c>SignalEventService.OnNotificationReceived</c> резолвить акаунт із <c>SubscriptionId</c> до того, як побудувати event-args.</param>
             <param name="Source">Загальний ідентифікатор джерела повідомлення.</param>
             <param name="SourceNumber">Номер телефону відправника.</param>
             <param name="SourceUuid">UUID відправника.</param>
@@ -3028,6 +3028,12 @@
             <param name="Timestamp">Часова мітка події.</param>
             <param name="ServerReceivedTimestamp">Часова мітка отримання сервером.</param>
             <param name="ServerDeliveredTimestamp">Часова мітка доставки сервером.</param>
+            <remarks>
+            post-modernize-tuning §4.19 (audit N9): <c>Account</c> більше не nullable. На сайті
+            побудови events (<c>SignalEventService.OnNotificationReceived</c>) акаунт резолвиться
+            з SubscriptionId до того, як ми створюємо event-args; nullable раніше змушував кожного
+            підписника null-чекати, попри те що значення гарантовано є.
+            </remarks>
         </member>
         <member name="M:SignalCli.Models.Signal.Events.BaseSignalEventArgs.#ctor(System.Int32,System.String,System.String,System.String,System.String,System.String,System.Nullable{System.Int32},System.Int64,System.Int64,System.Int64)">
             <summary>
@@ -3038,7 +3044,7 @@
             Використовується як базовий клас для спеціалізованих подій.
             </remarks>
             <param name="SubscriptionId">Ідентифікатор підписки, через яку отримано подію.</param>
-            <param name="Account">Ідентифікатор облікового запису одержувача.</param>
+            <param name="Account">Ідентифікатор облікового запису одержувача. Завжди заповнений: <c>SignalEventService.OnNotificationReceived</c> резолвить акаунт із <c>SubscriptionId</c> до того, як побудувати event-args.</param>
             <param name="Source">Загальний ідентифікатор джерела повідомлення.</param>
             <param name="SourceNumber">Номер телефону відправника.</param>
             <param name="SourceUuid">UUID відправника.</param>
@@ -3047,12 +3053,18 @@
             <param name="Timestamp">Часова мітка події.</param>
             <param name="ServerReceivedTimestamp">Часова мітка отримання сервером.</param>
             <param name="ServerDeliveredTimestamp">Часова мітка доставки сервером.</param>
+            <remarks>
+            post-modernize-tuning §4.19 (audit N9): <c>Account</c> більше не nullable. На сайті
+            побудови events (<c>SignalEventService.OnNotificationReceived</c>) акаунт резолвиться
+            з SubscriptionId до того, як ми створюємо event-args; nullable раніше змушував кожного
+            підписника null-чекати, попри те що значення гарантовано є.
+            </remarks>
         </member>
         <member name="P:SignalCli.Models.Signal.Events.BaseSignalEventArgs.SubscriptionId">
             <summary>Ідентифікатор підписки, через яку отримано подію.</summary>
         </member>
         <member name="P:SignalCli.Models.Signal.Events.BaseSignalEventArgs.Account">
-            <summary>Ідентифікатор облікового запису одержувача.</summary>
+            <summary>Ідентифікатор облікового запису одержувача. Завжди заповнений: <c>SignalEventService.OnNotificationReceived</c> резолвить акаунт із <c>SubscriptionId</c> до того, як побудувати event-args.</summary>
         </member>
         <member name="P:SignalCli.Models.Signal.Events.BaseSignalEventArgs.Source">
             <summary>Загальний ідентифікатор джерела повідомлення.</summary>
@@ -5249,6 +5261,11 @@
             <param name="subscriptionId">Ідентифікатор підписки.</param>
             <param name="account">Знайдений обліковий запис або null, якщо підписка не існує.</param>
             <returns>true, якщо підписка знайдена; інакше - false.</returns>
+            <remarks>
+            post-modernize-tuning §4.19: <see cref="T:System.Diagnostics.CodeAnalysis.NotNullWhenAttribute"/>
+            сповіщає нульабельність-аналізатор, що при <c>true</c>-поверненні <paramref name="account"/>
+            гарантовано non-null — це усуває потребу в <c>account!</c>-cast'ах на сайтах виклику.
+            </remarks>
         </member>
         <member name="M:SignalCli.Services.Signal.SignalEventService.GetActiveSubscriptionCount">
             <summary>

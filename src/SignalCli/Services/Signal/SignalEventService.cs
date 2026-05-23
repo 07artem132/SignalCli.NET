@@ -341,7 +341,7 @@ internal sealed class SignalEventService(
             using var scope = _logger.BeginScope(new Dictionary<string, object>
             {
                 ["SubscriptionId"] = subscriptionId,
-                ["Account"] = account!,
+                ["Account"] = account,
             });
 
             // Якщо отримано подію набору тексту
@@ -576,7 +576,14 @@ internal sealed class SignalEventService(
     /// <param name="subscriptionId">Ідентифікатор підписки.</param>
     /// <param name="account">Знайдений обліковий запис або null, якщо підписка не існує.</param>
     /// <returns>true, якщо підписка знайдена; інакше - false.</returns>
-    private bool TryGetAccountBySubscriptionId(int subscriptionId, out string? account)
+    /// <remarks>
+    /// post-modernize-tuning §4.19: <see cref="System.Diagnostics.CodeAnalysis.NotNullWhenAttribute"/>
+    /// сповіщає нульабельність-аналізатор, що при <c>true</c>-поверненні <paramref name="account"/>
+    /// гарантовано non-null — це усуває потребу в <c>account!</c>-cast'ах на сайтах виклику.
+    /// </remarks>
+    private bool TryGetAccountBySubscriptionId(
+        int subscriptionId,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? account)
     {
         lock (_subscriptionsLock)
         {

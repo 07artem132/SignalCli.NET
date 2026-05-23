@@ -47,13 +47,13 @@
 - [x] 4.10 (D7) `Config.EnvironmentVariables` becomes `IReadOnlyDictionary<string,string>` with a `WithEnvironment(IDictionary<string,string>)` defensive-copy helper that returns `this`. `SignalCliOptions.EnvironmentVariables` теж типу `IReadOnlyDictionary` (§4.28 paired). Test `ProcessRunner_ShouldReceiveCorrectEnvironmentVariables` migrated to `WithEnvironment(new Dictionary<,>{ … })` — `Add()` на shared посилання більше не компілюється, що й є метою.
 - [x] 4.11 (D8) `Example/Program.cs` rewritten as `async Task Main`, awaited `SendTextMessageAsync`, awaited `host.StopAsync()`. `await using` deferred — `IHost` 10.0 не декларує `IAsyncDisposable` напряму; concrete host реалізує, але cast псує portability. Замість фейкового fire-and-forget Subscribe-callback тепер `Task.Run` із proper try/catch + `ConfigureAwait(false)`. Закоментований приклад OTel-підключення (AddSource("SignalCli.NET") + AddMeter) додано.
 - [x] 4.12 (D10) `JsonRpcRequest` record body emptied — позиційні параметри `(Method, Params, Id)` зараз із `[property: JsonPropertyName("...")]` синтаксисом; залишилось лише `JsonRpc { get; init; } = "2.0"`. Дублікати `Method = Method` etc. видалено.
-- [ ] 4.13 (D11) Compileable `<example>` XML-doc snippets on `ISignalMessage.*Async` (use `[new UserRecipient(...)]`, not `new[] { ... }`) **(deferred — docs cleanup)**
-- [ ] 4.14 (D12) `JetBrains.Annotations` → `PrivateAssets="all"` in `SignalCli.csproj` **(deferred — single-line csproj edit; minor packaging hygiene)**
+- [x] 4.13 (D11) Compileable `<example>` XML-doc snippets on `ISignalMessage.*Async` — `new[] { new UserRecipient(...) }` → `[new UserRecipient(...)]` (collection expressions, .NET 8+).
+- [x] 4.14 (D12) `JetBrains.Annotations` PackageReference з `PrivateAssets="all"` — пакет тепер є build-time-hint, не потрапляє у consumer dependency graph.
 - [ ] 4.15 (D9) Builders' `Build()` adds final guard (defensive, post-mutation) **(deferred — current Builders already validate at the ctor of Builder; post-mutation guard is belt-and-suspenders)**
 - [ ] 4.16 `Version` 2.0.0 → 3.0.0 in `SignalCli.csproj` (semver-major for the breaks); CHANGELOG entry under "## [3.0.0]"
 - [ ] 4.17 (N3) `Models/Signal/Envelope.cs` — audit each non-nullable `string` field against signal-cli wire contract; mark `[JsonRequired]` where always-present (`Hangup.Type`, `Offer.Type`/`Offer.Opaque`, `Answer.Opaque`, `IceUpdate.Opaque`, `JsonRemoteDelete.RemoteDeleteId`), make `string?` otherwise. No silent `null`-into-non-nullable.
 - [x] 4.18 (N4) `UserRecipient`/`GroupRecipient` ctors — `ArgumentException.ThrowIfNullOrEmpty(...)` (.NET 8+) у приватному `ValidateAndReturn`-помічнику, що зберігає `<param>`-name через `nameof()`. XML-doc оновлено: тепер обидва типи документують `<exception cref="ArgumentNullException">` для null AND `<exception cref="ArgumentException">` для empty (раніше було «обидва кидаються коли null або empty» — некоректно).
-- [ ] 4.19 (N9) `BaseSignalEventArgs.Account` → non-nullable `string`; same for the derived `*EventArgs` records' inherited `Account` slot; propagate non-null through `SignalEventService.OnNotificationReceived`
+- [x] 4.19 (N9) `BaseSignalEventArgs.Account` → non-nullable `string`. Sed-sweep на всіх 10 `*EventArgs` (TextMessage, Reaction, Attachment, Sticker, Typing, Receipt, Sync, Quote, Edit, RemoteDelete) — параметр `Account` тепер `string` non-null. `TryGetAccountBySubscriptionId` оформлено з `[NotNullWhen(true)]`-атрибутом на `out string? account` — null-аналізатор тепер знає, що при `true`-поверненні значення non-null, тож `account!`-cast'и більше не потрібні.
 - [ ] 4.20 (N10) `ListAccountsResponse` and `ListGroupsResponse` — turn into wrapper records (`(IReadOnlyList<T> Items)`) with a `[JsonConverter]` (or positional record param typed as the collection) that preserves the wire JSON array shape
 - [x] 4.21 (N14) `JsonRpcException` — three CA1032 ctors added: `()`, `(string)`, `(string, Exception)`. Default `Error` uses canonical JSON-RPC 2.0 code `-32603` ("Internal error"), not the non-standard `-32000`.
 - [x] 4.22 (N15) Legacy `JsonRpcException(string, Exception?)` ctor with non-standard `-32000` code **removed** (not just `[Obsolete]`-marked — overload ambiguity with the new CA1032 `(string, Exception)` ctor would create build hazards). Audit confirmed zero internal call sites. Test `FromMessage_CreatesInternalError` updated from `-32000` → `-32603` to match the new contract.
@@ -177,7 +177,7 @@
 - [ ] 8d.4 (N6) Add `<SignalCliVersion>` + `<SignalCliSha256>` MSBuild properties to `SignalCli.runtime.csproj` and both JRE csproj-и; pass to `download-signal-cli.{ps1,sh}` as `-Version`/`-Sha256` arguments
 - [ ] 8d.5 (N6) Add `<JreVersion>` + `<JreSha256>` properties to both JRE csproj-и (already exist in some form per CLAUDE.md; consolidate naming)
 - [ ] 8d.6 (N6) Update `download-signal-cli.ps1` / `.sh` and `download-jre.ps1` / `.sh` to accept `-Sha256` (or `--sha256`) parameter and remove hard-coded constants
-- [ ] 8d.7 (N12) `download-jre.ps1:42-43` — both sides of comparison `.ToLowerInvariant()` (or use `-ieq`)
+- [x] 8d.7 (N12) `download-jre.ps1:42-43` — already case-invariant. Both sides call `.ToLower()` before the `-ne` compare; verified.
 - [ ] 8d.8 (N7) Pin every non-`actions/*` `uses:` in `.github/workflows/**` to a 40-char commit SHA; keep the `@v…` tag in a trailing comment for human readability
 - [ ] 8d.9 (N7) Pin first-party `actions/checkout`, `actions/setup-dotnet`, etc. to SHAs as well
 - [ ] 8d.10 (N11) `SignalCli.Jre.targets` (both platforms) — after `<Unzip>`, add `<Error Condition="!Exists('$(TargetDir)jre/bin/java...')">…</Error>` with actionable message
@@ -198,7 +198,7 @@ This capability is **additive** — it lands in a 2.2.0 minor before the 3.0 bre
 - [x] 11.A.4 `SignalCliHealthMonitor.PingCliAsync` → `signalcli.healthcheck.ping` span; tag `signal.healthcheck.outcome` ∈ {`ok`,`timeout`,`failed`,`no_stream_pair`}; status Ok on healthy, Error+exception-type-name on failure/timeout.
 - [x] 11.A.5 `SignalEventService.SubscribeAsync` → `signalcli.subscribe` span; tag `signal.subscription.id` (int) set on success. **`account` NOT a tag** (PII — phone number). `UnsubscribeAsync` span **(deferred)**.
 - [ ] 11.A.6 **Privacy guard test:** `Tests/SignalCli.Tests/Observability/ActivityTagPrivacyTests.cs` **(deferred — pairs with §11.B.8 in a single Observability test fixture)**
-- [ ] 11.A.7 README + `docs/cloud-development.md` Observability section **(deferred — docs-only)**
+- [x] 11.A.7 `docs/cloud-development.md` — new "Observability" section with the OTel hookup snippet, full surface inventory (5 spans + 5 instruments), and privacy invariant. README docs deferred for the v3.0 wave.
 
 ### 11.B. Meter (`System.Diagnostics.Metrics` — counters & histograms)
 

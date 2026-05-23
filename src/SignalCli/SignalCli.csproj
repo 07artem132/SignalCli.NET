@@ -47,7 +47,11 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="JetBrains.Annotations" Version="2024.3.0"/>
+        <!-- post-modernize-tuning §4.14 (audit D12): PrivateAssets="all" — JetBrains.Annotations
+             використовується лише як build-time hint (PublicAPI, NotNull тощо). Без цього
+             атрибута пакет потрапляє у dependency-list споживача, який ніколи його не
+             використовує напряму. -->
+        <PackageReference Include="JetBrains.Annotations" Version="2024.3.0" PrivateAssets="all"/>
         <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0"/>
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0"/>
         <!-- D.1: DataAnnotations для типізованої валідації SignalCliOptions через

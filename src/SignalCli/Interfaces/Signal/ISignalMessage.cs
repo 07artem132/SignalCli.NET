@@ -40,7 +40,7 @@ namespace SignalCli.Interfaces.Signal
         /// <example>
         /// <code>
         /// var textOptions = new TextMessageOptions.Builder("+380501234567", 
-        ///                          new[] { new UserRecipient("+380501234567") }, 
+        ///                          [new UserRecipient("+380501234567")], 
         ///                          "Привіт, світ!")
         ///                          .UseStyle()
         ///                          .Build();
@@ -78,7 +78,7 @@ namespace SignalCli.Interfaces.Signal
         /// <example>
         /// <code>
         /// var attachmentOptions = new AttachmentMessageOptions.Builder("+380501234567", 
-        ///                                new[] { new UserRecipient("+380501234567") }, 
+        ///                                [new UserRecipient("+380501234567")], 
         ///                                attachmentsList)
         ///                                .WithMessage("Привіт, світ з вкладенням!")
         ///                                .Build();
@@ -115,7 +115,7 @@ namespace SignalCli.Interfaces.Signal
         /// <example>
         /// <code>
         /// var stickerOptions = new StickerMessageOptions.Builder("+380501234567", 
-        ///                          new[] { new UserRecipient("+380501234567") }, 
+        ///                          [new UserRecipient("+380501234567")], 
         ///                          "stickerPackId:stickerId")
         ///                          .Build();
         /// var result = await signalMessage.SendStickerAsync(stickerOptions);

@@ -62,6 +62,25 @@ Hook потребує:
 - Async-режим (`{"async": true, "asyncTimeout": <ms>}` у першому рядку stdout) теж підтримується — старт сесії стає миттєвим, але з'являється гонка: агент може спробувати запустити тести до того, як restore завершився. Перемикайтеся на async лише якщо це вас не лякає.
 - Логи hook видно у виводі сесії під заголовком `SessionStart`.
 
+## Observability (post-modernize-tuning §11)
+
+Бібліотека експонує **дві OTel-сумісні поверхні** — `ActivitySource` для distributed-tracing і `Meter` для метрик. Обидва називаються `"SignalCli.NET"`; без активного listener'а — нульова накладна.
+
+```csharp
+// Program.cs — підписка на джерела через OpenTelemetry
+services.AddOpenTelemetry()
+    .WithTracing(t => t
+        .AddSource("SignalCli.NET")
+        .AddConsoleExporter())     // або AddOtlpExporter / AddJaegerExporter / etc.
+    .WithMetrics(m => m
+        .AddMeter("SignalCli.NET")
+        .AddConsoleExporter());
+```
+
+**Що відстежується.** Спани: `rpc.<method>` для кожного JSON-RPC виклику (теги `signal.rpc.method`, `signal.rpc.request_id`), `signalcli.process.start`, `signalcli.healthcheck.ping` (тег `signal.healthcheck.outcome` ∈ {`ok`,`timeout`,`failed`,`no_stream_pair`}), `signalcli.subscribe` (тег `signal.subscription.id`). Метрики: `signalcli.rpc.requests` (counter; теги `method`, `status` ∈ {`ok`,`timeout`,`error`}), `signalcli.rpc.duration` (histogram, `ms`), `signalcli.process.restarts` (counter; тег `trigger` ∈ {`force`,`crash`,`health`}), `signalcli.events.dropped` (counter; тег `event_type`), `signalcli.subscriptions.active` (observable gauge).
+
+**Privacy invariant.** Значення тегів — лише method-names, status-енами, integer-id, durations, exception-type-names. Тіло повідомлення, номер телефону, шлях до файлу вкладення в тегах **відсутні** — це CLAUDE.md rule #1, поширений на observability-поверхні (див. також `specs/observability/spec.md` у відповідній OpenSpec-зміні).
+
 ## Локальна розробка
 
 Hook не активується локально (умова `CLAUDE_CODE_REMOTE=true`). Ставте dotnet звичним для вас способом ([офіційні інструкції](https://learn.microsoft.com/dotnet/core/install/)) і виконуйте ті самі команди вручну.

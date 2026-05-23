@@ -20,7 +20,7 @@ namespace SignalCli.Models.Signal.Events;
 [PublicAPI]
 public record RemoteDeleteEventArgs(
     int SubscriptionId,
-    string? Account,
+    string Account,
     JsonRemoteDelete RemoteDelete,
     string? Source,
     string? SourceNumber,

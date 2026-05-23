@@ -23,7 +23,7 @@ namespace SignalCli.Models.Signal.Events;
 [PublicAPI]
 public record QuoteEventArgs(
     int SubscriptionId,
-    string? Account,
+    string Account,
     JsonDataMessage DataMessage,
     string? Source,
     string? SourceNumber,
