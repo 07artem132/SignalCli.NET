@@ -8,7 +8,11 @@ namespace SignalCli.Tests.SignalCliHostedService;
 
 [Trait("Category", "HostedService")]
 [Collection("HostedService")]
-public class SignalCliHostedServiceIntegrationTests : SignalCliHostedServiceTestsBase
+// G.7e: раніше клас називався "...IntegrationTests", але насправді це повністю
+// замоканий state/lifecycle-набір, без жодного запуску signal-cli. Реальні E2E
+// зараз НЕ запускаються в цій сесії (G.7 — окрема велика робота); цей файл
+// перейменовано в *StateTests, щоб назва відповідала змісту.
+public class SignalCliHostedServiceStateTests : SignalCliHostedServiceTestsBase
 {
     [Fact]
     [Trait("Category", "StateManagement")]
@@ -27,16 +31,16 @@ public class SignalCliHostedServiceIntegrationTests : SignalCliHostedServiceTest
         // Assert
         var expectedStates = new[]
         {
-            ProcessState.NotStarted, // Начальное
+            ProcessState.NotStarted, // Початковий
             ProcessState.Starting, // При старте
-            ProcessState.Running, // После успешного старта
+            ProcessState.Running, // Після успішного старту
             ProcessState.Stopping, // При остановке
-            ProcessState.Stopped // После остановки
+            ProcessState.Stopped // Після зупинки
         };
 
         Assert.Equal(expectedStates, states);
 
-        // Дополнительно проверяем логи для каждого состояния
+        // Додатково перевіряємо логи для кожного стану
         VerifyLog(LogLevel.Information, "SignalCliHostedService запускається...");
         VerifyLog(LogLevel.Information, "SignalCliHostedService успішно запущено.");
         VerifyLog(LogLevel.Information, "SignalCliHostedService зупиняється...");
@@ -88,10 +92,10 @@ public class SignalCliHostedServiceIntegrationTests : SignalCliHostedServiceTest
         processMock.Setup(p => p.HasExited).Returns(true);
         processMock.Raise(p => p.Exited += null, EventArgs.Empty);
 
-        await Task.Delay(100); // Даем время на обработку события и автоперезапуск
+        await Task.Delay(100); // Даємо час на обробку події та автоперезапуск
 
         // Assert
-        // Проверяем, что прошли через Failed перед автоперезапуском
+        // Перевіряємо, що пройшли через Failed перед автоперезапуском
         Assert.Contains(ProcessState.Failed, states);
         Assert.Equal(ProcessState.Running, states.Last());
     }
@@ -130,7 +134,7 @@ public class SignalCliHostedServiceIntegrationTests : SignalCliHostedServiceTest
 
     [Theory]
     [InlineData(1)] // 1 секунда
-    [InlineData(2)] // 2 секунды
+    [InlineData(2)] // 2 секунди
     public async Task ForceRestart_ShouldHandleVariousRestartDelays(int delaySeconds)
     {
         // Arrange
@@ -157,9 +161,9 @@ public class SignalCliHostedServiceIntegrationTests : SignalCliHostedServiceTest
     }
 
     [Theory]
-    [InlineData(0)] // Без попыток (отключено)
-    [InlineData(1)] // Одна попытка
-    [InlineData(3)] // Несколько попыток
+    [InlineData(0)] // Без спроб (вимкнено)
+    [InlineData(1)] // Одна спроба
+    [InlineData(3)] // Кілька спроб
     public async Task OnProcessExit_ShouldRespectMaxRestartAttempts(int maxAttempts)
     {
         // Arrange
@@ -193,7 +197,7 @@ public class SignalCliHostedServiceIntegrationTests : SignalCliHostedServiceTest
                     await Task.Delay(10); // Минимальная задержка
                     pMock.Raise(p => p.Exited += null, EventArgs.Empty);
 
-                    // Если это последняя попытка перезапуска, сигнализируем о завершении
+                    // Якщо це остання спроба перезапуску, сигналізуємо про завершення
                     if (attempts >= (maxAttempts == 0 ? 1 : maxAttempts + 1))
                     {
                         // Даем время для завершения всех внутренних обработчиков
@@ -217,7 +221,7 @@ public class SignalCliHostedServiceIntegrationTests : SignalCliHostedServiceTest
         await Task.WhenAny(allRestartsFinishedTcs.Task, Task.Delay(5000));
 
         // Assert
-        // +1 к maxAttempts потому что первый старт не считается за попытку
+        // +1 до maxAttempts, бо перший старт не зараховується як спроба
         var expectedAttempts = maxAttempts == 0 ? 1 : maxAttempts + 1;
         Assert.Equal(expectedAttempts, attempts);
 
@@ -228,8 +232,9 @@ public class SignalCliHostedServiceIntegrationTests : SignalCliHostedServiceTest
         }
         else
         {
+            // B.5: текст лог-меседжу тепер містить ще й розмір вікна стабільності — звужуємо substring.
             VerifyLog(LogLevel.Error,
-                $"Досягнуто максимальну кількість перезапусків ({maxAttempts}). Більше не перезапускатимемо");
+                $"Досягнуто максимальну кількість перезапусків ({maxAttempts})");
         }
     }
 }

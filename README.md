@@ -181,7 +181,7 @@ var finishResult = await signalDevices.FinishLink(
     linkResponse.DeviceLinkUri, 
     "Мій новий комп'ютер"
 );
-Console.WriteLine($"Пристрій успішно зв'язано. ID пристрою: {finishResult.DeviceId}");
+Console.WriteLine($"Пристрій успішно зв'язано. Номер: {finishResult.number}");
 
 ```
 
@@ -506,7 +506,7 @@ var finishResult = await signalDevices.FinishLink(
     linkResponse.DeviceLinkUri, 
     "Мій новий комп'ютер"
 );
-Console.WriteLine($"Пристрій успішно зв'язано. ID пристрою: {finishResult.DeviceId}");
+Console.WriteLine($"Пристрій успішно зв'язано. Номер: {finishResult.number}");
 ```
 
 ### Підписка на повідомлення та автоматична відповідь
@@ -536,35 +536,37 @@ var textSubscription = eventService.TextMessages.Subscribe(message =>
     signalMessage.SendTextMessageAsync(replyOptions);
 });
 
-// Підписуємося на вкладення
+// Підписуємося на вкладення.
+// AttachmentEventArgs.Attachments — це List<JsonAttachment> з метаданими;
+// сирі байти signal-cli НЕ передає інлайн — їх треба окремо забирати з диска
+// (signal-cli зберігає файли у конфіг-каталозі). Тут лише читаємо метадані.
 var attachmentSubscription = eventService.Attachments.Subscribe(attachment =>
 {
     Console.WriteLine($"[{DateTime.Now}] Отримано вкладення:");
-    Console.WriteLine($"Тип: {attachment.DataMessage.Attachments[0].ContentType}");
-    Console.WriteLine($"Ім'я файлу: {attachment.DataMessage.Attachments[0].Filename}");
-    
-    // Зберігаємо вкладення
-    var filePath = Path.Combine("Downloads", attachment.DataMessage.Attachments[0].Filename);
-    Directory.CreateDirectory(Path.GetDirectoryName(filePath));
-    File.WriteAllBytes(filePath, attachment.DataMessage.Attachments[0].Data);
-    
+    foreach (var att in attachment.Attachments)
+    {
+        Console.WriteLine($"Тип: {att.ContentType}, ім'я: {att.Filename}, " +
+                          $"id: {att.Id}, розмір: {att.Size} B");
+    }
+
     // Надсилаємо підтвердження
     var confirmOptions = new TextMessageOptions.Builder(
         account: attachment.Account,
         recipients: new List<IRecipient> { new UserRecipient(attachment.SourceUuid) },
-        message: $"Отримав ваше вкладення: {attachment.DataMessage.Attachments[0].Filename}"
+        message: $"Отримав ваші вкладення ({attachment.Attachments.Count})"
     ).Build();
-    
+
     signalMessage.SendTextMessageAsync(confirmOptions);
 });
 
-// Підписуємося на події реакцій
+// Підписуємося на події реакцій.
+// ReactionEventArgs.Reaction — це сам JsonReaction (не DataMessage.Reaction).
 var reactionSubscription = eventService.Reaction.Subscribe(reaction =>
 {
-    var emoji = reaction.DataMessage.Reaction.Emoji;
-    var remove = reaction.DataMessage.Reaction.IsRemove;
+    var emoji = reaction.Reaction.Emoji;
+    var remove = reaction.Reaction.IsRemove;
     var operation = remove ? "видалив(ла)" : "додав(ла)";
-    
+
     Console.WriteLine($"[{DateTime.Now}] {reaction.SourceNumber ?? reaction.SourceUuid} {operation} реакцію {emoji}");
 });
 

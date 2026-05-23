@@ -32,8 +32,14 @@ internal class SignalAccounts(
                 throw new InvalidOperationException("Отримано нульову відповідь від сервера");
             }
 
+            // ПРИВАТНІСТЬ (F5): на Information логуємо лише кількість; Account-record містить
+            // номер телефону/UUID, тож деталі — лише на Trace.
             _logger.LogInformation(
-                "Список облікових записів отримано успішно. Облікові записи={AccountList}",
+                "Список облікових записів отримано успішно. Кількість={Count}",
+                response.Count
+            );
+            _logger.LogTrace(
+                "Облікові записи={AccountList}",
                 string.Join(", ", response)
             );
 
@@ -65,10 +71,9 @@ internal class SignalAccounts(
                 throw new InvalidOperationException("Отримано нульову відповідь від сервера");
             }
 
-            _logger.LogInformation(
-                "Синхронізація облікових записів виконана успішно. Облікові записи={AccountList}",
-                string.Join(", ", response)
-            );
+            // ПРИВАТНІСТЬ (F5): SyncAccountsResponse — порожній record (sendSyncRequest повертає лише факт),
+            // тож на Information — лише факт виконання, без даних, які могли б містити PII.
+            _logger.LogInformation("Синхронізація облікових записів виконана успішно.");
 
             return response;
         }

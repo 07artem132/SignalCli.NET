@@ -54,12 +54,12 @@ public class ConfigTests
     [Fact]
     public void ToProcessConfig_ThrowsFileNotFoundException_IfNoJarFiles()
     {
-        // 1) Создаём временную папку (можно через Path.GetTempPath() + Guid)
+        // 1) Створюємо тимчасову папку (через Path.GetTempPath() + Guid)
         var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir);
 
-        // 2) Настраиваем Config так, чтобы AppHome указывал на tempDir,
-        //    а LibDirectory = "lib". Получим:  /tmp/xxx/lib
+        // 2) Налаштовуємо Config так, щоб AppHome вказував на tempDir,
+        //    а LibDirectory = "lib". Отримаємо:  /tmp/xxx/lib
         // JavaExecutable заданий -> JVM-режим -> ToProcessConfig викликає BuildClasspath
         var config = new Config
         {
@@ -68,39 +68,39 @@ public class ConfigTests
             JavaExecutable = "java"
         };
 
-        // Создадим папку lib, но НЕ кладём туда *.jar-файлы
+        // Створимо папку lib, але НЕ кладемо туди *.jar-файли
         Directory.CreateDirectory(Path.Combine(tempDir, "lib"));
 
-        // 3) Проверяем, что при вызове ToProcessConfig -> BuildClasspath будет FileNotFoundException
+        // 3) Перевіряємо, що при виклику ToProcessConfig -> BuildClasspath буде FileNotFoundException
         Assert.Throws<FileNotFoundException>(() => config.ToProcessConfig());
 
-        // 4) Очистка временной директории (в реальном коде убрать в Dispose/Finally)
+        // 4) Очищення тимчасової директорії (у реальному коді винести у Dispose/Finally)
         Directory.Delete(tempDir, recursive: true);
     }
     [Fact]
     public void ToProcessConfig_BuildsClassPath_IfJarFilesFound()
     {
-        // 1) Создаём временную папку
+        // 1) Створюємо тимчасову папку
         var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir);
 
-        // 2) Настраиваем Config
+        // 2) Налаштовуємо Config
         var config = new Config
         {
             AppHome = tempDir,
             LibDirectory = "lib",
-            JavaExecutable = "java" // пусть не важно что
+            JavaExecutable = "java" // значення не важливе
         };
 
-        // 3) Создаём папку lib
+        // 3) Створюємо папку lib
         var libDir = Path.Combine(tempDir, "lib");
         Directory.CreateDirectory(libDir);
 
-        // 4) "Подкладываем" фейковый jar-файл (пусть даже пустой)
+        // 4) "Підкладаємо" фейковий jar-файл (нехай навіть порожній)
         var fakeJarPath = Path.Combine(libDir, "test1.jar");
         File.WriteAllText(fakeJarPath, "fake jar content");
 
-        // 5) Вызываем ToProcessConfig и убеждаемся, что не бросает исключения
+        // 5) Викликаємо ToProcessConfig і переконуємось, що він не кидає винятків
         var processConfig = config.ToProcessConfig();
 
         // 6) Аргументи передаються через ArgumentList (безпечне екранування)
@@ -108,9 +108,9 @@ public class ConfigTests
         Assert.Contains("-classpath", processConfig.ArgumentList!);
         Assert.Contains(processConfig.ArgumentList!, a => a.Contains("test1.jar"));
 
-        // Дополнительно можно проверить другие части аргументов: jsonRpc, log-file и т.д.
+        // Додатково можна перевірити інші частини аргументів: jsonRpc, log-file тощо.
 
-        // 7) Очистка
+        // 7) Очищення
         Directory.Delete(tempDir, recursive: true);
     }
 
@@ -121,6 +121,8 @@ public class ConfigTests
         var config = new Config
         {
             AppHome = Path.GetTempPath(),
+            JavaExecutable = string.Empty,
+            LibDirectory = string.Empty,
             SignalCliExecutable = "/opt/signal-cli/bin/signal-cli"
         };
 
@@ -138,8 +140,45 @@ public class ConfigTests
     [Fact]
     public void ToProcessConfig_NoJavaAndNoNative_Throws()
     {
-        var config = new Config { AppHome = Path.GetTempPath() };
+        // Жоден зі способів запуску не заданий (JavaExecutable порожній, SignalCliExecutable null).
+        var config = new Config
+        {
+            AppHome = Path.GetTempPath(),
+            JavaExecutable = string.Empty,
+            LibDirectory = string.Empty
+        };
         Assert.Throws<InvalidOperationException>(() => config.ToProcessConfig());
+    }
+
+    [Fact]
+    public void CreateDefault_AppHomeChangeAffectsLogAndStoragePaths()
+    {
+        // F11: дефолти LogFileCli/StoragePathCli мають обчислюватися від AppHome
+        // в момент виклику ToProcessConfig, а не зафіксованого baseDirectory часів CreateDefault.
+        var customHome = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(customHome);
+        try
+        {
+            var libDir = Path.Combine(customHome, "lib");
+            Directory.CreateDirectory(libDir);
+            File.WriteAllText(Path.Combine(libDir, "test1.jar"), "fake");
+
+            var config = Config.CreateDefault();
+            config.AppHome = customHome;
+            config.LibDirectory = "lib";
+            config.JavaExecutable = "java";
+            // LogFileCli/StoragePathCli залишаємо null — мають обчислитися від AppHome.
+
+            var pc = config.ToProcessConfig();
+
+            Assert.NotNull(pc.ArgumentList);
+            Assert.Contains($"--log-file={Path.Combine(customHome, "signal.log")}", pc.ArgumentList!);
+            Assert.Contains($"--config={Path.Combine(customHome, "SignalCliStorageData")}", pc.ArgumentList!);
+        }
+        finally
+        {
+            Directory.Delete(customHome, recursive: true);
+        }
     }
 
     [Fact]

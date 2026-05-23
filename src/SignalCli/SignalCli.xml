@@ -53,14 +53,25 @@
             <summary>
             Додає всі необхідні сервіси для роботи з Signal CLI до контейнера DI.
             </summary>
-            <param name="configure">Делегат для налаштування конфігурації Signal CLI.</param>
+            <param name="configure">
+            Делегат для налаштування конфігурації Signal CLI. Може бути <c>null</c> —
+            тоді використовується <see cref="M:SignalCli.Models.Config.CreateDefault"/> без подальших змін.
+            </param>
             <returns>Колекція сервісів з доданими сервісами Signal CLI.</returns>
+            <remarks>
+            Реєстрація ідемпотентна (F23/H.23): повторні виклики не дублюють hosted-сервіси.
+            Конфігурація з ПЕРШОГО виклику залишається активною; пізніші <paramref name="configure"/>
+            при повторній реєстрації ігноруються (це навмисно — щоб не змінювати поведінку «гаряче»).
+            </remarks>
         </member>
         <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.&lt;G&gt;$7B30185E57B8298C6754F16C0BCF4773.AddSignalEvents">
             <summary>
             Додає сервіс обробки подій Signal до контейнера DI.
             </summary>
             <returns>Колекція сервісів з доданим сервісом обробки подій.</returns>
+            <remarks>
+            Ідемпотентно (F23/H.23): повторні виклики не призведуть до подвійного hosted-сервісу.
+            </remarks>
         </member>
         <member name="T:SignalCli.Interfaces.FileSystem.IAttachmentEntry">
             <summary>
@@ -546,6 +557,25 @@
             Містить події синхронізації між пристроями користувача.
             </remarks>
         </member>
+        <member name="P:SignalCli.Interfaces.Signal.ISignalEventService.Quotes">
+            <summary>
+            Потік повідомлень-цитат (DataMessage містить лише <see cref="T:SignalCli.Models.Signal.JsonQuote"/>
+            без власного тексту, реакції, стікера чи вкладень).
+            </summary>
+            <remarks>F13: раніше такі повідомлення дропалися як "unknown".</remarks>
+        </member>
+        <member name="P:SignalCli.Interfaces.Signal.ISignalEventService.Edits">
+            <summary>
+            Потік подій редагування — відправник змінив раніше надіслане повідомлення.
+            </summary>
+            <remarks>F13: новий потік для envelope.EditMessage.</remarks>
+        </member>
+        <member name="P:SignalCli.Interfaces.Signal.ISignalEventService.RemoteDeletes">
+            <summary>
+            Потік подій віддаленого видалення повідомлень.
+            </summary>
+            <remarks>F13: новий потік для DataMessage.RemoteDelete.</remarks>
+        </member>
         <member name="T:SignalCli.Interfaces.Signal.ISignalGroups">
             <summary>
             Сервіс для роботи з групами Signal.
@@ -745,6 +775,28 @@
             перш ніж процес буде завершено примусово (у секундах).
             </summary>
         </member>
+        <member name="P:SignalCli.Models.Config.RequestTimeoutSeconds">
+            <summary>
+            Максимальний час очікування на відповідь JSON-RPC запиту (у секундах).
+            </summary>
+            <remarks>
+            Кожен запит обмежується цим таймаутом; за його перевищення таск
+            фолтиться <see cref="T:System.TimeoutException"/>, що відрізняється від
+            <see cref="T:System.OperationCanceledException"/> ініційованого викликачем.
+            За замовчуванням 30 с.
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.Config.RestartWindowSeconds">
+            <summary>
+            Вікно стабільності, після якого лічильник перезапусків скидається в 0 (у секундах).
+            </summary>
+            <remarks>
+            Якщо процес залишається у стані Running протягом цього інтервалу,
+            "бюджет" перезапусків (<see cref="P:SignalCli.Models.Config.MaxRestartAttempts"/>) відновлюється
+            — щоб поодинокі транзитивні збої за тривалу роботу не вимикали авто-рестарт назавжди.
+            За замовчуванням 60 с.
+            </remarks>
+        </member>
         <member name="P:SignalCli.Models.Config.AppHome">
             <summary>
             Головна директорія програми.
@@ -762,11 +814,21 @@
             <summary>
             Шлях до файлу логу Signal CLI.
             </summary>
+            <remarks>
+            За замовчуванням (через <see cref="M:SignalCli.Models.Config.CreateDefault"/>) обчислюється
+            як <c>Path.Combine(AppHome, "signal.log")</c> — змінення <see cref="P:SignalCli.Models.Config.AppHome"/>
+            автоматично переносить лог-файл.
+            </remarks>
         </member>
         <member name="P:SignalCli.Models.Config.StoragePathCli">
             <summary>
             Шлях до директорії з даними Signal CLI.
             </summary>
+            <remarks>
+            За замовчуванням (через <see cref="M:SignalCli.Models.Config.CreateDefault"/>) обчислюється
+            як <c>Path.Combine(AppHome, "SignalCliStorageData")</c> — змінення
+            <see cref="P:SignalCli.Models.Config.AppHome"/> автоматично переносить сховище даних.
+            </remarks>
         </member>
         <member name="P:SignalCli.Models.Config.JavaExecutable">
             <summary>
@@ -858,7 +920,8 @@
         </member>
         <member name="P:SignalCli.Models.Rpc.JsonRpcError.Data">
             <summary>
-            Додаткові дані про помилку.
+            Додаткові дані про помилку (опціонально). Залишаємо як <see cref="T:System.Text.Json.JsonElement"/>?,
+            щоб STJ source-gen не падав на нетипізованому <c>object</c> (H.20/F20).
             </summary>
         </member>
         <member name="T:SignalCli.Models.Rpc.JsonRpcNotificationRaw">
@@ -2549,6 +2612,86 @@
         <member name="P:SignalCli.Models.Signal.Events.BaseSignalEventArgs.ServerDeliveredTimestamp">
             <summary>Часова мітка доставки сервером.</summary>
         </member>
+        <member name="T:SignalCli.Models.Signal.Events.EditEventArgs">
+            <summary>
+            Аргументи події «редагування повідомлення» — відправник відредагував раніше надіслане повідомлення;
+            конверт несе <see cref="T:SignalCli.Models.Signal.JsonEditMessage"/> із посиланням на оригінал та новими даними.
+            </summary>
+            <param name="SubscriptionId">Ідентифікатор підписки.</param>
+            <param name="Account">Ідентифікатор облікового запису одержувача.</param>
+            <param name="EditMessage">Повне редагування з новим вмістом і часовою міткою цільового повідомлення.</param>
+            <param name="Source">Загальний ідентифікатор джерела повідомлення.</param>
+            <param name="SourceNumber">Номер телефону відправника.</param>
+            <param name="SourceUuid">UUID відправника.</param>
+            <param name="SourceName">Ім'я відправника.</param>
+            <param name="SourceDevice">Ідентифікатор пристрою відправника.</param>
+            <param name="Timestamp">Часова мітка повідомлення.</param>
+            <param name="ServerReceivedTimestamp">Часова мітка отримання сервером.</param>
+            <param name="ServerDeliveredTimestamp">Часова мітка доставки сервером.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Events.EditEventArgs.#ctor(System.Int32,System.String,SignalCli.Models.Signal.JsonEditMessage,System.String,System.String,System.String,System.String,System.Nullable{System.Int32},System.Int64,System.Int64,System.Int64)">
+            <summary>
+            Аргументи події «редагування повідомлення» — відправник відредагував раніше надіслане повідомлення;
+            конверт несе <see cref="T:SignalCli.Models.Signal.JsonEditMessage"/> із посиланням на оригінал та новими даними.
+            </summary>
+            <param name="SubscriptionId">Ідентифікатор підписки.</param>
+            <param name="Account">Ідентифікатор облікового запису одержувача.</param>
+            <param name="EditMessage">Повне редагування з новим вмістом і часовою міткою цільового повідомлення.</param>
+            <param name="Source">Загальний ідентифікатор джерела повідомлення.</param>
+            <param name="SourceNumber">Номер телефону відправника.</param>
+            <param name="SourceUuid">UUID відправника.</param>
+            <param name="SourceName">Ім'я відправника.</param>
+            <param name="SourceDevice">Ідентифікатор пристрою відправника.</param>
+            <param name="Timestamp">Часова мітка повідомлення.</param>
+            <param name="ServerReceivedTimestamp">Часова мітка отримання сервером.</param>
+            <param name="ServerDeliveredTimestamp">Часова мітка доставки сервером.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Events.EditEventArgs.EditMessage">
+            <summary>Повне редагування з новим вмістом і часовою міткою цільового повідомлення.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Events.QuoteEventArgs">
+            <summary>
+            Аргументи події «вхідна цитата» (повідомлення містить лише <see cref="P:SignalCli.Models.Signal.JsonDataMessage.Quote"/>
+            без власного тексту, реакції, стікера чи вкладень).
+            </summary>
+            <remarks>
+            Раніше такі повідомлення класифікувалися як "unknown" і відкидалися; тепер вони мають власний потік.
+            </remarks>
+            <param name="SubscriptionId">Ідентифікатор підписки.</param>
+            <param name="Account">Ідентифікатор облікового запису одержувача.</param>
+            <param name="DataMessage">Повний DataMessage (містить <see cref="P:SignalCli.Models.Signal.JsonDataMessage.Quote"/>).</param>
+            <param name="Source">Загальний ідентифікатор джерела повідомлення.</param>
+            <param name="SourceNumber">Номер телефону відправника.</param>
+            <param name="SourceUuid">UUID відправника.</param>
+            <param name="SourceName">Ім'я відправника.</param>
+            <param name="SourceDevice">Ідентифікатор пристрою відправника.</param>
+            <param name="Timestamp">Часова мітка повідомлення.</param>
+            <param name="ServerReceivedTimestamp">Часова мітка отримання сервером.</param>
+            <param name="ServerDeliveredTimestamp">Часова мітка доставки сервером.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Events.QuoteEventArgs.#ctor(System.Int32,System.String,SignalCli.Models.Signal.JsonDataMessage,System.String,System.String,System.String,System.String,System.Nullable{System.Int32},System.Int64,System.Int64,System.Int64)">
+            <summary>
+            Аргументи події «вхідна цитата» (повідомлення містить лише <see cref="P:SignalCli.Models.Signal.JsonDataMessage.Quote"/>
+            без власного тексту, реакції, стікера чи вкладень).
+            </summary>
+            <remarks>
+            Раніше такі повідомлення класифікувалися як "unknown" і відкидалися; тепер вони мають власний потік.
+            </remarks>
+            <param name="SubscriptionId">Ідентифікатор підписки.</param>
+            <param name="Account">Ідентифікатор облікового запису одержувача.</param>
+            <param name="DataMessage">Повний DataMessage (містить <see cref="P:SignalCli.Models.Signal.JsonDataMessage.Quote"/>).</param>
+            <param name="Source">Загальний ідентифікатор джерела повідомлення.</param>
+            <param name="SourceNumber">Номер телефону відправника.</param>
+            <param name="SourceUuid">UUID відправника.</param>
+            <param name="SourceName">Ім'я відправника.</param>
+            <param name="SourceDevice">Ідентифікатор пристрою відправника.</param>
+            <param name="Timestamp">Часова мітка повідомлення.</param>
+            <param name="ServerReceivedTimestamp">Часова мітка отримання сервером.</param>
+            <param name="ServerDeliveredTimestamp">Часова мітка доставки сервером.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Events.QuoteEventArgs.DataMessage">
+            <summary>Повний DataMessage (містить <see cref="P:SignalCli.Models.Signal.JsonDataMessage.Quote"/>).</summary>
+        </member>
         <member name="T:SignalCli.Models.Signal.Events.ReactionEventArgs">
             <summary>
             Аргументи події реакції на повідомлення.
@@ -2634,6 +2777,43 @@
         </member>
         <member name="P:SignalCli.Models.Signal.Events.ReceiptEventArgs.Receipt">
             <summary>Об'єкт з даними квитанції.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Events.RemoteDeleteEventArgs">
+            <summary>
+            Аргументи події «віддалене видалення повідомлення» — відправник видалив у себе раніше
+            надіслане повідомлення; одержувач має його прибрати з UI.
+            </summary>
+            <param name="SubscriptionId">Ідентифікатор підписки.</param>
+            <param name="Account">Ідентифікатор облікового запису одержувача.</param>
+            <param name="RemoteDelete">Інформація про повідомлення, що видаляється.</param>
+            <param name="Source">Загальний ідентифікатор джерела повідомлення.</param>
+            <param name="SourceNumber">Номер телефону відправника.</param>
+            <param name="SourceUuid">UUID відправника.</param>
+            <param name="SourceName">Ім'я відправника.</param>
+            <param name="SourceDevice">Ідентифікатор пристрою відправника.</param>
+            <param name="Timestamp">Часова мітка повідомлення.</param>
+            <param name="ServerReceivedTimestamp">Часова мітка отримання сервером.</param>
+            <param name="ServerDeliveredTimestamp">Часова мітка доставки сервером.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Events.RemoteDeleteEventArgs.#ctor(System.Int32,System.String,SignalCli.Models.Signal.JsonRemoteDelete,System.String,System.String,System.String,System.String,System.Nullable{System.Int32},System.Int64,System.Int64,System.Int64)">
+            <summary>
+            Аргументи події «віддалене видалення повідомлення» — відправник видалив у себе раніше
+            надіслане повідомлення; одержувач має його прибрати з UI.
+            </summary>
+            <param name="SubscriptionId">Ідентифікатор підписки.</param>
+            <param name="Account">Ідентифікатор облікового запису одержувача.</param>
+            <param name="RemoteDelete">Інформація про повідомлення, що видаляється.</param>
+            <param name="Source">Загальний ідентифікатор джерела повідомлення.</param>
+            <param name="SourceNumber">Номер телефону відправника.</param>
+            <param name="SourceUuid">UUID відправника.</param>
+            <param name="SourceName">Ім'я відправника.</param>
+            <param name="SourceDevice">Ідентифікатор пристрою відправника.</param>
+            <param name="Timestamp">Часова мітка повідомлення.</param>
+            <param name="ServerReceivedTimestamp">Часова мітка отримання сервером.</param>
+            <param name="ServerDeliveredTimestamp">Часова мітка доставки сервером.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Events.RemoteDeleteEventArgs.RemoteDelete">
+            <summary>Інформація про повідомлення, що видаляється.</summary>
         </member>
         <member name="T:SignalCli.Models.Signal.Events.SignalEventArgs">
             <summary>
@@ -3104,6 +3284,54 @@
         <member name="P:SignalCli.Models.Signal.Groups.Member.Uuid">
             <summary>Унікальний ідентифікатор користувача.</summary>
         </member>
+        <member name="T:SignalCli.Models.Signal.Message.AttachmentMessageOptions">
+            <summary>Опції для відправки повідомлення з вкладеннями. Створюється через <see cref="T:SignalCli.Models.Signal.Message.AttachmentMessageOptions.Builder"/>.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.AttachmentMessageOptions.Account">
+            <summary>Номер акаунту-відправника.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.AttachmentMessageOptions.Recipients">
+            <summary>Один або кілька отримувачів.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.AttachmentMessageOptions.Message">
+            <summary>Опціональне тіло повідомлення (підпис до вкладень).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.AttachmentMessageOptions.Attachments">
+            <summary>Список вкладень для відправки.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.AttachmentMessageOptions.UseStyle">
+            <summary>Чи парсити markdown-стилізацію в тексті.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.AttachmentMessageOptions.Mentions">
+            <summary>Згадки користувачів у тексті.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.AttachmentMessageOptions.CancellationToken">
+            <summary>Токен скасування відправки.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Message.AttachmentMessageOptions.Builder">
+            <summary>Будівельник <see cref="T:SignalCli.Models.Signal.Message.AttachmentMessageOptions"/>.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.AttachmentMessageOptions.Builder.#ctor(System.String,System.Collections.Generic.List{SignalCli.Interfaces.Signal.IRecipient},System.Collections.Generic.List{SignalCli.Interfaces.FileSystem.IAttachmentEntry})">
+            <summary>Створює будівельник з обов'язковими акаунтом, отримувачами та списком вкладень.</summary>
+            <param name="account">Номер акаунту-відправника.</param>
+            <param name="recipients">Отримувачі.</param>
+            <param name="attachments">Вкладення.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.AttachmentMessageOptions.Builder.WithMessage(System.String)">
+            <summary>Додати опціональний текст-підпис до вкладень.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.AttachmentMessageOptions.Builder.UseStyle">
+            <summary>Увімкнути парсинг markdown-стилізації тексту.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.AttachmentMessageOptions.Builder.WithMentions(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Додати згадки користувачів.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.AttachmentMessageOptions.Builder.WithCancellationToken(System.Threading.CancellationToken)">
+            <summary>Задати токен скасування.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.AttachmentMessageOptions.Builder.Build">
+            <summary>Будує <see cref="T:SignalCli.Models.Signal.Message.AttachmentMessageOptions"/>.</summary>
+        </member>
         <member name="T:SignalCli.Models.Signal.Message.GroupRecipient">
             <summary>
             Отримувач повідомлення типу "група".
@@ -3350,6 +3578,102 @@
         </member>
         <member name="P:SignalCli.Models.Signal.Message.SendMessageResult.Type">
             <summary>Тип результату (наприклад, "SUCCESS", "ERROR").</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Message.StickerMessageOptions">
+            <summary>Опції для відправки стікера. Створюється через <see cref="T:SignalCli.Models.Signal.Message.StickerMessageOptions.Builder"/>.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.StickerMessageOptions.Account">
+            <summary>Номер акаунту-відправника.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.StickerMessageOptions.Recipients">
+            <summary>Один або кілька отримувачів.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.StickerMessageOptions.Sticker">
+            <summary>Ідентифікатор стікера у форматі signal-cli (packId:stickerId).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.StickerMessageOptions.Mentions">
+            <summary>Згадки користувачів (рідкісне використання для стікерів).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.StickerMessageOptions.CancellationToken">
+            <summary>Токен скасування.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Message.StickerMessageOptions.Builder">
+            <summary>Будівельник <see cref="T:SignalCli.Models.Signal.Message.StickerMessageOptions"/>.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.StickerMessageOptions.Builder.#ctor(System.String,System.Collections.Generic.List{SignalCli.Interfaces.Signal.IRecipient},System.String)">
+            <summary>Створює будівельник з обов'язковими акаунтом, отримувачами та ідентифікатором стікера.</summary>
+            <param name="account">Номер акаунту-відправника.</param>
+            <param name="recipients">Отримувачі.</param>
+            <param name="sticker">Ідентифікатор стікера.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.StickerMessageOptions.Builder.WithMentions(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Додати згадки користувачів.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.StickerMessageOptions.Builder.WithCancellationToken(System.Threading.CancellationToken)">
+            <summary>Задати токен скасування.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.StickerMessageOptions.Builder.Build">
+            <summary>Будує <see cref="T:SignalCli.Models.Signal.Message.StickerMessageOptions"/>.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Message.TextMessageOptions">
+            <summary>
+            Опції для відправки текстового повідомлення Signal.
+            Створюється через <see cref="T:SignalCli.Models.Signal.Message.TextMessageOptions.Builder"/>.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.TextMessageOptions.Account">
+            <summary>Номер акаунту-відправника.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.TextMessageOptions.Recipients">
+            <summary>Один або кілька отримувачів (користувачі або одна група).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.TextMessageOptions.Message">
+            <summary>Тіло повідомлення.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.TextMessageOptions.UseStyle">
+            <summary>Чи парсити markdown-подібну стилізацію (*курсив*, **жирний**, `код`, ~закреслений~, ||спойлер||).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.TextMessageOptions.Mentions">
+            <summary>Згадки (UUID/номери, на які слід посилатися у тексті).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.TextMessageOptions.PreviewUrl">
+            <summary>URL у попередньому перегляді посилання.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.TextMessageOptions.PreviewTitle">
+            <summary>Заголовок попереднього перегляду посилання.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.TextMessageOptions.PreviewDescription">
+            <summary>Опис попереднього перегляду посилання.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.TextMessageOptions.PreviewImage">
+            <summary>Зображення попереднього перегляду посилання (шлях або URI).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.TextMessageOptions.CancellationToken">
+            <summary>Токен скасування відправлення.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Message.TextMessageOptions.Builder">
+            <summary>Будівельник <see cref="T:SignalCli.Models.Signal.Message.TextMessageOptions"/>.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.TextMessageOptions.Builder.#ctor(System.String,System.Collections.Generic.List{SignalCli.Interfaces.Signal.IRecipient},System.String)">
+            <summary>Створює будівельник з обов'язковими параметрами акаунту, отримувачів та тексту.</summary>
+            <param name="account">Номер акаунту-відправника.</param>
+            <param name="recipients">Отримувачі.</param>
+            <param name="message">Тіло повідомлення.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.TextMessageOptions.Builder.UseStyle">
+            <summary>Увімкнути парсинг markdown-стилізації тексту.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.TextMessageOptions.Builder.WithMentions(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Додати згадки користувачів.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.TextMessageOptions.Builder.WithPreview(System.String,System.String,System.String,System.String)">
+            <summary>Додати попередній перегляд посилання.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.TextMessageOptions.Builder.WithCancellationToken(System.Threading.CancellationToken)">
+            <summary>Задати токен скасування відправки.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.TextMessageOptions.Builder.Build">
+            <summary>Будує <see cref="T:SignalCli.Models.Signal.Message.TextMessageOptions"/>.</summary>
         </member>
         <member name="T:SignalCli.Models.Signal.Message.UserRecipient">
             <summary>
@@ -3807,6 +4131,11 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.NullableJsonElement">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.Int32">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
@@ -3823,11 +4152,6 @@
             </summary>
         </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.NullableInt64">
-            <summary>
-            Defines the source generated JSON serialization contract metadata for a given type.
-            </summary>
-        </member>
-        <member name="P:SignalCli.Serialization.SignalJsonContext.Object">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -3866,23 +4190,75 @@
         <member name="M:SignalCli.Serialization.SignalJsonContext.GetTypeInfo(System.Type)">
             <inheritdoc/>
         </member>
+        <member name="T:SignalCli.Services.FileSystem.AttachmentEntry">
+            <summary>
+            Конкретна реалізація <see cref="T:SignalCli.Interfaces.FileSystem.IAttachmentEntry"/> для байтів у пам'яті +
+            допоміжна логіка для збереження в темп-файл / data-URI / визначення MIME-типу.
+            </summary>
+            <param name="fileName">Ім'я файлу (для розширення, MIME-резерву та <see cref="P:SignalCli.Services.FileSystem.AttachmentEntry.SafeFileName"/>).</param>
+            <param name="data">Сирі байти вкладення.</param>
+        </member>
+        <member name="M:SignalCli.Services.FileSystem.AttachmentEntry.#ctor(System.String,System.Byte[])">
+            <summary>
+            Конкретна реалізація <see cref="T:SignalCli.Interfaces.FileSystem.IAttachmentEntry"/> для байтів у пам'яті +
+            допоміжна логіка для збереження в темп-файл / data-URI / визначення MIME-типу.
+            </summary>
+            <param name="fileName">Ім'я файлу (для розширення, MIME-резерву та <see cref="P:SignalCli.Services.FileSystem.AttachmentEntry.SafeFileName"/>).</param>
+            <param name="data">Сирі байти вкладення.</param>
+        </member>
+        <member name="P:SignalCli.Services.FileSystem.AttachmentEntry.FileName">
+            <summary>Оригінальне ім'я файлу (як передано конструктору).</summary>
+        </member>
+        <member name="P:SignalCli.Services.FileSystem.AttachmentEntry.Data">
+            <summary>Сирі байти вкладення.</summary>
+        </member>
+        <member name="P:SignalCli.Services.FileSystem.AttachmentEntry.FilePath">
+            <summary>Шлях до тимчасового файлу (заповнюється <see cref="M:SignalCli.Services.FileSystem.AttachmentEntry.SaveToTempFile"/>).</summary>
+        </member>
+        <member name="P:SignalCli.Services.FileSystem.AttachmentEntry.MimeType">
+            <summary>Визначений MIME-тип вкладення (за сигнатурою або розширенням).</summary>
+        </member>
         <member name="P:SignalCli.Services.FileSystem.AttachmentEntry.SafeFileName">
             <summary>
             Безпечне ім'я файлу без компонентів шляху (захист від path traversal).
             Відкидає каталоги та послідовності "../"; за порожнього результату — "attachment".
             </summary>
         </member>
+        <member name="M:SignalCli.Services.FileSystem.AttachmentEntry.ToDataUri">
+            <summary>
+            Будує data-URI з base64-кодованими байтами (інлайн-варіант передачі вкладення).
+            </summary>
+        </member>
+        <member name="M:SignalCli.Services.FileSystem.AttachmentEntry.SaveToTempFile">
+            <summary>
+            Зберігає вкладення в окрему тимчасову директорію (Path.GetTempPath() + GUID)
+            під безпечним ім'ям файлу. <see cref="P:SignalCli.Services.FileSystem.AttachmentEntry.FilePath"/> після успішного збереження
+            містить повний шлях.
+            </summary>
+        </member>
+        <member name="M:SignalCli.Services.FileSystem.AttachmentEntry.DeleteTempFile">
+            <summary>
+            Видаляє тимчасовий файл (якщо його було створено через <see cref="M:SignalCli.Services.FileSystem.AttachmentEntry.SaveToTempFile"/>)
+            разом із його окремою директорією; обнуляє <see cref="P:SignalCli.Services.FileSystem.AttachmentEntry.FilePath"/>.
+            </summary>
+        </member>
         <member name="T:SignalCli.Services.Rpc.JsonRpcClient">
             <summary>
             Реалізація IJsonRpcClient — відправка запитів, отримання повідомлень.
             </summary>
+            <remarks>
+            Гарантує обмежений час життя запитів (<see cref="P:SignalCli.Models.Config.RequestTimeoutSeconds"/>)
+            та коректний lifecycle читачів stdout/stderr: цикли скасовуються та чекаються до
+            завершення на зміні <see cref="T:SignalCli.Models.SignalCli.StreamPair"/> й при <see cref="M:SignalCli.Services.Rpc.JsonRpcClient.DisposeAsync"/>.
+            </remarks>
         </member>
-        <member name="M:SignalCli.Services.Rpc.JsonRpcClient.#ctor(Microsoft.Extensions.Logging.ILogger{SignalCli.Services.Rpc.JsonRpcClient},SignalCli.Interfaces.SignalCli.IStreamPairProvider)">
+        <member name="M:SignalCli.Services.Rpc.JsonRpcClient.#ctor(Microsoft.Extensions.Logging.ILogger{SignalCli.Services.Rpc.JsonRpcClient},SignalCli.Interfaces.SignalCli.IStreamPairProvider,SignalCli.Models.Config)">
             <summary>
             Створює новий екземпляр JSON-RPC клієнта.
             </summary>
             <param name="logger">Логер для запису діагностичної інформації.</param>
             <param name="streamProvider">Постачальник потоків для взаємодії з зовнішнім процесом.</param>
+            <param name="config">Конфігурація — для отримання <see cref="P:SignalCli.Models.Config.RequestTimeoutSeconds"/>.</param>
         </member>
         <member name="P:SignalCli.Services.Rpc.JsonRpcClient.Notifications">
             <summary>
@@ -3895,9 +4271,21 @@
             </summary>
             <param name="pair">Нова пара потоків або null, якщо потоки стали недоступні.</param>
         </member>
+        <member name="M:SignalCli.Services.Rpc.JsonRpcClient.StopReadersSync">
+            <summary>
+            Зупиняє поточні читачі stdout/stderr: скасовує токен і чекає на завершення задач
+            (з обмеженим таймаутом, щоб гарантовано не залипнути в OnStreamPairChanged).
+            </summary>
+        </member>
+        <member name="M:SignalCli.Services.Rpc.JsonRpcClient.StopReadersAsync">
+            <summary>
+            Асинхронний варіант <see cref="M:SignalCli.Services.Rpc.JsonRpcClient.StopReadersSync"/> — використовується у <see cref="M:SignalCli.Services.Rpc.JsonRpcClient.DisposeAsync"/>.
+            </summary>
+        </member>
         <member name="M:SignalCli.Services.Rpc.JsonRpcClient.StartReading(SignalCli.Models.SignalCli.StreamPair)">
             <summary>
-            Починає читання з пари потоків.
+            Починає читання з пари потоків. Поточні читачі мають бути попередньо зупинені
+            (через <see cref="M:SignalCli.Services.Rpc.JsonRpcClient.StopReadersSync"/>).
             </summary>
             <param name="pair">Пара потоків для читання.</param>
         </member>
@@ -3919,6 +4307,8 @@
             <returns>Об'єкт відповіді від сервера JSON-RPC.</returns>
             <exception cref="T:System.ObjectDisposedException">Виникає, якщо об'єкт був утилізований.</exception>
             <exception cref="T:System.ArgumentNullException">Виникає, якщо параметри дорівнюють null.</exception>
+            <exception cref="T:System.TimeoutException">Виникає, якщо відповідь не отримано за <see cref="P:SignalCli.Models.Config.RequestTimeoutSeconds"/>.</exception>
+            <exception cref="T:System.OperationCanceledException">Виникає, якщо викликач скасував запит через <paramref name="cancellationToken"/>.</exception>
             <exception cref="T:System.InvalidOperationException">Виникає, якщо отримано нульову відповідь або не вдалося перетворити результат.</exception>
             <exception cref="T:SignalCli.Exceptions.JsonRpcException">Виникає, якщо сервер повернув помилку.</exception>
         </member>
@@ -3933,20 +4323,25 @@
         </member>
         <member name="M:SignalCli.Services.Rpc.JsonRpcClient.Dispose">
             <summary>
-            Виконує очищення та вивільнення ресурсів.
+            Виконує очищення та вивільнення ресурсів (синхронна версія —
+            делегує асинхронній і чекає на завершення).
             </summary>
+        </member>
+        <member name="M:SignalCli.Services.Rpc.JsonRpcClient.DisposeAsync">
+            <inheritdoc />
         </member>
         <member name="T:SignalCli.Services.Rpc.JsonRpcClientFactory">
             <summary>
             Фабрика для створення екземплярів IJsonRpcClient.
             </summary>
         </member>
-        <member name="M:SignalCli.Services.Rpc.JsonRpcClientFactory.#ctor(Microsoft.Extensions.Logging.ILogger{SignalCli.Services.Rpc.JsonRpcClient},SignalCli.Interfaces.SignalCli.IStreamPairProvider)">
+        <member name="M:SignalCli.Services.Rpc.JsonRpcClientFactory.#ctor(Microsoft.Extensions.Logging.ILogger{SignalCli.Services.Rpc.JsonRpcClient},SignalCli.Interfaces.SignalCli.IStreamPairProvider,SignalCli.Models.Config)">
             <summary>
             Створює новий екземпляр фабрики JSON-RPC клієнтів.
             </summary>
             <param name="logger">Логер для запису діагностичної інформації.</param>
             <param name="streamPairProvider">Постачальник потоків для взаємодії з зовнішнім процесом.</param>
+            <param name="config">Конфігурація — використовується для отримання таймауту запитів.</param>
         </member>
         <member name="M:SignalCli.Services.Rpc.JsonRpcClientFactory.CreateAsync(System.Threading.CancellationToken)">
             <summary>
@@ -4008,6 +4403,11 @@
             та <see cref="M:SignalCli.Services.SignalCli.ProcessStateManager.WaitForReadyAsync(System.Threading.CancellationToken)"/> (раніше це дублювалося окремими механізмами в hosted-сервісі).
             </summary>
         </member>
+        <member name="P:SignalCli.Services.SignalCli.ProcessStateManager.ProcessState">
+            <summary>
+            Потік (Rx) повних знімків стану процесу — стан + поточна пара потоків + остання помилка.
+            </summary>
+        </member>
         <member name="P:SignalCli.Services.SignalCli.ProcessStateManager.CurrentStreamPair">
             <summary>
             Поточна пара потоків (похідна від стану).
@@ -4024,6 +4424,25 @@
             </summary>
             <param name="cancellationToken">Токен скасування очікування.</param>
         </member>
+        <member name="M:SignalCli.Services.SignalCli.ProcessStateManager.#ctor(Microsoft.Extensions.Logging.ILogger{SignalCli.Services.SignalCli.ProcessStateManager})">
+            <summary>Створює менеджер стану в початковому стані <see cref="F:SignalCli.Models.SignalCli.ProcessState.NotStarted"/>.</summary>
+            <param name="logger">Логер для діагностики переходів стану.</param>
+        </member>
+        <member name="M:SignalCli.Services.SignalCli.ProcessStateManager.UpdateState(SignalCli.Models.SignalCli.ProcessState,SignalCli.Models.SignalCli.StreamPair,System.Exception)">
+            <summary>
+            Атомарно оновлює стан процесу і публікує новий знімок у потік <see cref="P:SignalCli.Services.SignalCli.ProcessStateManager.ProcessState"/>.
+            Запізнілі виклики після <see cref="M:SignalCli.Services.SignalCli.ProcessStateManager.Dispose"/> тихо ігноруються (F25/B.25).
+            </summary>
+            <param name="newState">Новий стан процесу.</param>
+            <param name="streamPair">Поточна пара потоків (за наявності — для Running).</param>
+            <param name="error">Помилка, що супроводжує перехід (для Failed).</param>
+        </member>
+        <member name="P:SignalCli.Services.SignalCli.ProcessStateManager.CurrentState">
+            <summary>Поточний стан процесу (потокобезпечне читання).</summary>
+        </member>
+        <member name="M:SignalCli.Services.SignalCli.ProcessStateManager.Dispose">
+            <inheritdoc />
+        </member>
         <member name="T:SignalCli.Services.SignalCli.ProcessWrapper">
             <summary>
             Обгортка для системного процесу, що реалізує інтерфейс IProcess.
@@ -4035,7 +4454,7 @@
             і при "зависаннях" ініціює перезапуск через SignalCliHostedService.
             </summary>
         </member>
-        <member name="M:SignalCli.Services.SignalCli.SignalCliHealthMonitor.#ctor(Microsoft.Extensions.Logging.ILogger{SignalCli.Services.SignalCli.SignalCliHealthMonitor},SignalCli.Interfaces.Rpc.IJsonRpcClientProvider,SignalCli.Services.SignalCli.SignalCliHostedService,SignalCli.Models.Config)">
+        <member name="M:SignalCli.Services.SignalCli.SignalCliHealthMonitor.#ctor(Microsoft.Extensions.Logging.ILogger{SignalCli.Services.SignalCli.SignalCliHealthMonitor},SignalCli.Interfaces.Rpc.IJsonRpcClientProvider,SignalCli.Services.SignalCli.SignalCliHostedService,SignalCli.Models.Config,System.TimeProvider)">
             <summary>
             Створює новий екземпляр монітора здоров'я Signal CLI.
             </summary>
@@ -4043,6 +4462,11 @@
             <param name="clientProvider">Постачальник JSON-RPC клієнта.</param>
             <param name="signalCliHostedService">Хостований сервіс Signal CLI.</param>
             <param name="config">Конфігурація Signal CLI.</param>
+            <param name="timeProvider">
+            Опціональний постачальник часу для <c>Task.Delay</c> та <c>CancelAfter</c>.
+            За замовчуванням <see cref="P:System.TimeProvider.System"/>; у тестах підставляється
+            <c>FakeTimeProvider</c>, щоб монітор-цикл працював у віртуальному часі.
+            </param>
         </member>
         <member name="M:SignalCli.Services.SignalCli.SignalCliHealthMonitor.StartAsync(System.Threading.CancellationToken)">
             <summary>
@@ -4089,7 +4513,8 @@
             <summary>
             HostedService, який:
             1) Запускає та зупиняє Signal-CLI при старті/зупинці застосунку.
-            2) Автоматично перезапускає його при аварійному завершенні (до MaxRestartAttempts).
+            2) Автоматично перезапускає його при аварійному завершенні (до MaxRestartAttempts
+               у межах вікна <see cref="P:SignalCli.Models.Config.RestartWindowSeconds"/>).
             3) Надає доступ до StreamPair через IStreamPairProvider.
             </summary>
         </member>
@@ -4162,12 +4587,31 @@
             Очищує ресурси, пов'язані з процесом.
             </summary>
         </member>
+        <member name="M:SignalCli.Services.SignalCli.SignalCliHostedService.ScheduleRestartWindowReset">
+            <summary>
+            Стартує таймер, який після <see cref="P:SignalCli.Models.Config.RestartWindowSeconds"/> у стані Running
+            скине лічильник перезапусків у 0. Викликається тільки тоді, коли процес щойно перейшов
+            у Running; будь-який наступний рестарт/стоп має скасувати цей таймер.
+            </summary>
+        </member>
+        <member name="M:SignalCli.Services.SignalCli.SignalCliHostedService.CancelRestartWindowTimer">
+            <summary>
+            Скасовує таймер вікна стабільності (якщо запущено).
+            </summary>
+        </member>
         <member name="M:SignalCli.Services.SignalCli.SignalCliHostedService.OnProcessExited(System.Object,System.EventArgs)">
             <summary>
-            Обробник події Exited процесу. Запускає автоматичний перезапуск за потреби.
+            Обробник події Exited процесу. Тонка async-void обгортка, що в try/catch делегує
+            важку логіку <see cref="M:SignalCli.Services.SignalCli.SignalCliHostedService.OnProcessExitedAsync"/> — щоб виняток не зриває хост.
             </summary>
             <param name="sender">Джерело події.</param>
             <param name="e">Аргументи події.</param>
+        </member>
+        <member name="M:SignalCli.Services.SignalCli.SignalCliHostedService.OnProcessExitedAsync">
+            <summary>
+            Реальна логіка обробки Exited: серіалізована через <see cref="F:SignalCli.Services.SignalCli.SignalCliHostedService._operationLock"/>,
+            щоб не змагатися з <see cref="M:SignalCli.Services.SignalCli.SignalCliHostedService.StopAsync(System.Threading.CancellationToken)"/> / <see cref="M:SignalCli.Services.SignalCli.SignalCliHostedService.ForceRestartAsync(System.Threading.CancellationToken)"/>.
+            </summary>
         </member>
         <member name="M:SignalCli.Services.SignalCli.SignalCliHostedService.Dispose">
             <summary>
@@ -4246,6 +4690,12 @@
             <param name="fileName">Опціональне ім'я файлу для визначення MIME-типу за розширенням.</param>
             <returns>MIME-тип у вигляді рядка.</returns>
         </member>
+        <member name="M:SignalCli.Utilities.MimeTypeHelper.MapIsoBmffBrand(System.String)">
+            <summary>
+            Визначає MIME-тип за "major brand" контейнера ISO-BMFF (offset 8..11).
+            </summary>
+            <param name="brand">4-літерний код типу контейнера.</param>
+        </member>
         <member name="M:SignalCli.Utilities.MimeTypeHelper.GetMimeType(System.IO.Stream,System.String)">
             <summary>
             Визначає MIME-тип, зчитуючи дані з потоку.
@@ -4276,6 +4726,12 @@
             Кортеж, що містить очищений текст (без маркерів стилів) та список інструкцій форматування
             у форматі "start:length:STYLE".
             </returns>
+        </member>
+        <member name="M:SignalCli.Utilities.TextStyleParser.MarkerForToken(SignalCli.Utilities.TextStyleParser.TokenType)">
+            <summary>
+            Літеральний маркер, який відповідає типу токена (для повернення в текст
+            при незакритому маркері — F18).
+            </summary>
         </member>
         <member name="M:SignalCli.Utilities.TextStyleParser.HandleToken(SignalCli.Utilities.TextStyleParser.TokenType)">
             <summary>

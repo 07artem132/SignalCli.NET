@@ -13,11 +13,11 @@ public class SignalCliHealthMonitorEdgeCaseTests : SignalCliHealthMonitorTestBas
         await service.StartAsync(CancellationToken.None);
         var monitor = CreateMonitor(service);
         await monitor.StartAsync(CancellationToken.None);
-        await Task.Delay(100);  // Даём время на запуск
+        await Task.Delay(100);  // Даємо час на запуск
 
         // Act & Assert
-        monitor.Dispose(); // Первый вызов
-        monitor.Dispose(); // Повторный вызов не должен бросать исключение
+        monitor.Dispose(); // Перший виклик
+        monitor.Dispose(); // Повторний виклик не повинен кидати винятку
 
         await service.StopAsync(CancellationToken.None);
     }
@@ -42,7 +42,7 @@ public class SignalCliHealthMonitorEdgeCaseTests : SignalCliHealthMonitorTestBas
             .Returns<string, VersionParameters, CancellationToken>(async (m, p, ct) => 
             {
                 pingCount++;
-                await Task.Delay(TimeSpan.FromSeconds(2), ct); // Используем переданный токен
+                await Task.Delay(TimeSpan.FromSeconds(2), ct); // Використовуємо переданий токен
                 return new VersionResponse("test");
             });
 
@@ -51,7 +51,7 @@ public class SignalCliHealthMonitorEdgeCaseTests : SignalCliHealthMonitorTestBas
         // Act
         await monitor.StartAsync(CancellationToken.None);
         
-        // Ждём до тех пор, пока не увидим Warning в логе или не истечет таймаут
+        // Чекаємо, доки не побачимо Warning у логах або не вичерпається таймаут
         var timeout = DateTime.UtcNow.AddSeconds(ServiceConfig.HealthCheckTimeoutSeconds*3);
         while (DateTime.UtcNow < timeout)
         {
@@ -67,7 +67,7 @@ public class SignalCliHealthMonitorEdgeCaseTests : SignalCliHealthMonitorTestBas
         }
 
         // Assert
-        Assert.True(pingCount > 0, "Ping должен быть вызван хотя бы раз");
+        Assert.True(pingCount > 0, "Ping має бути викликаний хоча б раз");
         VerifyErrorLog("Signal CLI не відповідає", Times.AtLeastOnce());
 
         await monitor.StopAsync(CancellationToken.None);
@@ -97,7 +97,7 @@ public class SignalCliHealthMonitorEdgeCaseTests : SignalCliHealthMonitorTestBas
 
         var monitor = CreateMonitor(service);
         await monitor.StartAsync(CancellationToken.None);
-        await Task.Delay(1500); // Даём время на первый пинг
+        await Task.Delay(1500); // Даємо час на перший пінг
 
         // Assert
         VerifyErrorLog("PingCliAsync: пінг CLI невдалий", Times.Once());

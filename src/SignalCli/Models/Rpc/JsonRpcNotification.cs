@@ -15,13 +15,13 @@ public record JsonRpcNotificationRaw
     /// Версія протоколу JSON-RPC.
     /// </summary>
     [JsonPropertyName("jsonrpc")]
-    public string JsonRpc { get; init; }
+    public string? JsonRpc { get; init; }
 
     /// <summary>
     /// Назва методу, по якому надійшло повідомлення.
     /// </summary>
     [JsonPropertyName("method")]
-    public string Method { get; init; }
+    public string? Method { get; init; }
 
     /// <summary>
     /// Параметри повідомлення у форматі JsonElement.
@@ -42,13 +42,13 @@ public record JsonRpcNotification<T>
     /// Версія протоколу JSON-RPC.
     /// </summary>
     [JsonPropertyName("jsonrpc")]
-    public string JsonRpc { get; init; }
+    public string? JsonRpc { get; init; }
 
     /// <summary>
     /// Назва методу, по якому надійшло повідомлення.
     /// </summary>
     [JsonPropertyName("method")]
-    public string Method { get; init; }
+    public string? Method { get; init; }
 
     /// <summary>
     /// Типізовані параметри повідомлення.

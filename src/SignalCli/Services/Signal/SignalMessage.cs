@@ -83,18 +83,25 @@ namespace SignalCli.Services.Signal
                     nameof(recipients));
             }
 
-            if (groupRecipients.Count > 1 && userRecipients.Count > 1)
+            // F8: змішування «1 група + N користувачів» раніше проходило цю перевірку
+            // (Count>1 && Count>1 — недосяжно для першого > 1), і signal-cli отримував
+            // некоректний send. Тепер відкидаємо БУДЬ-ЯКЕ змішування user+group в одному виклику.
+            if (groupRecipients.Count > 0 && userRecipients.Count > 0)
             {
-                throw new ArgumentException("Допускаэться лише один тип отримувача", nameof(recipients));
+                throw new ArgumentException(
+                    "Не можна змішувати отримувачів-користувачів і отримувачів-груп у одному повідомленні",
+                    nameof(recipients));
             }
 
             if ((quoteTimestamp != null || quoteAuthor != null || quoteMessage != null) &&
                 (quoteTimestamp == null || quoteAuthor == null || quoteMessage == null))
             {
+                // F24: ArgumentException.ParamName має бути одне ім'я параметра — не joined-list.
+                // Перелік невказаних полів кладемо в текст повідомлення.
                 throw new ArgumentException(
-                    "Для цитирования сообщения необходимо указать все три параметра: " +
-                    $"{nameof(quoteTimestamp)}, {nameof(quoteAuthor)} и {nameof(quoteMessage)}",
-                    string.Join(", ", nameof(quoteTimestamp), nameof(quoteAuthor), nameof(quoteMessage))
+                    "Для цитування повідомлення необхідно вказати всі три параметри: " +
+                    $"{nameof(quoteTimestamp)}, {nameof(quoteAuthor)} та {nameof(quoteMessage)}",
+                    nameof(quoteTimestamp)
                 );
             }
 
@@ -207,6 +214,8 @@ namespace SignalCli.Services.Signal
         /// </summary>
         public async Task<List<SendMessageResponse>> SendTextMessageAsync(TextMessageOptions options)
         {
+            // F12: явний guard замість NRE при доступі до options.Account.
+            ArgumentNullException.ThrowIfNull(options);
             var response = await SendUnifiedMessageAsync(
                 account: options.Account,
                 recipients: options.Recipients,
@@ -246,6 +255,8 @@ namespace SignalCli.Services.Signal
         /// </summary>
         public async Task<List<SendMessageResponse>> SendAttachmentAsync(AttachmentMessageOptions options)
         {
+            // F12: явний guard замість NRE при доступі до options.Account.
+            ArgumentNullException.ThrowIfNull(options);
             var response = await SendUnifiedMessageAsync(
                 account: options.Account,
                 recipients: options.Recipients,
@@ -284,6 +295,8 @@ namespace SignalCli.Services.Signal
         /// </summary>
         public async Task<List<SendMessageResponse>> SendStickerAsync(StickerMessageOptions options)
         {
+            // F12: явний guard замість NRE при доступі до options.Account.
+            ArgumentNullException.ThrowIfNull(options);
             var response = await SendUnifiedMessageAsync(
                 account: options.Account,
                 recipients: options.Recipients,

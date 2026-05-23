@@ -29,12 +29,12 @@ public class JsonRpcClientHostedServiceTests
         _clientFactoryMock = new Mock<IJsonRpcClientFactory>();
         _clientMock = new Mock<IJsonRpcClient>();
 
-        // По умолчанию при создании фабрика отдаёт _clientMock.Object
+        // За замовчуванням при створенні фабрика повертає _clientMock.Object
         _clientFactoryMock
             .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(_clientMock.Object);
 
-        // Когда вызываем InvokeMethodAsync("version", ...)
+        // Коли викликаємо InvokeMethodAsync("version", ...)
         _clientMock
             .Setup(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
                 "version",
@@ -46,7 +46,7 @@ public class JsonRpcClientHostedServiceTests
         _scsLoggerMock = new Mock<ILogger<Services.SignalCli.SignalCliHostedService>>();
         _processRunnerMock = new Mock<IProcessRunner>();
 
-        // Настраиваем, чтобы при запуске возвращался «фейковый» IProcess и StreamPair
+        // Налаштовуємо, щоб при запуску повертався «фейковий» IProcess і StreamPair
         _processRunnerMock
             .Setup(r => r.StartProcessWithHandle(It.IsAny<ProcessConfig>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() =>
@@ -69,7 +69,7 @@ public class JsonRpcClientHostedServiceTests
         var loggerPsMock = new Mock<ILogger<ProcessStateManager>>();
         _stateManager = new ProcessStateManager(loggerPsMock.Object);
 
-        // Конфиг, чтобы не упасть при BuildClasspath
+        // Конфіг, щоб не впасти при BuildClasspath
         var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir);
 
@@ -78,18 +78,18 @@ public class JsonRpcClientHostedServiceTests
             AppHome = tempDir,
             LibDirectory = "lib",
             JavaExecutable = "java",
-            // Чтобы не ждали реальных секунд...
+            // Щоб не чекали реальних секунд...
             RestartDelaySeconds = 0,
         };
 
-        // Создадим папку lib + фейковый jar
+        // Створимо папку lib + фейковий jar
         var libDir = Path.Combine(tempDir, "lib");
         Directory.CreateDirectory(libDir);
         File.WriteAllText(Path.Combine(libDir, "test1.jar"), "fake jar content");
     }
 
     /// <summary>
-    /// Создаёт реальный SignalCliHostedService с моками внутри.
+    /// Створює справжній SignalCliHostedService з моками всередині.
     /// </summary>
     private Services.SignalCli.SignalCliHostedService CreateSignalCliService()
     {
@@ -102,14 +102,14 @@ public class JsonRpcClientHostedServiceTests
     }
 
     /// <summary>
-    /// Создаёт JsonRpcClientHostedService, принимая реальный SCS.
+    /// Створює JsonRpcClientHostedService, приймаючи справжній SCS.
     /// </summary>
     private JsonRpcClientHostedService CreateJsonRpcClientHostedService(Services.SignalCli.SignalCliHostedService scs)
     {
         return new JsonRpcClientHostedService(
             _loggerMock.Object,
             _clientFactoryMock.Object,
-            scs // Реальный SCS (не мок!)
+            scs // Справжній SCS (не мок!)
         );
     }
 
@@ -118,30 +118,30 @@ public class JsonRpcClientHostedServiceTests
     {
         // Arrange
         var scs = CreateSignalCliService();
-        // Запускаем SCS → он создаст процесс и станет "Running"
+        // Запускаємо SCS → він створить процес і стане "Running"
         await scs.StartAsync(CancellationToken.None);
 
         var rpcService = CreateJsonRpcClientHostedService(scs);
 
         // Act
-        // Запускаем JsonRpcClientHostedService -> подождёт WaitForReadyAsync
+        // Запускаємо JsonRpcClientHostedService -> зачекає WaitForReadyAsync
         await rpcService.StartAsync(CancellationToken.None);
 
         // Assert
-        // 1) Проверим, что фабрика создала клиент
+        // 1) Перевіримо, що фабрика створила клієнт
         _clientFactoryMock.Verify(f => f.CreateAsync(It.IsAny<CancellationToken>()), Times.Once);
 
-        // 2) Проверим вызов "version"
+        // 2) Перевіримо виклик "version"
         _clientMock.Verify(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
                 "version",
                 It.IsAny<VersionParameters>(),
                 It.IsAny<CancellationToken>()),
             Times.Once);
 
-        // 3) Убедимся, что свойство Client теперь не null
+        // 3) Переконаємось, що властивість Client тепер не null
         Assert.NotNull(rpcService.Client);
 
-        // Также можно проверить логи
+        // Також можна перевірити логи
         _loggerMock.Verify(
             x => x.Log(
                 LogLevel.Information,
@@ -168,13 +168,13 @@ public class JsonRpcClientHostedServiceTests
         await rpcService.StopAsync(CancellationToken.None);
 
         // Assert
-        // Клиент должен освободиться
-        _clientMock.Verify(c => c.Dispose(), Times.Once);
+        // A.7: IJsonRpcClient тепер IAsyncDisposable — hosted service викликає саме DisposeAsync.
+        _clientMock.Verify(c => c.DisposeAsync(), Times.Once);
 
-        // Попытка получить rpcService.Client после StopAsync -> InvalidOperationException
+        // Спроба отримати rpcService.Client після StopAsync -> InvalidOperationException
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
-            // При обращении к Client выбросит
+            // При зверненні до Client кине виняток
             var _ = rpcService.Client;
             await Task.Yield();
         });
@@ -188,7 +188,7 @@ public class JsonRpcClientHostedServiceTests
         await scs.StartAsync(CancellationToken.None);
 
         var rpcService = CreateJsonRpcClientHostedService(scs);
-        // Асинхронный Dispose
+        // Асинхронний Dispose
         await rpcService.DisposeAsync();
 
         // Act & Assert

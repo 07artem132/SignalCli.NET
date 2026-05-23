@@ -73,11 +73,31 @@ public class TextStyleParserMarkerTests
     }
 
     [Fact]
-    public void Parse_UnclosedMarker_StripsMarkerNoRange()
+    public void Parse_UnclosedMarker_EmitsLiteralCharNoRange()
     {
+        // F18: незакритий маркер тепер повертається у текст як літерал (раніше — мовчки з'їдався).
         var (text, styles) = new TextStyleParser("*unclosed").Parse();
-        Assert.Equal("unclosed", text);
+        Assert.Equal("*unclosed", text);
         Assert.Empty(styles);
+    }
+
+    [Fact]
+    public void Parse_UnclosedBold_EmitsTwoLiteralChars()
+    {
+        // F18: дворівневий маркер ("**") теж повертається повністю.
+        var (text, styles) = new TextStyleParser("**bold-without-close").Parse();
+        Assert.Equal("**bold-without-close", text);
+        Assert.Empty(styles);
+    }
+
+    [Fact]
+    public void Parse_MixedClosedAndUnclosed_PreservesUnclosedLiteral()
+    {
+        // F18: один закритий, один незакритий — закрита частина перетворюється в style,
+        // незакрита повертає літерал у текст.
+        var (text, styles) = new TextStyleParser("*hi* world *tail").Parse();
+        Assert.Equal("hi world *tail", text);
+        Assert.Equal(new[] { "0:2:ITALIC" }, styles);
     }
 
     [Fact]

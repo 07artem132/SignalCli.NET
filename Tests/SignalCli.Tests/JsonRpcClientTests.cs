@@ -4,6 +4,7 @@ using Moq;
 using System.Text.Json;
 using SignalCli.Exceptions;
 using SignalCli.Interfaces.SignalCli;
+using SignalCli.Models;
 using SignalCli.Models.Rpc;
 using SignalCli.Models.Signal.Events;
 using SignalCli.Models.SignalCli;
@@ -35,19 +36,28 @@ public class JsonRpcClientTests
     }
 
     /// <summary>
-    /// Создаёт тестируемый JsonRpcClient с замоканным IStreamPairProvider.
+    /// Створює клієнт JsonRpcClient з замоканим IStreamPairProvider.
+    /// Дефолтний таймаут — великий, щоб тести з очікуванням відповіді не падали з TimeoutException.
     /// </summary>
-    private JsonRpcClient CreateClient()
+    private JsonRpcClient CreateClient(int requestTimeoutSeconds = 60)
     {
+        var config = new Config
+        {
+            AppHome = Path.GetTempPath(),
+            JavaExecutable = string.Empty,
+            LibDirectory = string.Empty,
+            RequestTimeoutSeconds = requestTimeoutSeconds
+        };
         return new JsonRpcClient(
             _loggerMock.Object,
-            _streamProviderMock.Object
+            _streamProviderMock.Object,
+            config
         );
     }
 
     /// <summary>
-    /// Генерирует новый <see cref="StreamPair"/> через OnNext(...).
-    /// Принимает на вход 3 объекта: (inputWriter, outputReader, errorReader).
+    /// Генерує нову <see cref="StreamPair"/> через OnNext(...).
+    /// Приймає на вхід 3 об'єкти: (inputWriter, outputReader, errorReader).
     /// </summary>
     private void PushStreamPair(StreamWriter input, StreamReader output, StreamReader error)
     {
@@ -57,7 +67,7 @@ public class JsonRpcClientTests
     }
 
     /// <summary>
-    /// Посылает в OnNext(null) - имитируя потерю текущего стрим-пара.
+    /// Надсилає в OnNext(null) — імітуючи втрату поточної стрім-пари.
     /// </summary>
     private void PushNullStreamPair()
     {
@@ -82,8 +92,8 @@ public class JsonRpcClientTests
         // Arrange
         var client = CreateClient();
 
-        // Создаём некий MemoryStream для input, output, error
-        //чтобы SendRequestAsync не падал на "No active stream pair".
+        // Створюємо MemoryStream для input, output, error,
+        // щоб SendRequestAsync не падав на "No active stream pair".
         var inputStream = new MemoryStream();
         var inputWriter = new StreamWriter(inputStream);
         var outputReader = new StreamReader(new MemoryStream());
@@ -92,10 +102,10 @@ public class JsonRpcClientTests
         // «Включаем» стрим-пару
         PushStreamPair(inputWriter, outputReader, errorReader);
 
-        // Запускаем запрос
+        // Запускаємо запит
         var invokeTask = client.InvokeMethodAsync<object, object>("testMethod", new { });
 
-        // Act — имитируем, что стрим-пара пропала
+        // Act — імітуємо, що стрім-пара зникла
         PushNullStreamPair();
 
         // Assert
@@ -109,7 +119,7 @@ public class JsonRpcClientTests
         // Arrange
         var client = CreateClient();
 
-        // Аналогично создаём MemoryStream для input, output, error
+        // Аналогічно створюємо MemoryStream для input, output, error
         var inputWriter = new StreamWriter(new MemoryStream());
         var outputReader = new StreamReader(new MemoryStream());
         var errorReader = new StreamReader(new MemoryStream());
@@ -130,19 +140,19 @@ public class JsonRpcClientTests
         // Arrange
         var client = CreateClient();
 
-        // Создаём MemoryStream'ы
+        // Створюємо MemoryStream'и
         var inputWriter = new StreamWriter(new MemoryStream());
         var outputReader = new StreamReader(new MemoryStream());
         var errorReader = new StreamReader(new MemoryStream());
         PushStreamPair(inputWriter, outputReader, errorReader);
 
-        // Запускаем запрос
+        // Запускаємо запит
         var invokeTask = client.InvokeMethodAsync<TestResponse, object>("someMethod", new { param = 123 });
 
-        // Имитация «ответа» с id=1 (если счётчик 0 => первый запрос → "1")
+        // Імітація «відповіді» з id=1 (якщо лічильник 0 => перший запит → "1")
         var json = @"{ ""id"": ""1"", ""result"": { ""Foo"": ""bar"" } }";
 
-        // Вызываем ProcessMessage(...) рефлексией, т.к. он приватный
+        // Викликаємо ProcessMessage(...) через рефлексію, бо він приватний
         CallProcessMessage(client, json);
 
         // Assert
@@ -208,7 +218,7 @@ public class JsonRpcClientTests
         // Arrange
         var client = CreateClient();
 
-        // Будем проверять, что в inputWriter «записался» JSON
+        // Перевірятимемо, що в inputWriter «записався» JSON
         var inputStream = new MemoryStream();
         var inputWriter = new StreamWriter(inputStream);
         var outputReader = new StreamReader(new MemoryStream());
@@ -218,10 +228,10 @@ public class JsonRpcClientTests
         // Act — отправляем запрос
         _ = client.InvokeMethodAsync<JsonElement, object>("myMethod", new { Hello = "world" });
 
-        // Дадим чуть времени, чтобы SendRequestAsync успел записать
+        // Даємо трохи часу, щоб SendRequestAsync встиг записати
         await Task.Delay(50);
 
-        // Assert: читаем из inputStream, смотрим что там
+        // Assert: читаємо з inputStream, дивимось, що там
         inputWriter.Flush(); // не забудьте сбросить буфер
         inputStream.Seek(0, SeekOrigin.Begin);
 
@@ -241,7 +251,74 @@ public class JsonRpcClientTests
             Times.Once);
     }
 
-    // Вспомогательный метод для приватного ProcessMessage(...)
+    [Fact]
+    public async Task A3_InvokeMethodAsync_SilentProcess_FaultsWithTimeoutException()
+    {
+        // A.3 (F1): процес живий, але мовчить — виклик має зафейлитись TimeoutException,
+        // а не висіти вічно. Користуємось дуже коротким таймаутом.
+        var client = CreateClient(requestTimeoutSeconds: 1);
+
+        var inputWriter = new StreamWriter(new MemoryStream());
+        var outputReader = new StreamReader(new MemoryStream());
+        var errorReader = new StreamReader(new MemoryStream());
+        PushStreamPair(inputWriter, outputReader, errorReader);
+
+        var invokeTask = client.InvokeMethodAsync<TestResponse, object>("silent", new { });
+
+        // Очікуємо точно TimeoutException у межах кількох таймаутів (бо є тонкі race-вікна).
+        var ex = await Assert.ThrowsAsync<TimeoutException>(async () =>
+            await invokeTask.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Contains("silent", ex.Message);
+    }
+
+    [Fact]
+    public async Task A3_InvokeMethodAsync_CallerCancel_DoesNotMaskAsTimeoutException()
+    {
+        // A.3 (F1) часткова: якщо callerCancel спрацював раніше за timeout,
+        // має вилетіти OperationCanceledException, а НЕ TimeoutException.
+        var client = CreateClient(requestTimeoutSeconds: 10);
+
+        var inputWriter = new StreamWriter(new MemoryStream());
+        var outputReader = new StreamReader(new MemoryStream());
+        var errorReader = new StreamReader(new MemoryStream());
+        PushStreamPair(inputWriter, outputReader, errorReader);
+
+        using var cts = new CancellationTokenSource();
+        var invokeTask = client.InvokeMethodAsync<TestResponse, object>("cancel-me", new { }, cts.Token);
+        await Task.Delay(50);
+        cts.Cancel();
+
+        await Assert.ThrowsAsync<TaskCanceledException>(() => invokeTask);
+    }
+
+    [Fact]
+    public async Task A8_OnStreamPairChanged_StopsPriorReaderBeforeStartingNew()
+    {
+        // A.8 (F4): після push другої пари, читач першої має бути зупинений
+        // (а не залишений із попереднім токеном). Перевіряємо через те, що
+        // після другого PushStreamPair виклик на «старій» парі (відповідь з id=2)
+        // не доходить, бо pending-запити чистяться, а нові читачі читають з нової пари.
+        var client = CreateClient();
+
+        // Перша пара
+        var inputA = new StreamWriter(new MemoryStream());
+        var outA = new StreamReader(new MemoryStream());
+        var errA = new StreamReader(new MemoryStream());
+        PushStreamPair(inputA, outA, errA);
+
+        // Pending запит на першій парі.
+        var first = client.InvokeMethodAsync<TestResponse, object>("first", new { });
+
+        // Друга пара — push має скасувати pending.
+        var inputB = new StreamWriter(new MemoryStream());
+        var outB = new StreamReader(new MemoryStream());
+        var errB = new StreamReader(new MemoryStream());
+        PushStreamPair(inputB, outB, errB);
+
+        await Assert.ThrowsAsync<TaskCanceledException>(() => first);
+    }
+
+    // Допоміжний метод для приватного ProcessMessage(...)
     private static void CallProcessMessage(JsonRpcClient client, string json)
     {
         var methodInfo = typeof(JsonRpcClient)

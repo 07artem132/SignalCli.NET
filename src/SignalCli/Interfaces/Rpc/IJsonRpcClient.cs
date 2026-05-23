@@ -12,6 +12,7 @@
 public interface IJsonRpcClient :
     IJsonRpcSender,
     IJsonRpcNotificationReceiver,
+    IAsyncDisposable,
     IDisposable
 {
 }

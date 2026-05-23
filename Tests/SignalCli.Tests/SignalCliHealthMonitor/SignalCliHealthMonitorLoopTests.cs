@@ -10,15 +10,25 @@ public class SignalCliHealthMonitorLoopTests : SignalCliHealthMonitorTestBase
     [Fact]
     public async Task MonitorLoop_WhenPingFails_ShouldForceRestart()
     {
-        // Arrange
+        // G.14: TaskCompletionSource замість Stopwatch-вікон + ранній stop,
+        // щоб loop із HealthCheckIntervalSeconds=0 не намолочував тисячі ітерацій
+        // (OOM-ризик у тест-хості).
         var service = CreateHostedService();
         await service.StartAsync(CancellationToken.None);
         Assert.Equal(ProcessState.Running, StateManager.CurrentState);
 
-        var pingCount = 0;
         var streamPairs = new List<StreamPair?>();
+        var secondPairSeen = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var subscription = service.StreamPairChanged
-            .Subscribe(sp => streamPairs.Add(sp));
+            .Subscribe(sp =>
+            {
+                lock (streamPairs)
+                {
+                    streamPairs.Add(sp);
+                    if (streamPairs.Count(s => s != null) >= 2)
+                        secondPairSeen.TrySetResult(true);
+                }
+            });
 
         JsonRpcClientMock
             .Setup(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
@@ -26,33 +36,20 @@ public class SignalCliHealthMonitorLoopTests : SignalCliHealthMonitorTestBase
                 It.IsAny<VersionParameters>(),
                 It.IsAny<CancellationToken>()
             ))
-            .Callback(() => pingCount++)
             .ReturnsAsync(new VersionResponse(""));
 
         var monitor = CreateMonitor(service);
 
-        // Act
         await monitor.StartAsync(CancellationToken.None);
-        
-        // Ждём до тех пор пока не получим два StreamPair или не истечет таймаут
-        var timeout = DateTime.UtcNow.AddSeconds(5);
-        while (DateTime.UtcNow < timeout && streamPairs.Count(sp => sp != null) < 2)
-        {
-            await Task.Delay(100);
-        }
-
-        // Assert
-        Assert.True(pingCount > 0, "PingCliAsync должен быть вызван");
-        VerifyWarningLog("Signal CLI не відповідає", Times.AtLeastOnce());
-
-        var nonNullCount = streamPairs.Count(sp => sp != null);
+        await secondPairSeen.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await monitor.StopAsync(CancellationToken.None);
         await service.StopAsync(CancellationToken.None);
-        
-        Assert.True(
-            nonNullCount >= 2,
-            $"Ожидалось как минимум 2 не-null StreamPair, получено {nonNullCount}"
-        );
+
+        VerifyWarningLog("Signal CLI не відповідає", Times.AtLeastOnce());
+        int nonNullCount;
+        lock (streamPairs) { nonNullCount = streamPairs.Count(s => s != null); }
+        Assert.True(nonNullCount >= 2,
+            $"Очікувалося ≥ 2 не-null StreamPair, отримано {nonNullCount}");
     }
 
 
@@ -95,6 +92,12 @@ public class SignalCliHealthMonitorLoopTests : SignalCliHealthMonitorTestBase
         var service = CreateHostedService();
         await service.StartAsync(CancellationToken.None);
 
+        // G.14: знімаємо тіньове очікування «рівно 1 пінг» — TestBase задає
+        // HealthCheckIntervalSeconds=0, тож монітор може встигнути виконати >1 ітерації
+        // за 500мс. Достатньо переконатися, що пінг бодай раз спрацював і викликаний
+        // ForceRestartAsync відмалював відповідні логи. ITC-stop сигналом — фіксація
+        // самого факту через TaskCompletionSource (без Stopwatch-вікон і race-у).
+        var pingObserved = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var pingCount = 0;
         JsonRpcClientMock
             .Setup(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
@@ -102,92 +105,131 @@ public class SignalCliHealthMonitorLoopTests : SignalCliHealthMonitorTestBase
                 It.IsAny<VersionParameters>(),
                 It.IsAny<CancellationToken>()
             ))
-            .Callback(() => pingCount++)
+            .Callback(() =>
+            {
+                Interlocked.Increment(ref pingCount);
+                pingObserved.TrySetResult(true);
+            })
             .ThrowsAsync(new InvalidOperationException("RPC error"));
 
         var monitor = CreateMonitor(service);
 
         // Act
         await monitor.StartAsync(CancellationToken.None);
-        
-        // Ждём первого пинга и ошибки
-        await Task.Delay(500);
-        
+
+        // Чекаємо подію (а не довільний sleep) із розумним fallback-таймаутом.
+        await pingObserved.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // Зупиняємо монітор ВІДРАЗУ, поки лічильник не накопичує тисячі ітерацій (OOM-ризик).
+        await monitor.StopAsync(CancellationToken.None);
+
         // Assert
-        Assert.Equal(1, pingCount);
+        Assert.True(pingCount >= 1, $"Expected at least one ping, got {pingCount}");
         VerifyWarningLog("Signal CLI не відповідає", Times.AtLeastOnce());
         VerifyErrorLog("PingCliAsync: пінг CLI невдалий", Times.AtLeastOnce());
 
-        await monitor.StopAsync(CancellationToken.None);
         await service.StopAsync(CancellationToken.None);
     }
 
     [Fact]
     public async Task MonitorLoop_WhenNoStreamPair_ShouldTriggerRestart()
     {
-        // Arrange
+        // G.14: ловимо подію через TaskCompletionSource у самому логері, щоб не лишати
+        // монітор крутитися 500мс і не накопичувати алокації.
         var service = CreateHostedService();
 
-        // Сымитируем ситуацию с null StreamPair, не останавливая сервис
         ProcessRunnerMock
             .Setup(r => r.StartProcessWithHandle(It.IsAny<ProcessConfig>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => 
+            .ReturnsAsync(() =>
             {
                 var pMock = new Mock<IProcess>();
                 return (pMock.Object, null as StreamPair);
             });
         await service.StartAsync(CancellationToken.None);
+
+        var debugSeen = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        LoggerMonitorMock
+            .Setup(x => x.Log(
+                LogLevel.Debug,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("немає поточного StreamPair")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception, string>>()))
+            .Callback(() => debugSeen.TrySetResult(true));
+
         var monitor = CreateMonitor(service);
 
-        // Act
         await monitor.StartAsync(CancellationToken.None);
-        await Task.Delay(500);
+        await debugSeen.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await monitor.StopAsync(CancellationToken.None);
 
-        // Assert
-        VerifyDebugLog("PingCliAsync: немає поточного StreamPair => CLI не готовий",Times.AtLeastOnce());
+        VerifyDebugLog("PingCliAsync: немає поточного StreamPair => CLI не готовий", Times.AtLeastOnce());
         VerifyWarningLog("Signal CLI не відповідає", Times.AtLeastOnce());
 
-        await monitor.StopAsync(CancellationToken.None);
         await service.StopAsync(CancellationToken.None);
     }
 
     [Fact]
     public async Task MonitorLoop_ShouldRespectHealthCheckInterval()
     {
-        // Arrange
-        var pingTimes = new List<DateTime>();
+        // G.14: тест працює у віртуальному часі (FakeTimeProvider). Кожен Advance(1с)
+        // має вивільнити рівно один Task.Delay у MonitorLoop і спричинити один пінг.
+        // Реальний DateTime.UtcNow та Task.Delay(3500) видалено — flake неможливий.
+        var pingTimes = new List<DateTimeOffset>();
+        var pingFired = new SemaphoreSlim(0);
+        var fakeTime = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(DateTimeOffset.UtcNow);
+
         JsonRpcClientMock
             .Setup(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
                 It.IsAny<string>(),
                 It.IsAny<VersionParameters>(),
                 It.IsAny<CancellationToken>()))
-            .Callback(() => pingTimes.Add(DateTime.UtcNow))
+            .Callback(() =>
+            {
+                lock (pingTimes) { pingTimes.Add(fakeTime.GetUtcNow()); }
+                pingFired.Release();
+            })
             .ReturnsAsync(new VersionResponse("test-version"));
 
         ServiceConfig.HealthCheckIntervalSeconds = 1;
-        
+
         var hostedService = CreateHostedService();
         await hostedService.StartAsync(CancellationToken.None);
-        var monitor = CreateMonitor(hostedService);
+        var monitor = CreateMonitor(hostedService, fakeTime);
 
-        // Act
-        await monitor.StartAsync(CancellationToken.None);
-        await Task.Delay(3500); // Ждём ~3 пинга
-        await monitor.StopAsync(CancellationToken.None);
-
-        // Assert
-        Assert.True(pingTimes.Count >= 3, "Should have pinged at least 3 times");
-        
-        for (int i = 1; i < pingTimes.Count; i++)
+        try
         {
-            var interval = pingTimes[i] - pingTimes[i-1];
-            Assert.True(
-                interval.TotalSeconds >= 0.9 && interval.TotalSeconds <= 1.1,
-                $"Ping interval should be ~1 second, was {interval.TotalSeconds}"
-            );
-        }
+            await monitor.StartAsync(CancellationToken.None);
 
-        await hostedService.StopAsync(CancellationToken.None);
+            // Тричі провертаємо віртуальний годинник на 1с і чекаємо на сигнал від пінгу.
+            // Маленька реальна пауза перед Advance — щоб MonitorLoop встиг ДОЙТИ до
+            // await Task.Delay(_timeProvider) і зареєструвати таймер на віртуальному
+            // годиннику; інакше Advance може спрацювати в порожнечу.
+            for (var i = 0; i < 3; i++)
+            {
+                await Task.Delay(50);
+                fakeTime.Advance(TimeSpan.FromSeconds(1));
+                Assert.True(await pingFired.WaitAsync(TimeSpan.FromSeconds(5)),
+                    $"Очікувався пінг #{i + 1} після Advance(1c) у віртуальному часі");
+            }
+
+            await monitor.StopAsync(CancellationToken.None);
+
+            List<DateTimeOffset> snapshot;
+            lock (pingTimes) { snapshot = new List<DateTimeOffset>(pingTimes); }
+
+            Assert.True(snapshot.Count >= 3, $"Мало бути ≥ 3 пінгів, отримано {snapshot.Count}");
+            for (var i = 1; i < snapshot.Count; i++)
+            {
+                var interval = snapshot[i] - snapshot[i - 1];
+                // У віртуальному часі інтервал точно 1с (без flake-вікон).
+                Assert.Equal(1.0, interval.TotalSeconds);
+            }
+        }
+        finally
+        {
+            await hostedService.StopAsync(CancellationToken.None);
+        }
     }
 
     private void VerifyDebugLog(string messageContains, Times? times = null)

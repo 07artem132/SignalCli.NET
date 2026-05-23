@@ -23,9 +23,9 @@ public class SignalCliHostedServiceStreamPairTests : SignalCliHostedServiceTests
 
         // Assert
         Assert.Equal(3, streamPairs.Count);
-        Assert.Null(streamPairs[0]); // Начальное состояние
-        Assert.NotNull(streamPairs[1]); // После старта
-        Assert.Null(streamPairs[2]); // После остановки
+        Assert.Null(streamPairs[0]); // Початковий стан
+        Assert.NotNull(streamPairs[1]); // Після старту
+        Assert.Null(streamPairs[2]); // Після зупинки
     }
 
     [Fact]
@@ -49,12 +49,12 @@ public class SignalCliHostedServiceStreamPairTests : SignalCliHostedServiceTests
         Assert.NotNull(newStreamPair);
         Assert.NotSame(initialStreamPair, newStreamPair);
         
-        // Проверяем последовательность уведомлений
+        // Перевіряємо послідовність сповіщень
         Assert.True(streamPairs.Count >= 4);
-        Assert.Null(streamPairs[0]); // Начальное состояние
-        Assert.Same(initialStreamPair, streamPairs[1]); // После первого старта
-        Assert.Null(streamPairs[2]); // После остановки при рестарте
-        Assert.Same(newStreamPair, streamPairs[3]); // После перезапуска
+        Assert.Null(streamPairs[0]); // Початковий стан
+        Assert.Same(initialStreamPair, streamPairs[1]); // Після першого старту
+        Assert.Null(streamPairs[2]); // Після зупинки під час рестарту
+        Assert.Same(newStreamPair, streamPairs[3]); // Після перезапуску
     }
 
 
@@ -204,13 +204,13 @@ public class SignalCliHostedServiceStreamPairTests : SignalCliHostedServiceTests
         processMock.Setup(p => p.HasExited).Returns(true);
         processMock.Raise(p => p.Exited += null, EventArgs.Empty);
 
-        await Task.Delay(100); // Даем время на обработку события
+        await Task.Delay(100); // Даємо час на обробку події
 
         // Assert
         Assert.True(streamPairs.Count >= 4);
-        Assert.Null(streamPairs[0]); // Начальное состояние
-        Assert.NotNull(streamPairs[1]); // После первого старта
-        Assert.Null(streamPairs[2]); // После краха процесса
-        Assert.NotNull(streamPairs[3]); // После автоматического перезапуска
+        Assert.Null(streamPairs[0]); // Початковий стан
+        Assert.NotNull(streamPairs[1]); // Після першого старту
+        Assert.Null(streamPairs[2]); // Після краху процесу
+        Assert.NotNull(streamPairs[3]); // Після автоматичного перезапуску
     }
 }

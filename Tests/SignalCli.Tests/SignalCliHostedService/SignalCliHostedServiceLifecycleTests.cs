@@ -29,7 +29,7 @@ public class SignalCliHostedServiceLifecycleTests : SignalCliHostedServiceTestsB
         Assert.NotNull(service.CurrentStreamPair);
         Assert.NotNull(GetPrivateField<IProcess>(service, "_currentProcess"));
 
-        // Проверяем логи
+        // Перевіряємо логи
         VerifyLog(LogLevel.Information, "SignalCliHostedService запускається...");
         VerifyLog(LogLevel.Information, "SignalCliHostedService успішно запущено.");
     }
@@ -85,7 +85,7 @@ public class SignalCliHostedServiceLifecycleTests : SignalCliHostedServiceTestsB
         var processMock = Mock.Get(process!);
         var streamPair = service.CurrentStreamPair;
     
-        // Получаем базовый поток из StreamWriter для последующей проверки
+        // Отримуємо базовий потік зі StreamWriter для подальшої перевірки
         var memStream = (MemoryStream)streamPair!.StandardInput.BaseStream;
 
         // Act
@@ -121,7 +121,9 @@ public class SignalCliHostedServiceLifecycleTests : SignalCliHostedServiceTestsB
         // Assert
         processMock.Verify(p => p.Kill(true), Times.Once);
         Assert.Equal(ProcessState.Stopped, StateManager.CurrentState);
-        VerifyLog(LogLevel.Warning, "Процес не завершився, примусово завершуємо його...");
+        // B.9: тепер чекаємо реального exit через WaitForExitAsync(timeout); якщо процес висить,
+        // на таймаут пише Warning з "Процес не завершився за …c, примусово завершуємо його".
+        VerifyLog(LogLevel.Warning, "Процес не завершився за");
     }
 
     [Fact]
@@ -152,7 +154,7 @@ public class SignalCliHostedServiceLifecycleTests : SignalCliHostedServiceTestsB
 
         // Assert
         Assert.Equal(ProcessState.Stopped, StateManager.CurrentState);
-        // Проверяем, что логи об остановке появились только один раз
+        // Перевіряємо, що логи про зупинку з'явилися лише один раз
         LoggerMock.Verify(
             x => x.Log(
                 LogLevel.Information,

@@ -31,7 +31,7 @@ public class ProcessRunnerTests
         var runner = new ProcessRunner(loggerMock.Object, processFactoryMock.Object);
 
         using var cts = new CancellationTokenSource();
-        cts.Cancel(); // Чтобы сразу был requested
+        cts.Cancel(); // Щоб одразу був requested
 
         var config = new ProcessConfig
         {
@@ -51,7 +51,7 @@ public class ProcessRunnerTests
         var loggerMock = new Mock<ILogger<ProcessRunner>>();
 
         var mockProcess = new Mock<IProcess>();
-        // При вызове Start() вернём false
+        // При виклику Start() повернемо false
         mockProcess.Setup(p => p.Start(It.IsAny<CancellationToken>())).Returns(false);
 
         var processFactoryMock = new Mock<IProcessFactory>();
@@ -72,7 +72,7 @@ public class ProcessRunnerTests
             await runner.StartProcessWithHandle(config)
         );
 
-        // Дополнительно можно проверить, что Dispose был вызван в случае ошибки
+        // Додатково можна перевірити, що Dispose був викликаний у випадку помилки
         mockProcess.Verify(p => p.Dispose(), Times.Once);
     }
 
@@ -83,13 +83,13 @@ public class ProcessRunnerTests
         var loggerMock = new Mock<ILogger<ProcessRunner>>();
 
         var mockProcess = new Mock<IProcess>();
-        // Допустим, Start() вернёт true.
+        // Припустимо, Start() поверне true.
         mockProcess.Setup(p => p.Start(It.IsAny<CancellationToken>())).Returns(true);
-        // Имитация PID
+        // Імітація PID
         mockProcess.Setup(p => p.Id).Returns(123);
 
-        // В реальном процессе это будут реальные stream'ы, а тут можно в тестах подделать
-        // чтобы проверить сам факт передачи. Например, создать MemoryStream или оставить null.
+        // У реальному процесі це будуть справжні stream'и, а тут у тестах підставимо фейкові,
+        // щоб перевірити сам факт передачі. Наприклад, MemoryStream або null.
         var fakeStdIn = new StreamWriter(new MemoryStream());
         var fakeStdOut = new StreamReader(new MemoryStream());
         var fakeStdErr = new StreamReader(new MemoryStream());
@@ -128,10 +128,10 @@ public class ProcessRunnerTests
         Assert.Equal(fakeStdOut, streams.StandardOutput);
         Assert.Equal(fakeStdErr, streams.StandardError);
 
-        // Проверим, что метод Start() действительно вызван
+        // Перевіримо, що метод Start() справді викликано
         mockProcess.Verify(p => p.Start(It.IsAny<CancellationToken>()), Times.Once);
 
-        // Проверим, что логгер был вызван с нужным сообщением
+        // Перевіримо, що логер було викликано з потрібним повідомленням
         loggerMock.Verify(
             x => x.Log(
                 LogLevel.Debug,
@@ -162,7 +162,7 @@ public class ProcessRunnerTests
         var mockProcess = new Mock<IProcess>();
         mockProcess.Setup(p => p.Start(It.IsAny<CancellationToken>())).Returns(true);
 
-        // Подделываем стримы, которые не будут null
+        // Підставляємо стріми, які не будуть null
         var fakeStdIn = new StreamWriter(new MemoryStream());
         var fakeStdOut = new StreamReader(new MemoryStream());
         var fakeStdErr = new StreamReader(new MemoryStream());
@@ -180,7 +180,7 @@ public class ProcessRunnerTests
 
         var runner = new ProcessRunner(loggerMock.Object, processFactoryMock.Object);
 
-        // Здесь включаем редирект, чтобы Streams не были null
+        // Тут вмикаємо редирект, щоб Streams не були null
         var config = new ProcessConfig
         {
             Executable = "someExecutable",
@@ -197,10 +197,10 @@ public class ProcessRunnerTests
         // Act
         var (process, streams) = await runner.StartProcessWithHandle(config);
 
-        // Assert: Проверяем Environment
+        // Assert: перевіряємо Environment
         Assert.Equal("VALUE1", capturedPsi.Environment["VAR1"]);
 
-        // Проверяем, что потоки не null
+        // Перевіряємо, що потоки не null
         Assert.NotNull(streams);
         Assert.Same(fakeStdIn, streams.StandardInput);
         Assert.Same(fakeStdOut, streams.StandardOutput);

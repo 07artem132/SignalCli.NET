@@ -60,9 +60,9 @@ jobs:
     - name: Build
       run: dotnet build ${{ env.Solution_Name }} --configuration ${{ matrix.configuration }} --no-restore -p:WarningsAsErrors=false
       
-    # Запуск тестів зі збереженням результатів
+    # Запуск тестів зі збереженням результатів (юніт-набір; E2E — в окремому workflow .github/workflows/e2e.yml).
     - name: Test
-      run: dotnet test ${{ env.Test_Project_Path }} --configuration ${{ matrix.configuration }} --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx"
+      run: dotnet test ${{ env.Test_Project_Path }} --configuration ${{ matrix.configuration }} --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx" --filter "Category!=E2E"
       continue-on-error: ${{ matrix.configuration == 'Debug' }}
       
     # Публікація результатів тестів

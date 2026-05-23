@@ -32,8 +32,14 @@ internal class SignalGroups(
                 throw new InvalidOperationException("Отримано нульову відповідь від сервера");
             }
 
+            // ПРИВАТНІСТЬ (F5): Group/Member записи в response містять PII (members, назви, IDs);
+            // на Information — лише кількість, повні деталі — Trace.
             _logger.LogInformation(
-                "Список груп отримано успішно. Групи={Groups}",
+                "Список груп отримано успішно. Кількість={Count}",
+                response.Count
+            );
+            _logger.LogTrace(
+                "Групи={Groups}",
                 string.Join(", ", response)
             );
 

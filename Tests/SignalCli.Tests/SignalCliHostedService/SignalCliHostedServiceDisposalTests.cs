@@ -26,17 +26,17 @@ public class SignalCliHostedServiceDisposalTests : SignalCliHostedServiceTestsBa
         service.Dispose();
 
         // Assert
-        // Проверяем, что процесс был убит
+        // Перевіряємо, що процес було вбито
         processMock.Verify(p => p.Kill(true), Times.Once);
-        
-        // Проверяем, что процесс и потоки занулены
+
+        // Перевіряємо, що процес і потоки занулено
         Assert.Null(GetPrivateField<IProcess>(service, "_currentProcess"));
         Assert.Null(GetPrivateField<StreamPair>(service, "_currentStreamPair"));
-        
-        // Проверяем, что потоки закрыты
+
+        // Перевіряємо, що потоки закрито
         Assert.Throws<ObjectDisposedException>(() => memStream.Position);
-        
-        // Проверяем логирование
+
+        // Перевіряємо логування
         VerifyLog(LogLevel.Information, "Disposing SignalCliHostedService...");
     }
 
@@ -52,7 +52,7 @@ public class SignalCliHostedServiceDisposalTests : SignalCliHostedServiceTestsBa
 
         // Act
         service.Dispose();
-        service.Dispose(); // Повторный вызов
+        service.Dispose(); // Повторний виклик
 
         // Assert
         processMock.Verify(p => p.Kill(true), Times.Once);
@@ -195,7 +195,7 @@ public class SignalCliHostedServiceDisposalTests : SignalCliHostedServiceTestsBa
         // Arrange
         var service = CreateService();
     
-        // Запускаем WaitForReadyAsync но не дожидаемся их завершения
+        // Запускаємо WaitForReadyAsync, але не чекаємо їх завершення
         var readyTask1 = service.WaitForReadyAsync(CancellationToken.None);
         var readyTask2 = service.WaitForReadyAsync(CancellationToken.None);
 

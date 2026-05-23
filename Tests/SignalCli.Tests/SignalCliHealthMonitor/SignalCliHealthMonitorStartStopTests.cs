@@ -19,8 +19,8 @@ public class SignalCliHealthMonitorStartStopTests : SignalCliHealthMonitorTestBa
         VerifyInfoLog("SignalCliHealthMonitor запускається...");
         VerifyInfoLog("SignalCliHealthMonitor запущено.");
         
-        await Task.Delay(100); // Даём время на запуск MonitorLoop
-        await monitor.StopAsync(CancellationToken.None); // Чистим ресурсы
+        await Task.Delay(100); // Даємо час на запуск MonitorLoop
+        await monitor.StopAsync(CancellationToken.None); // Чистимо ресурси
     }
 
     [Fact]
@@ -38,7 +38,7 @@ public class SignalCliHealthMonitorStartStopTests : SignalCliHealthMonitorTestBa
             () => monitor.StartAsync(cts.Token)
         );
 
-        // Проверяем что мониторинг не запустился
+        // Перевіряємо, що моніторинг не запустився
         VerifyInfoLog("MonitorLoop started", Times.Never());
     }
 
@@ -49,11 +49,11 @@ public class SignalCliHealthMonitorStartStopTests : SignalCliHealthMonitorTestBa
         var hostedService = CreateHostedService();
         var monitor = CreateMonitor(hostedService);
     
-        // Добавим TaskCompletionSource для отслеживания событий
+        // Додамо TaskCompletionSource для відстеження подій
         var monitoringStartedTcs = new TaskCompletionSource<bool>();
         var monitoringStoppedTcs = new TaskCompletionSource<bool>();
-    
-        // Настроим моковый логгер для сигнализации о событиях
+
+        // Налаштуємо мок-логер для сигналізації про події
         LoggerMonitorMock
             .Setup(l => l.Log(
                 It.IsAny<LogLevel>(),
@@ -75,13 +75,13 @@ public class SignalCliHealthMonitorStartStopTests : SignalCliHealthMonitorTestBa
         // Act
         await monitor.StartAsync(CancellationToken.None);
     
-        // Ждем запуска мониторинга с таймаутом
+        // Чекаємо на запуск моніторингу з таймаутом
         await monitoringStartedTcs.Task.WaitAsync(TimeSpan.FromSeconds(1));
-    
-        // Act - останавливаем монитор
+
+        // Act — зупиняємо монітор
         await monitor.StopAsync(CancellationToken.None);
-    
-        // Ждем завершения с таймаутом
+
+        // Чекаємо на завершення з таймаутом
         await monitoringStoppedTcs.Task.WaitAsync(TimeSpan.FromSeconds(1));
     
         // Assert
@@ -100,7 +100,7 @@ public class SignalCliHealthMonitorStartStopTests : SignalCliHealthMonitorTestBa
 
         // Act & Assert
         await monitor.StopAsync(CancellationToken.None);
-        // Не должно быть исключений
+        // Винятків бути не повинно
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public class SignalCliHealthMonitorStartStopTests : SignalCliHealthMonitorTestBa
         );
         
         await monitor.StopAsync(CancellationToken.None);
-        await monitor.StopAsync(CancellationToken.None);  // Повторный вызов
+        await monitor.StopAsync(CancellationToken.None);  // Повторний виклик
 
         VerifyInfoLog("SignalCliHealthMonitor запускається...", Times.Once());
         VerifyInfoLog("SignalCliHealthMonitor зупиняється...", Times.AtMost(2));
