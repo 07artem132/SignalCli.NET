@@ -231,7 +231,7 @@ This capability is **additive** — it lands in a 2.2.0 minor before the 3.0 bre
 
 - [x] 11.D.1 **Privacy invariant test** — done as part of `ObservabilityPrivacyTests` (§11.A.6/§11.B.8 fixture). `MeterTagValues_AreOnlyKnownEnumLiterals` enforce'ує що `tag.Key ∈ {method, status, trigger, event_type}` AND `tag.Value` non-null; будь-який новий tag spawns test failure.
 - [ ] 11.D.2 With §6.7 (`<IsAotCompatible>true</IsAotCompatible>`), AOT analyzer reports zero new IL2026/IL3050 warnings from the `Diagnostics/` folder.
-- [ ] 11.D.3 Update `CLAUDE.md`: extend critical rule #1 (Privacy) to read "no PII in `[LoggerMessage]` templates at `Information+` AND no PII in `Activity` tag values AND no PII in `Meter` tag values" (the rule's intent already covers this — make it explicit).
+- [x] 11.D.3 `CLAUDE.md` rule #1 — extended із приміткою про observability tags. Phrasing оновлено: посилання на актуальний фактичний тест `ObservabilityPrivacyTests` (єдина fixture для ActivityListener + MeterListener), плюс акцент на `MeterTagValues_AreOnlyKnownEnumLiterals` — закріплює canonical tag-key set (`method`, `status`, `trigger`, `event_type`).
 
 ## 9. Synthesis & validation
 
