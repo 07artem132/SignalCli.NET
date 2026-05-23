@@ -734,9 +734,16 @@ Signal підтримує вкладення розміром до 100 МБ. З�
 |------------|------------------------------------------------------|
 | Microsoft.Extensions.Hosting.Abstractions | Абстракції для інтеграції з хостингом .NET           |
 | Microsoft.Extensions.Logging.Abstractions | Абстракції для логування                             |
+| Microsoft.Extensions.Options.DataAnnotations | `[Required]`/`[Range]`-атрибути для `[OptionsValidator]` source-gen |
 | System.Text.Json | Робота з JSON (вбудована в .NET) |
-| Nito.AsyncEx | Утиліта для асинхронного програмування               |
 | System.Reactive | Бібліотека для реактивного програмування             |
+| JetBrains.Annotations | `PublicAPI`/`NotNull`-hint'и; `PrivateAssets=all` — НЕ потрапляє у consumer dependency graph |
+
+Опціонально:
+
+| Пакет | Опис |
+|-------|------|
+| SignalCli.NET.HealthChecks | `IHealthCheck`-адаптер для signal-cli state. Залежить лише від `Microsoft.Extensions.Diagnostics.HealthChecks` — generic-host, **не ASP.NET**. Працює всюди де є `IHost`. |
 
 ## 🤝 Участь у розробці
 
