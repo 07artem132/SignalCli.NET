@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SignalCli.Interfaces.Rpc;
 using SignalCli.Models;
@@ -7,10 +7,16 @@ using SignalCli.Models.SignalCli;
 namespace SignalCli.Services.SignalCli;
 
 /// <summary>
-/// Сервіс, який відстежує "живість" процесу Signal-CLI, 
+/// Сервіс, який відстежує "живість" процесу Signal-CLI,
 /// і при "зависаннях" ініціює перезапуск через SignalCliHostedService.
 /// </summary>
-public sealed class SignalCliHealthMonitor : IHostedService, IDisposable
+/// <remarks>
+/// B.1/B.2: реалізовано через <see cref="BackgroundService"/>; цикл побудовано на
+/// <see cref="PeriodicTimer"/>(interval, <see cref="TimeProvider"/>) — стандартний
+/// .NET-патерн для періодичних воркерів. <c>FakeTimeProvider</c> у тестах крутить
+/// тики без реального wall-clock.
+/// </remarks>
+public sealed class SignalCliHealthMonitor : BackgroundService
 {
     private readonly ILogger<SignalCliHealthMonitor> _logger;
     private readonly IJsonRpcClientProvider _clientProvider;
@@ -20,10 +26,6 @@ public sealed class SignalCliHealthMonitor : IHostedService, IDisposable
     // FakeTimeProvider, тож інтервал між пінгами стає віртуальним і flake-вільним.
     private readonly TimeProvider _timeProvider;
 
-    private CancellationTokenSource? _monitorCts;
-    private Task? _monitorTask;
-    private bool _disposed;
-
     /// <summary>
     /// Створює новий екземпляр монітора здоров'я Signal CLI.
     /// </summary>
@@ -32,7 +34,7 @@ public sealed class SignalCliHealthMonitor : IHostedService, IDisposable
     /// <param name="signalCliHostedService">Хостований сервіс Signal CLI.</param>
     /// <param name="config">Конфігурація Signal CLI.</param>
     /// <param name="timeProvider">
-    /// Опціональний постачальник часу для <c>Task.Delay</c> та <c>CancelAfter</c>.
+    /// Опціональний постачальник часу для <see cref="PeriodicTimer"/> та <c>CancelAfter</c>.
     /// За замовчуванням <see cref="TimeProvider.System"/>; у тестах підставляється
     /// <c>FakeTimeProvider</c>, щоб монітор-цикл працював у віртуальному часі.
     /// </param>
@@ -52,75 +54,80 @@ public sealed class SignalCliHealthMonitor : IHostedService, IDisposable
     }
 
     /// <summary>
-    /// Запускається при ініціалізації застосунку: 
-    /// створює фонове завдання моніторингу і входить у MonitorLoop.
+    /// Lifecycle-обгортка над <see cref="BackgroundService.StartAsync"/>:
+    /// зберігає звичну для попередніх версій діагностику й pre-cancellation-перевірку,
+    /// потім делегує запуск ExecuteAsync базовому класу.
     /// </summary>
-    /// <param name="cancellationToken">Токен скасування операції.</param>
-    /// <returns>Завдання, що представляє асинхронну операцію.</returns>
-    /// <exception cref="InvalidOperationException">Виникає, якщо моніторинг вже запущено.</exception>
-    public Task StartAsync(CancellationToken cancellationToken)
+    public override Task StartAsync(CancellationToken cancellationToken)
     {
-        if (_monitorCts is { IsCancellationRequested: false })
+        // Якщо ExecuteTask вже існує — повторний StartAsync не очікуваний.
+        if (ExecuteTask is { IsCompleted: false })
         {
             _logger.LogError("StartAsync викликано коли цикл вже працює, зупиніть монітор та викличте StartAsync.");
             throw new InvalidOperationException("StartAsync викликано коли цикл вже працює, зупиніть монітор та викличте StartAsync.");
         }
         cancellationToken.ThrowIfCancellationRequested();
-        
+
         _logger.LogInformation("SignalCliHealthMonitor запускається...");
-
-        // Створюємо новий CTS, щоб при зупинці можна було скасувати MonitorLoop
-        _monitorCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-
-        // Запускаємо моніторинг в окремому завданні:
-        _monitorTask = Task.Run(() => MonitorLoop(_monitorCts.Token), _monitorCts.Token);
-
+        var t = base.StartAsync(cancellationToken);
         _logger.LogInformation("SignalCliHealthMonitor запущено.");
-        return Task.CompletedTask;
+        return t;
     }
 
     /// <summary>
-    /// Основний цикл, який періодично "пінгує" CLI:
-    /// 1) чекає MonitoringIntervalSeconds
-    /// 2) викликає PingCliAsync(...)
-    /// 3) якщо пінг невдалий — викликає ForceRestartAsync
+    /// Lifecycle-обгортка над <see cref="BackgroundService.StopAsync"/>: збереження
+    /// інформаційних логів для діагностики.
     /// </summary>
-    /// <param name="ct">Токен скасування операції.</param>
-    /// <returns>Завдання, що представляє асинхронну операцію моніторингу.</returns>
-    private async Task MonitorLoop(CancellationToken ct)
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("SignalCliHealthMonitor зупиняється...");
+        await base.StopAsync(cancellationToken).ConfigureAwait(false);
+        _logger.LogInformation("SignalCliHealthMonitor зупинено.");
+    }
+
+    /// <summary>
+    /// Основний цикл моніторингу здоров’я Signal CLI: періодично пінгує процес і
+    /// викликає примусовий перезапуск, якщо пінг не вдається.
+    /// </summary>
+    /// <param name="stoppingToken">Токен зупинки <see cref="BackgroundService"/>.</param>
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Цикл моніторингу запущено в SignalCliHealthMonitor");
 
-        while (!ct.IsCancellationRequested)
+        var interval = TimeSpan.FromSeconds(Math.Max(1, _config.HealthCheckIntervalSeconds));
+        using var timer = new PeriodicTimer(interval, _timeProvider);
+
+        try
         {
-            try
+            while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
             {
-                // Чекаємо інтервал моніторингу (з Config) через TimeProvider —
-                // дозволяє тестам використовувати FakeTimeProvider замість реальних секунд.
-                await Task.Delay(TimeSpan.FromSeconds(_config.HealthCheckIntervalSeconds),
-                    _timeProvider, ct).ConfigureAwait(false);
+                try
+                {
+                    var isHealthy = await PingCliAsync(
+                        timeout: TimeSpan.FromSeconds(_config.HealthCheckTimeoutSeconds),
+                        stoppingToken
+                    ).ConfigureAwait(false);
 
-                // "Пінгуємо"
-                var isHealthy = await PingCliAsync(
-                    timeout: TimeSpan.FromSeconds(_config.HealthCheckTimeoutSeconds),
-                    ct
-                ).ConfigureAwait(false);
-
-                if (isHealthy) continue;
-                _logger.LogWarning("Signal CLI не відповідає. Запускаємо перезапуск...");
-                await _signalCliHostedService.ForceRestartAsync(ct).ConfigureAwait(false);
+                    if (isHealthy) continue;
+                    _logger.LogWarning("Signal CLI не відповідає. Запускаємо перезапуск...");
+                    await _signalCliHostedService.ForceRestartAsync(stoppingToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Нормальний сценарій при зупинці сервісу.
+                    break;
+                }
+                // Навмисний широкий catch: межа циклу моніторингу — помилка однієї
+                // ітерації не повинна зупиняти весь монітор (логуємо й продовжуємо).
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Неочікувана помилка в циклі моніторингу");
+                }
             }
-            catch (OperationCanceledException)
-            {
-                // Це нормальний сценарій при зупинці сервісу
-                break;
-            }
-            // Навмисний широкий catch: межа циклу моніторингу — помилка однієї
-            // ітерації не повинна зупиняти весь монітор (логуємо й продовжуємо).
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Неочікувана помилка в циклі моніторингу");
-            }
+        }
+        catch (OperationCanceledException)
+        {
+            // PeriodicTimer.WaitForNextTickAsync кидає OCE при stoppingToken — очікувано.
         }
 
         _logger.LogInformation("Цикл моніторингу завершено в SignalCliHealthMonitor");
@@ -137,7 +144,7 @@ public sealed class SignalCliHealthMonitor : IHostedService, IDisposable
     {
         try
         {
-            // Якщо у нас немає доступного StreamPair (сервіс ще не "готовий"), 
+            // Якщо у нас немає доступного StreamPair (сервіс ще не "готовий"),
             // вважаємо CLI "не здоровим"
             if (_signalCliHostedService.CurrentStreamPair == null)
             {
@@ -168,54 +175,11 @@ public sealed class SignalCliHealthMonitor : IHostedService, IDisposable
         {
             _logger.LogError(ex, "PingCliAsync: пінг CLI невдалий");
             return false;
-        } 
+        }
         catch (OperationCanceledException ex)
         {
             _logger.LogError(ex, "Signal CLI не відповідає");
             return false;
         }
-    }
-
-    /// <summary>
-    /// Зупиняється при вимкненні застосунку: 
-    /// скасовує моніторинговий цикл і чекає, поки він завершиться.
-    /// </summary>
-    /// <param name="cancellationToken">Токен скасування операції.</param>
-    /// <returns>Завдання, що представляє асинхронну операцію.</returns>
-    public async Task StopAsync(CancellationToken cancellationToken)
-    {
-        _logger.LogInformation("SignalCliHealthMonitor зупиняється...");
-
-        if (_disposed)
-            return;
-        
-        if (_monitorCts != null)
-            await _monitorCts.CancelAsync().ConfigureAwait(false);
-
-        if (_monitorTask != null)
-        {
-            try
-            {
-                await _monitorTask.ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                // Ігноруємо — це очікувано
-            }
-        }
-
-        _logger.LogInformation("SignalCliHealthMonitor зупинено.");
-    }
-
-    /// <summary>
-    /// Звільнення ресурсів, скасування всіх фонових операцій.
-    /// </summary>
-    public void Dispose()
-    {
-        if (_disposed) return;
-        _disposed = true;
-
-        _monitorCts?.Cancel();
-        _monitorCts?.Dispose();
     }
 }

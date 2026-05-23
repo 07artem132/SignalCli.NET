@@ -92,13 +92,16 @@ public abstract class SignalCliHostedServiceTestsBase : IDisposable
         File.WriteAllText(Path.Combine(libDir, "signal-cli.jar"), "fake jar content");
     }
 
-    protected Services.SignalCli.SignalCliHostedService CreateService()
+    protected Services.SignalCli.SignalCliHostedService CreateService(TimeProvider? timeProvider = null)
     {
+        // B.5/B.6: дозволяє тесту підставити FakeTimeProvider для віртуального часу
+        // (Task.Delay у ForceRestartAsync та timer вікна стабільності — обидва через _timeProvider).
         return new Services.SignalCli.SignalCliHostedService(
             LoggerMock.Object,
             ProcessRunnerMock.Object,
             StateManager,
-            Config
+            Config,
+            timeProvider
         );
     }
 
