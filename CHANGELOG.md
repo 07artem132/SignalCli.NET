@@ -69,6 +69,9 @@
 - **(round 9 §4.9)** `.editorconfig` піднято `CA2007 (ConfigureAwait)` до `warning` після audit-перевірки: 0 missing-sites у `src/SignalCli/**`. Тепер регресія неможлива — будь-який майбутній bare `await` ловиться build-warning'ом.
 - **(round 9 §4.25)** `[StringSyntax(StringSyntaxAttribute.Uri)]` на `TextMessageOptions.PreviewUrl`, `PreviewImage`, та параметрах `Builder.WithPreview(previewUrl, …, previewImage)`. Zero runtime cost; IDEs тепер валідують URL-syntax.
 - **(round 9 §4.26)** XMLDoc'и на 3 `Send*Async`-методах в `ISignalMessage` отримали `<exception cref="TimeoutException">` із посиланням на `SignalCliOptions.RequestTimeoutSeconds`. Closes audit-doc-gap.
+- **(round 10 §6.12)** Новий test-file `JsonContextRegistrationTests` — рефлексивно стверджує, що кожен `*Parameters`/`*Response` DTO у `SignalCli.Models.Signal.*` зареєстрований у `SignalJsonContext` через `[JsonSerializable(typeof(...))]`. Захист від "silent {}"-регресії, коли source-gen контекст не знає тип і `JsonSerializer.SerializeToElement` тихо повертає порожній об'єкт. Закриває audit N8.
+- **(round 10 §7.4)** `Assert.Equal(1.0, …)` → `Assert.Equal(1.0, …, precision: 3)` у `MonitorLoop_ShouldRespectHealthCheckInterval`. CA2243 best-practice — explicit precision на double-asserts.
+- **(round 10 §4.9 follow-up)** Scope-обмеження `CA2007 → warning` тільки для `src/SignalCli/**`; у `Tests/**` залишили `none` (xUnit-runner запускає тести без SynchronizationContext, тож `.ConfigureAwait(false)` no-op'не).
 
 ## [2.1.0] — неопубліковано
 

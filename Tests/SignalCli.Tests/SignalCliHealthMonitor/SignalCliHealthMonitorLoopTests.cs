@@ -223,7 +223,8 @@ public class SignalCliHealthMonitorLoopTests : SignalCliHealthMonitorTestBase
             {
                 var interval = snapshot[i] - snapshot[i - 1];
                 // У віртуальному часі інтервал точно 1с (без flake-вікон).
-                Assert.Equal(1.0, interval.TotalSeconds);
+                // post-modernize-tuning §7.4: explicit precision на double-assert (CA2243-safe).
+                Assert.Equal(1.0, interval.TotalSeconds, precision: 3);
             }
         }
         finally

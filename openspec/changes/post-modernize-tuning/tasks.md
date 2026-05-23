@@ -92,20 +92,18 @@
 - [ ] 6.9 (P6) `dotnet publish -c Release /p:PublishAot=true` from a probe app succeeds (smoke test only, not added to CI yet) **(Paired with §6.7.)**
 - [ ] 6.10 Migrate anonymous-type test usages off the (now-removed) reflection fallback: `JsonRpcClientTests.cs:106,128,150,174` and `JsonSerializationTests.cs:20` — pick Option A (concrete DTO registered in `SignalJsonContext`) or Option B (`SignalJson.OptionsForTests` exposed via `[InternalsVisibleTo]` with `DefaultJsonTypeInfoResolver`). Production options stay source-gen-only. **(Paired with §6.4.)**
 - [ ] 6.11 Update `CLAUDE.md` rule 6 — remove "(which combines the source-gen resolver with a reflection fallback)" and state "source-generated context only; every serializable type MUST be registered in `SignalJsonContext`" **(Paired with §6.4.)**
-- [ ] 6.12 (audit N8) New test `Tests/SignalCli.Tests/JsonContextRegistrationTests.cs`: reflectively enumerates every call site of `ISignalCliClient.InvokeMethodAsync<TRequest, TResponse>` in `src/SignalCli/Services/Signal/**` (and the matching `JsonSerializer.SerializeToElement` site in `JsonRpcClient.InvokeMethodAsync`), then asserts each `TRequest` and `TResponse` is present in `SignalJsonContext.Default.GetTypeInfo(...)`. Prevents the next "tihko {}" silent-empty-params regression once the reflection fallback is removed.
+- [x] 6.12 (audit N8) `Tests/SignalCli.Tests/JsonContextRegistrationTests.cs` — два concrete тести: (1) `AllParametersAndResponseDtos_AreRegisteredInSignalJsonContext` рефлексивно знаходить усі concrete-types з `SignalCli.Models.Signal.*`-namespace із суфіксом `Parameters`/`Response` і стверджує, що кожен зареєстрований у `SignalJsonContext.Default`; (2) `KnownRpcTypes_AreRegisteredInSignalJsonContext` фіксує JSON-RPC root-types (Request/Response/Error/NotificationRaw/Notification<T>). **IL-level callsite-discovery через Mono.Cecil — overkill**: namespace-enumeration ловить той самий клас регресій без зайвої залежності. `*EventArgs` свідомо ВИКЛЮЧЕНО — вони мапляться з `JsonMessageEnvelope` програмно у `SignalEventService.OnNotificationReceived`, а не через JsonSerializer.
 
 ## 7. Test virtualization (capability `test-virtualization`)
 
-- [ ] 7.1 (T2) Replace 12 `Task.Delay` waits in unit tests with `FakeTimeProvider.Advance` — list:
-  - `JsonRpcClientTests.cs:232, 288`
-  - `SignalCliHostedServiceRestartTests.cs:92, 125, 221`
-  - `SignalCliHostedServiceAuditTests.cs:41, 65, 75`
-  - `SignalCliHostedServiceStateTests.cs:204`
-  - `SignalCliHealthMonitorEdgeCaseTests.cs:65`
-  - `SignalCliHealthMonitorLoopTests.cs:71`
+- [~] 7.1 (T2) Audit reality check: список 12 `Task.Delay`-сайтів був написаний aspiraційно. На практиці тільки **частина** є справді clock-dependent (RestartWindow-timer, PeriodicTimer-tick) і піддається FakeTimeProvider. Решта — це **sync-completion waits** (`Task.Delay(100)` після `processMock.Raise(Exited)` чекає на event-handler chain — це чистий sync-job, не годинник). Pure FakeTimeProvider-міграція тут НЕ допоможе — потрібен event-based pattern (`TaskCompletionSource` + log-callback-spy, як уже зроблено в `MonitorLoop_WhenPingThrows_ShouldTriggerRestart` (line 100-121) та `MonitorLoop_WhenNoStreamPair_ShouldTriggerRestart` (line 150-)).
+  - **Status**: site-by-site analysis ниже; clear-win пункти позначено [x], sync-completion-сайти позначено [~] із приміткою про реальний шлях fix'у.
+  - `SignalCliHealthMonitorLoopTests.cs:71` — `Task.Delay(1000)` у NEGATIVE-тесті ("монітор не повинен restart-ити, якщо ping ОК"). Виправлення: replace із FakeTimeProvider + `MonitorLoop`-Subscribe на ping-callback signal. **Deferred** — окрема ітерація.
+  - `SignalCliHostedServiceAuditTests.cs:65` — `Task.Delay(RestartWindowSeconds+1)`: справжній clock-dep на RestartWindow-timer. **Migration plan**: інжектити `FakeTimeProvider` через `CreateService(timeProvider)`, потім `fakeTime.Advance(...)` + `await Task.Yield()` для async-timer-callback. **Deferred** — async-timer-callback може потребувати додаткового sync-signal'у.
+  - Решта (`JsonRpcClientTests.cs:232,288`, `RestartTests.cs:92,125,221`, `AuditTests.cs:41,75`, `StateTests.cs:204`, `EdgeCaseTests.cs:65`) — sync-completion waits, fix через event-based pattern (TCS-Spy на log-callback або state-change-event). **Не FakeTimeProvider**.
 - [ ] 7.2 (T3) Add `internal` TestSeam properties (gated by `[InternalsVisibleTo("SignalCli.Tests")]`) — replace `GetPrivateField<IProcess>(svc, "_currentProcess")` with `svc.TestSeam.CurrentProcess`
 - [ ] 7.3 (T3) Delete `GetPrivateField`/`SetPrivateField` from `SignalCliHostedServiceTestsBase`
-- [ ] 7.4 (T4) Floating-point asserts use `Assert.Equal(expected, actual, precision: 3)`
+- [x] 7.4 (T4) Audit: знайдено 1 floating-point assert без explicit-precision — `SignalCliHealthMonitorLoopTests.cs:226` (`Assert.Equal(1.0, interval.TotalSeconds)`). Додано `precision: 3` із посиланням на CA2243 у коментарі. Інші numeric-asserts у тест-suite — int/long (precision-agnostic).
 - [ ] 7.5 (T5) New `Tests/SignalCli.Tests/SignalCliHostedService/StateManagerReentrancyTests.cs` (matches §2.5)
 - [ ] 7.6 (T5) New `Tests/SignalCli.Tests/SignalEventService/SubscribeRaceTests.cs` (matches §3.6)
 - [ ] 7.7 (T5) New `Tests/SignalCli.Tests/Rpc/BackPressureTests.cs` (matches §1.6)
@@ -137,7 +135,7 @@
 - [ ] 8b.1 (B5) Replace `services.AddSingleton(config)` in `AddSignalCli` with `services.AddOptions<Config>().Configure(configure ?? (_ => {})).ValidateDataAnnotations().ValidateOnStart()`
 - [ ] 8b.2 (B5) Add `[Range(...)]`/`[Required]` annotations on every numeric/path field in `Config` per the rules table in `specs/options-validation/spec.md`
 - [ ] 8b.3 (B5) New overload `IServiceCollection AddSignalCli(this IServiceCollection, IConfiguration section)` that binds the section through Options pipeline
-- [ ] 8b.4 (B7) Every `Config` property migrates from `{ get; set; }` to `{ get; init; }`; the `Action<Config>` setup delegate continues to work because it runs before consumers resolve the registered options
+- [~] 8b.4 (B7) **Tried+reverted** — задокументовано в CLAUDE.md ("Established patterns"): "Properties are `get; set;` (not `init`-only). Microsoft.Extensions.Options is a stateful pattern: the framework creates the instance via `Activator.CreateInstance` and mutates it through your `Action<TOptions>.Configure`-delegate and `Bind(IConfiguration)`. `init` makes both reflection-based `Bind` and the `Configure`-delegate ergonomically painful — we learned this the hard way and reverted. Immutability is enforced socially (no setter calls after registration), not by the type system." Цей пункт **не повертати**.
 - [ ] 8b.5 (B7) `Config.EnvironmentVariables` already covered by 4.10 (IReadOnlyDictionary); confirm no remaining `set`
 - [ ] 8b.6 Test: out-of-range `RequestTimeoutSeconds = 0` → host startup fails fast with `OptionsValidationException`
 - [ ] 8b.7 Test: `AddSignalCli(IConfiguration)` overload binds appsettings JSON correctly
