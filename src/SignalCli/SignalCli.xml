@@ -5328,6 +5328,139 @@
             викликачу не треба явно передавати ім’я (рефакторинг безпечний).
             </remarks>
         </member>
+        <member name="T:SignalCli.Services.Signal.UnifiedSendRequest">
+            <summary>
+            post-modernize-tuning §8c.6 (audit C7): internal DTO для <c>SignalMessage.SendUnifiedMessageAsync</c>.
+            Раніше метод приймав 23 окремих параметри — це робило сigna нечитабельною, а додавання
+            нового поля (типу <c>storyTimestamp</c>) — болючим. Тепер усі параметри пакуються в один record,
+            а public-обгортки (<c>SendTextMessageAsync</c>/<c>SendAttachmentAsync</c>/<c>SendStickerAsync</c>)
+            будують його з типобезпечного <c>*MessageOptions</c>. <b>Не public</b> — тільки internal.
+            </summary>
+            <param name="Account">Акаунт-відправник.</param>
+            <param name="Recipients">Список отримувачів (user або group, узгоджуються <see cref="T:SignalCli.Services.Signal.SignalMessage"/>-валідацією).</param>
+            <param name="Message">Тіло повідомлення (може бути порожнім для стікерів).</param>
+            <param name="NoteToSelf">Чи відправляти у власний "Note to Self"-чат.</param>
+            <param name="EndSession">Чи завершувати session-key для отримувача.</param>
+            <param name="TextMode">Режим парсингу markdown-стилів (None / Styled).</param>
+            <param name="Attachments">Вкладення (data-URI або temp-file шляхи — вибирається в <see cref="T:SignalCli.Services.Signal.SignalMessage"/>).</param>
+            <param name="Mentions">UUID/номери для згадки у тексті.</param>
+            <param name="QuoteTimestamp">Timestamp цитованого повідомлення.</param>
+            <param name="QuoteAuthor">Автор цитованого повідомлення.</param>
+            <param name="QuoteMessage">Текст цитованого повідомлення.</param>
+            <param name="QuoteMentions">Згадки у цитаті.</param>
+            <param name="QuoteTextStyles">Стилі тексту у цитаті.</param>
+            <param name="QuoteAttachments">Вкладення цитати.</param>
+            <param name="ExternalTextStyles">Стилі тексту, передані ззовні (мають пріоритет якщо <c>TextMode == None</c>).</param>
+            <param name="EditTimestamp">Timestamp повідомлення, яке редагується.</param>
+            <param name="Sticker">Sticker id у форматі <c>packId:stickerId</c>.</param>
+            <param name="PreviewUrl">URL для попереднього перегляду посилання.</param>
+            <param name="PreviewTitle">Заголовок попереднього перегляду.</param>
+            <param name="PreviewDescription">Опис попереднього перегляду.</param>
+            <param name="PreviewImage">Шлях до зображення попереднього перегляду.</param>
+            <param name="StoryTimestamp">Timestamp story-контексту (для відповідей на сторіс).</param>
+            <param name="StoryAuthor">Автор story-контексту.</param>
+        </member>
+        <member name="M:SignalCli.Services.Signal.UnifiedSendRequest.#ctor(System.String,System.Collections.Generic.IEnumerable{SignalCli.Interfaces.Signal.IRecipient},System.String,System.Boolean,System.Boolean,SignalCli.Models.Signal.Message.TextStyleMode,System.Collections.Generic.IEnumerable{SignalCli.Interfaces.FileSystem.IAttachmentEntry},System.Collections.Generic.IEnumerable{System.String},System.Nullable{System.UInt64},System.String,System.String,System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Nullable{System.UInt64},System.String,System.String,System.String,System.String,System.String,System.Nullable{System.UInt64},System.String)">
+            <summary>
+            post-modernize-tuning §8c.6 (audit C7): internal DTO для <c>SignalMessage.SendUnifiedMessageAsync</c>.
+            Раніше метод приймав 23 окремих параметри — це робило сigna нечитабельною, а додавання
+            нового поля (типу <c>storyTimestamp</c>) — болючим. Тепер усі параметри пакуються в один record,
+            а public-обгортки (<c>SendTextMessageAsync</c>/<c>SendAttachmentAsync</c>/<c>SendStickerAsync</c>)
+            будують його з типобезпечного <c>*MessageOptions</c>. <b>Не public</b> — тільки internal.
+            </summary>
+            <param name="Account">Акаунт-відправник.</param>
+            <param name="Recipients">Список отримувачів (user або group, узгоджуються <see cref="T:SignalCli.Services.Signal.SignalMessage"/>-валідацією).</param>
+            <param name="Message">Тіло повідомлення (може бути порожнім для стікерів).</param>
+            <param name="NoteToSelf">Чи відправляти у власний "Note to Self"-чат.</param>
+            <param name="EndSession">Чи завершувати session-key для отримувача.</param>
+            <param name="TextMode">Режим парсингу markdown-стилів (None / Styled).</param>
+            <param name="Attachments">Вкладення (data-URI або temp-file шляхи — вибирається в <see cref="T:SignalCli.Services.Signal.SignalMessage"/>).</param>
+            <param name="Mentions">UUID/номери для згадки у тексті.</param>
+            <param name="QuoteTimestamp">Timestamp цитованого повідомлення.</param>
+            <param name="QuoteAuthor">Автор цитованого повідомлення.</param>
+            <param name="QuoteMessage">Текст цитованого повідомлення.</param>
+            <param name="QuoteMentions">Згадки у цитаті.</param>
+            <param name="QuoteTextStyles">Стилі тексту у цитаті.</param>
+            <param name="QuoteAttachments">Вкладення цитати.</param>
+            <param name="ExternalTextStyles">Стилі тексту, передані ззовні (мають пріоритет якщо <c>TextMode == None</c>).</param>
+            <param name="EditTimestamp">Timestamp повідомлення, яке редагується.</param>
+            <param name="Sticker">Sticker id у форматі <c>packId:stickerId</c>.</param>
+            <param name="PreviewUrl">URL для попереднього перегляду посилання.</param>
+            <param name="PreviewTitle">Заголовок попереднього перегляду.</param>
+            <param name="PreviewDescription">Опис попереднього перегляду.</param>
+            <param name="PreviewImage">Шлях до зображення попереднього перегляду.</param>
+            <param name="StoryTimestamp">Timestamp story-контексту (для відповідей на сторіс).</param>
+            <param name="StoryAuthor">Автор story-контексту.</param>
+        </member>
+        <member name="P:SignalCli.Services.Signal.UnifiedSendRequest.Account">
+            <summary>Акаунт-відправник.</summary>
+        </member>
+        <member name="P:SignalCli.Services.Signal.UnifiedSendRequest.Recipients">
+            <summary>Список отримувачів (user або group, узгоджуються <see cref="T:SignalCli.Services.Signal.SignalMessage"/>-валідацією).</summary>
+        </member>
+        <member name="P:SignalCli.Services.Signal.UnifiedSendRequest.Message">
+            <summary>Тіло повідомлення (може бути порожнім для стікерів).</summary>
+        </member>
+        <member name="P:SignalCli.Services.Signal.UnifiedSendRequest.NoteToSelf">
+            <summary>Чи відправляти у власний "Note to Self"-чат.</summary>
+        </member>
+        <member name="P:SignalCli.Services.Signal.UnifiedSendRequest.EndSession">
+            <summary>Чи завершувати session-key для отримувача.</summary>
+        </member>
+        <member name="P:SignalCli.Services.Signal.UnifiedSendRequest.TextMode">
+            <summary>Режим парсингу markdown-стилів (None / Styled).</summary>
+        </member>
+        <member name="P:SignalCli.Services.Signal.UnifiedSendRequest.Attachments">
+            <summary>Вкладення (data-URI або temp-file шляхи — вибирається в <see cref="T:SignalCli.Services.Signal.SignalMessage"/>).</summary>
+        </member>
+        <member name="P:SignalCli.Services.Signal.UnifiedSendRequest.Mentions">
+            <summary>UUID/номери для згадки у тексті.</summary>
+        </member>
+        <member name="P:SignalCli.Services.Signal.UnifiedSendRequest.QuoteTimestamp">
+            <summary>Timestamp цитованого повідомлення.</summary>
+        </member>
+        <member name="P:SignalCli.Services.Signal.UnifiedSendRequest.QuoteAuthor">
+            <summary>Автор цитованого повідомлення.</summary>
+        </member>
+        <member name="P:SignalCli.Services.Signal.UnifiedSendRequest.QuoteMessage">
+            <summary>Текст цитованого повідомлення.</summary>
+        </member>
+        <member name="P:SignalCli.Services.Signal.UnifiedSendRequest.QuoteMentions">
+            <summary>Згадки у цитаті.</summary>
+        </member>
+        <member name="P:SignalCli.Services.Signal.UnifiedSendRequest.QuoteTextStyles">
+            <summary>Стилі тексту у цитаті.</summary>
+        </member>
+        <member name="P:SignalCli.Services.Signal.UnifiedSendRequest.QuoteAttachments">
+            <summary>Вкладення цитати.</summary>
+        </member>
+        <member name="P:SignalCli.Services.Signal.UnifiedSendRequest.ExternalTextStyles">
+            <summary>Стилі тексту, передані ззовні (мають пріоритет якщо <c>TextMode == None</c>).</summary>
+        </member>
+        <member name="P:SignalCli.Services.Signal.UnifiedSendRequest.EditTimestamp">
+            <summary>Timestamp повідомлення, яке редагується.</summary>
+        </member>
+        <member name="P:SignalCli.Services.Signal.UnifiedSendRequest.Sticker">
+            <summary>Sticker id у форматі <c>packId:stickerId</c>.</summary>
+        </member>
+        <member name="P:SignalCli.Services.Signal.UnifiedSendRequest.PreviewUrl">
+            <summary>URL для попереднього перегляду посилання.</summary>
+        </member>
+        <member name="P:SignalCli.Services.Signal.UnifiedSendRequest.PreviewTitle">
+            <summary>Заголовок попереднього перегляду.</summary>
+        </member>
+        <member name="P:SignalCli.Services.Signal.UnifiedSendRequest.PreviewDescription">
+            <summary>Опис попереднього перегляду.</summary>
+        </member>
+        <member name="P:SignalCli.Services.Signal.UnifiedSendRequest.PreviewImage">
+            <summary>Шлях до зображення попереднього перегляду.</summary>
+        </member>
+        <member name="P:SignalCli.Services.Signal.UnifiedSendRequest.StoryTimestamp">
+            <summary>Timestamp story-контексту (для відповідей на сторіс).</summary>
+        </member>
+        <member name="P:SignalCli.Services.Signal.UnifiedSendRequest.StoryAuthor">
+            <summary>Автор story-контексту.</summary>
+        </member>
         <member name="T:SignalCli.Utilities.AtomicCounter">
             <summary>
             Атомарний лічильник для генерації монотонних ідентифікаторів (наприклад, JSON-RPC id).

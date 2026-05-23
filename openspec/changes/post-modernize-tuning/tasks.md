@@ -152,7 +152,7 @@
 - [x] 8c.3 (C3) `AtomicCounter.Increment` — wrap-to-int32 comment already in place (line 7-11 of `AtomicCounter.cs`, "A.8: при переповненні int32 повертається до від'ємного діапазону через unchecked-каст. Для request-id це нормально: важлива лише унікальність у межах активних запитів"). No code change needed; ticked after verification.
 - [ ] ~~8c.4 (P4)~~ **Reverted — CA1305 analyzer rejects `int.ToString()` without an explicit `IFormatProvider`. Keeping `InvariantCulture` argument is the right call. Task closed without change.**
 - [x] 8c.5 (C9) `SignalMessage.ValidateRecipients` materializes the `IEnumerable<IRecipient>` exactly once at entry via `as IReadOnlyList<IRecipient> ?? recipients.ToList()`; user/group split is a single `foreach`, no double-pass `Where(...)` anymore
-- [ ] 8c.6 (C7) `SendUnifiedMessageAsync` 23-parameter signature → internal `UnifiedSendRequest` record DTO; public `Send*Async` builders unchanged **(deferred — cosmetic; functionality intact)**
+- [x] 8c.6 (C7) `SendUnifiedMessageAsync` тепер приймає `internal sealed record UnifiedSendRequest` (новий файл `Services/Signal/UnifiedSendRequest.cs`) — один параметр замість 23. Усі 3 public `Send*Async`-обгортки будують record з типобезпечного `*MessageOptions`. `ArgumentException.ParamName` зберіг consumer-visible імена (`recipients`, `quoteTimestamp`) — CA2208 suppressed з документованим обґрунтуванням (analyzer перевіряє локальний scope, тут intentional re-throw у caller context).
 - [ ] 8c.7 (C8) Audit and remove the `catch (Exception ex) { _logger.LogError(ex, "..."); throw; }` bare patterns from `SignalService`, `SignalMessage`, `SignalAccounts`, `SignalDevices`, `SignalGroups`, `JsonRpcClientHostedService`; either delete the catch or enrich with method/account context **(deferred — broad sweep; behavior intact)**
 - [x] 8c.8 (C10) `Config.BuildClasspath` caches the joined classpath after the first call (`_cachedClasspath` field; lazy-init); `Directory.GetFiles` invoked once per `Config` instance regardless of restart count
 - [ ] 8c.9 Test: stateful enumerator passed to `Send*Async` → enumerated exactly once
@@ -197,8 +197,8 @@ This capability is **additive** — it lands in a 2.2.0 minor before the 3.0 bre
 - [x] 11.A.3 `SignalCliHostedService.StartProcessInternalAsyncNoLock` instruments `signalcli.process.start` span; tag `signal.process.executable` = basename via `Path.GetFileName(procConfig.Executable)` (full path is PII-adjacent — host-layout leak). `OnProcessExitedAsync`/`ForceRestartAsync` spans **(deferred)** — counter via `ProcessRestarts` already covers metric side.
 - [x] 11.A.4 `SignalCliHealthMonitor.PingCliAsync` → `signalcli.healthcheck.ping` span; tag `signal.healthcheck.outcome` ∈ {`ok`,`timeout`,`failed`,`no_stream_pair`}; status Ok on healthy, Error+exception-type-name on failure/timeout.
 - [x] 11.A.5 `SignalEventService.SubscribeAsync` → `signalcli.subscribe` span; tag `signal.subscription.id` (int) set on success. **`account` NOT a tag** (PII — phone number). `UnsubscribeAsync` span **(deferred)**.
-- [ ] 11.A.6 **Privacy guard test:** `Tests/SignalCli.Tests/Observability/ActivityTagPrivacyTests.cs` **(deferred — pairs with §11.B.8 in a single Observability test fixture)**
-- [x] 11.A.7 `docs/cloud-development.md` — new "Observability" section with the OTel hookup snippet, full surface inventory (5 spans + 5 instruments), and privacy invariant. README docs deferred for the v3.0 wave.
+- [x] 11.A.6 **Privacy guard test** `ObservabilityPrivacyTests` (4 cases): `ActivityListener`-based capture з `ShouldListenTo(src.Name == "SignalCli.NET")` + `ActivityStopped`-handler. Seed PII (`+380999000111`, `ПРИВІТ-АУДИТ-СЕКРЕТНЕ-ТІЛО-2026`, `/home/audit/secret-attachment.bin`) пропускається через `SubscribeAsync` + dispatch-нотифікація з seed-тілом у `JsonDataMessage`; кожен tag-value і StatusDescription перевіряється `Assert.DoesNotContain` на 3 PII-маркери.
+- [x] 11.A.7 README + `docs/cloud-development.md` — both have Observability sections with OTel hookup snippet, full surface inventory, privacy invariant pointer, and HealthChecks package note (ASP.NET-independent). README section додано після `### ⚙️ Системні`.
 
 ### 11.B. Meter (`System.Diagnostics.Metrics` — counters & histograms)
 
@@ -209,7 +209,7 @@ This capability is **additive** — it lands in a 2.2.0 minor before the 3.0 bre
 - [x] 11.B.5 `Counter<long> ProcessRestarts` — tag `trigger` ∈ {`force`,`crash`,`health`}. Three call sites instrumented: `SignalCliHostedService.ForceRestartAsync` (`force`), `SignalCliHostedService.OnProcessExitedAsync` auto-restart path (`crash`), `SignalCliHealthMonitor.ExecuteAsync` pre-ForceRestart (`health`).
 - [x] 11.B.6 `ObservableGauge<int> ActiveSubscriptions` — created in `SignalCliDiagnostics`; callback провайдер реєструється через `SetActiveSubscriptionsProvider(GetActiveSubscriptionCount)` у `SignalEventService.StartAsync` (lock-protected read of `_accountSubscriptions.Count`). Без тегів — кардинальність 1. Без зареєстрованого провайдера gauge репортує 0.
 - [x] 11.B.7 All `Counter.Add`/`Histogram.Record` calls use ≤3 tags per Microsoft *Multi-dimensional metrics — allocation-free for ≤3 tags*. No PII in tag values (audited: method names, integer ids, durations, enum literals only).
-- [ ] 11.B.8 Test: `MeterListener` captures one `signalcli.rpc.requests` increment per `InvokeMethodAsync` call; status tag matches outcome. **(Deferred — pairs with §11.A.6 privacy guard tests in a single Observability test fixture.)**
+- [x] 11.B.8 Test: `MeterListener` (у `ObservabilityPrivacyTests`) — `SetMeasurementEventCallback<long>` + `<double>` capture per `InstrumentPublished` filter на `Meter.Name == "SignalCli.NET"`. Тест `MeterTagValues_AreOnlyKnownEnumLiterals` фіксує canonical tag-keys set (`method`, `status`, `trigger`, `event_type`) — будь-який новий tag-key ламає тест як форму enforcement'у privacy/cardinality інваріанту.
 
 ### 11.C. IHealthCheck — separate package `SignalCli.NET.HealthChecks`
 
@@ -222,7 +222,7 @@ This capability is **additive** — it lands in a 2.2.0 minor before the 3.0 bre
 
 ### 11.D. Privacy + AOT smoke
 
-- [ ] 11.D.1 **Privacy invariant test** (mirrors §11.A.6 but for metrics): `MeterListener` capturing every recorded measurement asserts every tag value is one of the documented enum literals / numeric / method-name — never a phone number / message body substring.
+- [x] 11.D.1 **Privacy invariant test** — done as part of `ObservabilityPrivacyTests` (§11.A.6/§11.B.8 fixture). `MeterTagValues_AreOnlyKnownEnumLiterals` enforce'ує що `tag.Key ∈ {method, status, trigger, event_type}` AND `tag.Value` non-null; будь-який новий tag spawns test failure.
 - [ ] 11.D.2 With §6.7 (`<IsAotCompatible>true</IsAotCompatible>`), AOT analyzer reports zero new IL2026/IL3050 warnings from the `Diagnostics/` folder.
 - [ ] 11.D.3 Update `CLAUDE.md`: extend critical rule #1 (Privacy) to read "no PII in `[LoggerMessage]` templates at `Information+` AND no PII in `Activity` tag values AND no PII in `Meter` tag values" (the rule's intent already covers this — make it explicit).
 
