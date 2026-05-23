@@ -111,4 +111,43 @@ public interface ISignalEventService : IHostedService
     /// </summary>
     /// <remarks>F13: новий потік для DataMessage.RemoteDelete.</remarks>
     IObservable<RemoteDeleteEventArgs> RemoteDeletes { get; }
+
+    // ===== E (async-stream events) =====
+    // IAsyncEnumerable-парні API для кожного потоку подій. Реалізовано поверх
+    // System.Threading.Channels.Channel.CreateBounded (capacity=1024, DropOldest).
+    //
+    // КОНТРАКТ — exclusive consumption: кожен елемент читає РІВНО ОДИН споживач (no fan-out).
+    // Для broadcast/fan-out використовуйте парні IObservable<>-властивості вище.
+    // При переповненні буфера найстаріший елемент мовчки вижене (DropOldest);
+    // факт дропу логується на Debug із лічильником.
+
+    /// <summary>Async-stream-варіант <see cref="TextMessages"/> (exclusive consumption).</summary>
+    IAsyncEnumerable<TextMessageEventArgs> TextMessagesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Async-stream-варіант <see cref="Reaction"/> (exclusive consumption).</summary>
+    IAsyncEnumerable<ReactionEventArgs> ReactionAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Async-stream-варіант <see cref="Attachments"/> (exclusive consumption).</summary>
+    IAsyncEnumerable<AttachmentEventArgs> AttachmentsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Async-stream-варіант <see cref="Sticker"/> (exclusive consumption).</summary>
+    IAsyncEnumerable<StickerEventArgs> StickerAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Async-stream-варіант <see cref="TypingNotifications"/> (exclusive consumption).</summary>
+    IAsyncEnumerable<TypingEventArgs> TypingAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Async-stream-варіант <see cref="Receipts"/> (exclusive consumption).</summary>
+    IAsyncEnumerable<ReceiptEventArgs> ReceiptsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Async-stream-варіант <see cref="Syncs"/> (exclusive consumption).</summary>
+    IAsyncEnumerable<SyncEventArgs> SyncsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Async-stream-варіант <see cref="Quotes"/> (exclusive consumption).</summary>
+    IAsyncEnumerable<QuoteEventArgs> QuotesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Async-stream-варіант <see cref="Edits"/> (exclusive consumption).</summary>
+    IAsyncEnumerable<EditEventArgs> EditsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Async-stream-варіант <see cref="RemoteDeletes"/> (exclusive consumption).</summary>
+    IAsyncEnumerable<RemoteDeleteEventArgs> RemoteDeletesAsync(CancellationToken cancellationToken = default);
 }
