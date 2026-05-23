@@ -62,7 +62,7 @@
 - [x] 4.25 (audit N9) `TextMessageOptions.PreviewUrl` + `.PreviewImage` декоровані `[StringSyntax(StringSyntaxAttribute.Uri)]`. Параметри `Builder.WithPreview(previewUrl, …, previewImage)` теж. `AttachmentMessageOptions` не має URL-полів. Zero runtime cost; IDEs/analyzers тепер валідують URL-syntax.
 - [x] 4.26 (audit N12) `ISignalMessage.{SendTextMessageAsync, SendAttachmentAsync, SendStickerAsync}` XMLDoc'и отримали `<exception cref="TimeoutException">` із посиланням на `SignalCliOptions.RequestTimeoutSeconds`. Заголовок результат-блоку оновлено (single response, не "Результати"). `<param>cancellationToken</param>` спрощено — більше не згадує "лінкується" (LinkTokens помер у §4.7).
 - [x] 4.27 (audit N11) Generic-order swap: `InvokeMethodAsync<TResponse, TRequest>` → `InvokeMethodAsync<TRequest, TResponse>` на `ISignalCliClient`, `IJsonRpcSender`, `JsonRpcClient`, `SignalService` + усі ~22 callsites (production + test mocks). **`[Obsolete]`-shim неможливий**: C# overload-resolution не розрізняє методи з однаковою runtime-сигнатурою, що відрізняються лише порядком typeparam'ів (аналогічно §4.21 з `JsonRpcException`-ctor — там теж pure removal). CHANGELOG-entry задокументовує неможливість shim'у.
-- [ ] 4.28 (audit E2) `SignalCliOptions.EnvironmentVariables` ALSO becomes `IReadOnlyDictionary<string,string>` (paired with §4.10 on `Config`); `SignalCliOptionsExtensions.ToOptions` / `ToConfig` / `CopyFrom` perform a defensive copy (no shared mutable reference between the two types or with consumer code).
+- [x] 4.28 (audit E2) Verified: `SignalCliOptions.EnvironmentVariables` уже `IReadOnlyDictionary<string,string>` (з §4.10 в попередній хвилі); `SignalCliOptionsExtensions.ToOptions`/`ToConfig`/`CopyFrom` уже виконують defensive-copy через `new Dictionary<string,string>(environment)` чи аналог. Зайвої роботи — нема.
 
 ## 5. High-performance logging (capability `high-performance-logging`)
 
@@ -85,7 +85,7 @@
 - [x] 6.2 (B2) `SignalCliHostedService._operationLock`: `AsyncLock` → `SemaphoreSlim(1, 1)` (4 lock sites + 1 callback)
 - [x] 6.3 (B2) Drop `Nito.AsyncEx` PackageReference from `SignalCli.csproj`
 - [ ] 6.4 (P6) Drop `DefaultJsonTypeInfoResolver` from `SignalJson.Options.TypeInfoResolver` — leave only `SignalJsonContext.Default`. **(Deferred — needs §6.10 first; 5 tests use anonymous types via reflection fallback.)**
-- [ ] 6.5 (P6) Audit all `JsonSerializer.Serialize`/`Deserialize`/`SerializeToElement` call sites for `TRequest`/`TResponse` types not in `SignalJsonContext`; add any missing. **(Tracked under §6.12 reflection-based context-registration test.)**
+- [x] 6.5 (P6) Audit покрито через §6.12 `JsonContextRegistrationTests`: reflective-enumeration усіх `*Parameters`/`*Response` DTO у Models namespace + fixed-list для JSON-RPC root types. Будь-який missing-registration ловиться test-failure'ом, а не silent-`{}`-bug'ом на production. §4.20 додало `List<Account>` + `List<Group>` (inner-collection для wrapper-converter'ів) — підтверджено будовою.
 - [x] 6.6 (B6) `[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Default)]` for fast-path emission (metadata + fast-path; was Metadata-only)
 - [ ] 6.7 (P6) `<IsAotCompatible>true</IsAotCompatible>` in `SignalCli.csproj` **(Deferred — enabling produces 14 IL2026/IL3050 warnings on generic `JsonSerializer.Serialize/Deserialize<T>(_, options)` sites in `JsonRpcClient.InvokeMethodAsync<TRequest, TResponse>`. Full migration needs redesign onto `JsonTypeInfo<T>`-based overloads — separate session.)**
 - [ ] 6.8 (P6) Resolve any IL2026/IL2104 warnings surfaced by the AOT analyzer (annotate with `RequiresUnreferencedCode` only as last resort) **(Paired with §6.7.)**
@@ -101,15 +101,15 @@
   - `SignalCliHealthMonitorLoopTests.cs:71` — `Task.Delay(1000)` у NEGATIVE-тесті ("монітор не повинен restart-ити, якщо ping ОК"). Виправлення: replace із FakeTimeProvider + `MonitorLoop`-Subscribe на ping-callback signal. **Deferred** — окрема ітерація.
   - `SignalCliHostedServiceAuditTests.cs:65` — `Task.Delay(RestartWindowSeconds+1)`: справжній clock-dep на RestartWindow-timer. **Migration plan**: інжектити `FakeTimeProvider` через `CreateService(timeProvider)`, потім `fakeTime.Advance(...)` + `await Task.Yield()` для async-timer-callback. **Deferred** — async-timer-callback може потребувати додаткового sync-signal'у.
   - Решта (`JsonRpcClientTests.cs:232,288`, `RestartTests.cs:92,125,221`, `AuditTests.cs:41,75`, `StateTests.cs:204`, `EdgeCaseTests.cs:65`) — sync-completion waits, fix через event-based pattern (TCS-Spy на log-callback або state-change-event). **Не FakeTimeProvider**.
-- [ ] 7.2 (T3) Add `internal` TestSeam properties (gated by `[InternalsVisibleTo("SignalCli.Tests")]`) — replace `GetPrivateField<IProcess>(svc, "_currentProcess")` with `svc.TestSeam.CurrentProcess`
-- [ ] 7.3 (T3) Delete `GetPrivateField`/`SetPrivateField` from `SignalCliHostedServiceTestsBase`
+- [x] 7.2 (T3) Додано typed test-seam'и в `SignalCliHostedService`: `internal IProcess? CurrentProcessForTests => _currentProcess;` + `internal StreamPair? CurrentStreamPairForTests => _currentStreamPair;`. Видимі через існуючий `InternalsVisibleTo("SignalCli.Tests")`. **35 reflection-сайтів** у 7 test-файлах (`SignalCliHostedServiceAuditTests`, `SignalCliHostedServiceDisposalTests`, `SignalCliHostedServiceLifecycleTests`, `SignalCliHostedServiceRestartTests`, `SignalCliHostedServiceShutdownTests`, `SignalCliHostedServiceStateTests`, `SignalCliHostedServiceStreamPairTests`) batch-замінено через PowerShell regex (UTF-8-safe IO).
+- [x] 7.3 (T3) `GetPrivateField`/`SetPrivateField` методи + `using System.Reflection` видалено з `SignalCliHostedServiceTestsBase`. Reflection-доступ був opaque: rename'и приватних полів тихо повертали null замість compile-error'у. Контракт тепер типовий — IDE rename'и автоматично пропагуються.
 - [x] 7.4 (T4) Audit: знайдено 1 floating-point assert без explicit-precision — `SignalCliHealthMonitorLoopTests.cs:226` (`Assert.Equal(1.0, interval.TotalSeconds)`). Додано `precision: 3` із посиланням на CA2243 у коментарі. Інші numeric-asserts у тест-suite — int/long (precision-agnostic).
 - [ ] 7.5 (T5) New `Tests/SignalCli.Tests/SignalCliHostedService/StateManagerReentrancyTests.cs` (matches §2.5)
 - [ ] 7.6 (T5) New `Tests/SignalCli.Tests/SignalEventService/SubscribeRaceTests.cs` (matches §3.6)
 - [ ] 7.7 (T5) New `Tests/SignalCli.Tests/Rpc/BackPressureTests.cs` (matches §1.6)
 - [ ] 7.8 (T1) Migrate to `xunit.v3` + `Microsoft.Testing.Platform.MSBuild`; update `xunit 2.9.2`/`xunit.runner.visualstudio 2.8.2` PackageReferences
 - [ ] 7.9 (T8) `IAsyncLifetime` on hosted-service test bases instead of `IDisposable`
-- [ ] 7.10 (T10) Consolidate facade passthrough tests with `[Theory]` + `[InlineData]` where the shape is uniform
+- [~] 7.10 (T10) **Не консолідовано** — audit показав, що 5 кандидат-тестів (`*_WhenNull_Throws`) використовують різні generic-types у Moq-setup'ах (`InvokeMethodAsync<TReq, TResp>` із 5 різних пар) і різні facade-types. `[InlineData]` не приймає Type-параметри для generics; alternative — helper-method із generic-параметрами + Func — не значно коротше, але втрачає decoupling per-test. Залишаю як 5 `[Fact]`-тестів — кожен self-contained, читальний. Spec was aspirational on this point.
 
 ## 8. Cloud development (capability `cloud-development`) — already in this change
 

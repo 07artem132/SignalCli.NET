@@ -41,6 +41,12 @@ public sealed class SignalCliHostedService : IHostedService, IStreamPairProvider
     // Тримаємо посилання на пару потоків ВИКЛЮЧНО для звільнення ресурсу в CleanupProcess.
     // Єдине джерело істини про стан/потоки — ProcessStateManager.
     private StreamPair? _currentStreamPair;
+
+    // post-modernize-tuning §7.2 (T3): typed test-seam замість reflection.GetField("_currentProcess").
+    // Internal-only — InternalsVisibleTo("SignalCli.Tests") у csproj. Прибирає ризик opaque
+    // breakage при rename'і приватних полів (рефлексія мовчки повертає null).
+    internal IProcess? CurrentProcessForTests => _currentProcess;
+    internal StreamPair? CurrentStreamPairForTests => _currentStreamPair;
     // post-modernize-tuning §2.4: Interlocked.Exchange-based disposal flag.
     private int _disposedFlag;
     private bool _disposed => Volatile.Read(ref _disposedFlag) != 0;

@@ -82,7 +82,7 @@ public class SignalCliHostedServiceStateTests : SignalCliHostedServiceTestsBase
             .Subscribe(info => states.Add(info.State));
 
         await service.StartAsync(CancellationToken.None);
-        var process = GetPrivateField<IProcess>(service, "_currentProcess");
+        var process = service.CurrentProcessForTests;
         var processMock = Mock.Get(process!);
 
         // Очищаем текущий список состояний

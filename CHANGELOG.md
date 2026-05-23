@@ -77,6 +77,7 @@
 - **(round 12 §8c.9)** Test: `SendTextMessageAsync_StatefulEnumerableRecipients_AreEnumeratedExactlyOnce` — захист §8c.5 single-pass-materialization від регресії до 3-х проходів (validate + 2× Where) на stateful IEnumerable.
 - **(round 12 §8c.10)** Test: `ToProcessConfig_CachesClasspath_SecondCall_DoesNotEnumerateFiles` — observable-pattern (delete jar between calls), захист §8c.8 classpath-кешування.
 - **(round 12 §9.6/§11.C.5)** CLAUDE.md "Established patterns" — нова **Observability** subsection: single ActivitySource/Meter `"SignalCli.NET"`, canonical tag-key set `{method, status, trigger, event_type}` (pinned by `MeterTagValues_AreOnlyKnownEnumLiterals`), HealthChecks adapter як ОКРЕМИЙ optional-package (NEVER hard dep на `Microsoft.Extensions.Diagnostics.HealthChecks` у core), lock+snapshot pattern для listener-fan-out тестів.
+- **(round 13 §7.2/§7.3)** Reflection helpers `GetPrivateField<T>`/`SetPrivateField` видалено з `SignalCliHostedServiceTestsBase`. Замість них — `internal IProcess? SignalCliHostedService.CurrentProcessForTests` + `CurrentStreamPairForTests` (typed test-seam, видимий через `InternalsVisibleTo("SignalCli.Tests")`). 35 reflection-сайтів у 7 test-файлах перекинуто на типовий доступ. Renames приватних полів тепер ламають білд (compile-error), а не повертають мовчазний null.
 
 ## [2.1.0] — неопубліковано
 

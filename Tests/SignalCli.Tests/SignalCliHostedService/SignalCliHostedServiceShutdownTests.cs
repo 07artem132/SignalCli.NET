@@ -15,7 +15,7 @@ public class SignalCliHostedServiceShutdownTests : SignalCliHostedServiceTestsBa
         var service = CreateService();
         await service.StartAsync(CancellationToken.None);
 
-        var process = GetPrivateField<IProcess>(service, "_currentProcess")!;
+        var process = service.CurrentProcessForTests!;
         var processMock = Mock.Get(process);
         // Зовнішня перевірка бачить процес живим, а після "exit" — вже завершеним.
         processMock.SetupSequence(p => p.HasExited)
@@ -37,7 +37,7 @@ public class SignalCliHostedServiceShutdownTests : SignalCliHostedServiceTestsBa
         var service = CreateService();
         await service.StartAsync(CancellationToken.None);
 
-        var process = GetPrivateField<IProcess>(service, "_currentProcess")!;
+        var process = service.CurrentProcessForTests!;
         var processMock = Mock.Get(process);
         // Процес не реагує на "exit" — лишається живим.
         processMock.Setup(p => p.HasExited).Returns(false);

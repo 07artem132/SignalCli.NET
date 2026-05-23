@@ -16,7 +16,7 @@ public class SignalCliHostedServiceRestartTests : SignalCliHostedServiceTestsBas
         // Arrange
         var service = CreateService();
         await service.StartAsync(CancellationToken.None);
-        var initialProcessId = GetPrivateField<IProcess>(service, "_currentProcess")?.Id;
+        var initialProcessId = service.CurrentProcessForTests?.Id;
 
         // Следим за порядком изменения состояний
         var stateChanges = new List<ProcessState>();
@@ -27,7 +27,7 @@ public class SignalCliHostedServiceRestartTests : SignalCliHostedServiceTestsBas
         await service.ForceRestartAsync(CancellationToken.None);
 
         // Assert
-        var newProcessId = GetPrivateField<IProcess>(service, "_currentProcess")?.Id;
+        var newProcessId = service.CurrentProcessForTests?.Id;
         Assert.NotEqual(initialProcessId, newProcessId);
         Assert.Equal(ProcessState.Running, StateManager.CurrentState);
         
@@ -50,17 +50,17 @@ public class SignalCliHostedServiceRestartTests : SignalCliHostedServiceTestsBas
         Config.MaxRestartAttempts = 1;
         var service = CreateService();
         await service.StartAsync(CancellationToken.None);
-        var initialProcessId = GetPrivateField<IProcess>(service, "_currentProcess")?.Id;
+        var initialProcessId = service.CurrentProcessForTests?.Id;
 
         // Act
         // Перша спроба (дозволена)
         await service.ForceRestartAsync(CancellationToken.None);
-        var firstRestartProcessId = GetPrivateField<IProcess>(service, "_currentProcess")?.Id;
+        var firstRestartProcessId = service.CurrentProcessForTests?.Id;
 
         ProcessStartCallCount = 0;
         // Друга спроба (перевищує ліміт)
         await service.ForceRestartAsync(CancellationToken.None);
-        var secondRestartProcessId = GetPrivateField<IProcess>(service, "_currentProcess")?.Id;
+        var secondRestartProcessId = service.CurrentProcessForTests?.Id;
 
         // Assert
         Assert.NotEqual(initialProcessId, firstRestartProcessId);
@@ -77,7 +77,7 @@ public class SignalCliHostedServiceRestartTests : SignalCliHostedServiceTestsBas
         // Arrange
         var service = CreateService();
         await service.StartAsync(CancellationToken.None);
-        var initialProcess = GetPrivateField<IProcess>(service, "_currentProcess");
+        var initialProcess = service.CurrentProcessForTests;
         var initialProcessMock = Mock.Get(initialProcess!);
         
         var stateChanges = new List<ProcessState>();
@@ -102,7 +102,7 @@ public class SignalCliHostedServiceRestartTests : SignalCliHostedServiceTestsBas
         Assert.Equal(ProcessState.Running, stateChanges.Last());
         
         // Перевіряємо, що це новий процес
-        var newProcess = GetPrivateField<IProcess>(service, "_currentProcess");
+        var newProcess = service.CurrentProcessForTests;
         Assert.NotNull(newProcess);
         Assert.NotSame(initialProcess, newProcess);
     }
@@ -115,7 +115,7 @@ public class SignalCliHostedServiceRestartTests : SignalCliHostedServiceTestsBas
         Config.MaxRestartAttempts = 0;
         var service = CreateService();
         await service.StartAsync(CancellationToken.None);
-        var process = GetPrivateField<IProcess>(service, "_currentProcess");
+        var process = service.CurrentProcessForTests;
         var processMock = Mock.Get(process!);
         
         // Act
@@ -139,7 +139,7 @@ public class SignalCliHostedServiceRestartTests : SignalCliHostedServiceTestsBas
         // Arrange
         var service = CreateService();
         await service.StartAsync(CancellationToken.None);
-        var process = GetPrivateField<IProcess>(service, "_currentProcess");
+        var process = service.CurrentProcessForTests;
         var processMock = Mock.Get(process!);
         
         // Начинаем остановку
@@ -213,7 +213,7 @@ public class SignalCliHostedServiceRestartTests : SignalCliHostedServiceTestsBas
         await service.StartAsync(CancellationToken.None);
         
         // Симулюємо один успішний перезапуск
-        var process1 = GetPrivateField<IProcess>(service, "_currentProcess");
+        var process1 = service.CurrentProcessForTests;
         var processMock1 = Mock.Get(process1!);
         processMock1.Setup(p => p.HasExited).Returns(true);
         processMock1.Raise(p => p.Exited += null, EventArgs.Empty);
@@ -222,7 +222,7 @@ public class SignalCliHostedServiceRestartTests : SignalCliHostedServiceTestsBas
         Assert.Equal(ProcessState.Running, StateManager.CurrentState);
         
         // Другий перезапуск має бути можливим, оскільки лічильник скинувся
-        var process2 = GetPrivateField<IProcess>(service, "_currentProcess");
+        var process2 = service.CurrentProcessForTests;
         var processMock2 = Mock.Get(process2!);
         processMock2.Setup(p => p.HasExited).Returns(true);
         processMock2.Raise(p => p.Exited += null, EventArgs.Empty);

@@ -197,7 +197,7 @@ public class SignalCliHostedServiceStreamPairTests : SignalCliHostedServiceTests
         using var subscription = service.StreamPairChanged.Subscribe(streamPairs.Add);
 
         await service.StartAsync(CancellationToken.None);
-        var process = GetPrivateField<IProcess>(service, "_currentProcess");
+        var process = service.CurrentProcessForTests;
         var processMock = Mock.Get(process!);
 
         // Act
