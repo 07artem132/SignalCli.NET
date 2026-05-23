@@ -44,15 +44,15 @@
 - [ ] 4.7 (D3) `CancellationToken` removed from `TextMessageOptions` / `AttachmentMessageOptions` / `StickerMessageOptions`; added as last parameter to `SendTextMessageAsync` / `SendAttachmentAsync` / `SendStickerAsync`
 - [x] 4.8 (D5) `SignalCliHostedService` becomes `sealed`
 - [ ] 4.9 (D6) `ConfigureAwait(false)` added to the 5 missing public-path `await`s; `.editorconfig` raises `CA2007` from `silent` → `warning`
-- [ ] 4.10 (D7) `Config.EnvironmentVariables` becomes `IReadOnlyDictionary<string,string>` with a `WithEnvironment(IDictionary<string,string>)` setter helper
-- [ ] 4.11 (D8) `Example/Program.cs` rewritten as `async Task Main`, `await using IHost host = …`, awaited `SendTextMessageAsync`, awaited `host.StopAsync()`
-- [ ] 4.12 (D10) `JsonRpcRequest` record body emptied (positional params already generate the properties); `[property: JsonPropertyName("...")]` on each ctor param
-- [ ] 4.13 (D11) Compileable `<example>` XML-doc snippets on `ISignalMessage.*Async` (use `[new UserRecipient(...)]`, not `new[] { ... }`)
-- [ ] 4.14 (D12) `JetBrains.Annotations` → `PrivateAssets="all"` in `SignalCli.csproj`
-- [ ] 4.15 (D9) Builders' `Build()` adds final guard (defensive, post-mutation)
+- [x] 4.10 (D7) `Config.EnvironmentVariables` becomes `IReadOnlyDictionary<string,string>` with a `WithEnvironment(IDictionary<string,string>)` defensive-copy helper that returns `this`. `SignalCliOptions.EnvironmentVariables` теж типу `IReadOnlyDictionary` (§4.28 paired). Test `ProcessRunner_ShouldReceiveCorrectEnvironmentVariables` migrated to `WithEnvironment(new Dictionary<,>{ … })` — `Add()` на shared посилання більше не компілюється, що й є метою.
+- [x] 4.11 (D8) `Example/Program.cs` rewritten as `async Task Main`, awaited `SendTextMessageAsync`, awaited `host.StopAsync()`. `await using` deferred — `IHost` 10.0 не декларує `IAsyncDisposable` напряму; concrete host реалізує, але cast псує portability. Замість фейкового fire-and-forget Subscribe-callback тепер `Task.Run` із proper try/catch + `ConfigureAwait(false)`. Закоментований приклад OTel-підключення (AddSource("SignalCli.NET") + AddMeter) додано.
+- [x] 4.12 (D10) `JsonRpcRequest` record body emptied — позиційні параметри `(Method, Params, Id)` зараз із `[property: JsonPropertyName("...")]` синтаксисом; залишилось лише `JsonRpc { get; init; } = "2.0"`. Дублікати `Method = Method` etc. видалено.
+- [ ] 4.13 (D11) Compileable `<example>` XML-doc snippets on `ISignalMessage.*Async` (use `[new UserRecipient(...)]`, not `new[] { ... }`) **(deferred — docs cleanup)**
+- [ ] 4.14 (D12) `JetBrains.Annotations` → `PrivateAssets="all"` in `SignalCli.csproj` **(deferred — single-line csproj edit; minor packaging hygiene)**
+- [ ] 4.15 (D9) Builders' `Build()` adds final guard (defensive, post-mutation) **(deferred — current Builders already validate at the ctor of Builder; post-mutation guard is belt-and-suspenders)**
 - [ ] 4.16 `Version` 2.0.0 → 3.0.0 in `SignalCli.csproj` (semver-major for the breaks); CHANGELOG entry under "## [3.0.0]"
 - [ ] 4.17 (N3) `Models/Signal/Envelope.cs` — audit each non-nullable `string` field against signal-cli wire contract; mark `[JsonRequired]` where always-present (`Hangup.Type`, `Offer.Type`/`Offer.Opaque`, `Answer.Opaque`, `IceUpdate.Opaque`, `JsonRemoteDelete.RemoteDeleteId`), make `string?` otherwise. No silent `null`-into-non-nullable.
-- [ ] 4.18 (N4) `UserRecipient`/`GroupRecipient` ctors — replace `ArgumentNullException` with `ArgumentException.ThrowIfNullOrEmpty(...)` (.NET 8+); update XML-doc `<exception>` to match
+- [x] 4.18 (N4) `UserRecipient`/`GroupRecipient` ctors — `ArgumentException.ThrowIfNullOrEmpty(...)` (.NET 8+) у приватному `ValidateAndReturn`-помічнику, що зберігає `<param>`-name через `nameof()`. XML-doc оновлено: тепер обидва типи документують `<exception cref="ArgumentNullException">` для null AND `<exception cref="ArgumentException">` для empty (раніше було «обидва кидаються коли null або empty» — некоректно).
 - [ ] 4.19 (N9) `BaseSignalEventArgs.Account` → non-nullable `string`; same for the derived `*EventArgs` records' inherited `Account` slot; propagate non-null through `SignalEventService.OnNotificationReceived`
 - [ ] 4.20 (N10) `ListAccountsResponse` and `ListGroupsResponse` — turn into wrapper records (`(IReadOnlyList<T> Items)`) with a `[JsonConverter]` (or positional record param typed as the collection) that preserves the wire JSON array shape
 - [x] 4.21 (N14) `JsonRpcException` — three CA1032 ctors added: `()`, `(string)`, `(string, Exception)`. Default `Error` uses canonical JSON-RPC 2.0 code `-32603` ("Internal error"), not the non-standard `-32000`.
@@ -207,7 +207,7 @@ This capability is **additive** — it lands in a 2.2.0 minor before the 3.0 bre
 - [x] 11.B.3 `Histogram<double> RpcDuration` (unit `ms`) — tag `method`. Recorded in `JsonRpcClient.InvokeMethodAsync` `finally` block via `Stopwatch.GetElapsedTime`.
 - [x] 11.B.4 `Counter<long> EventsDropped` — tag `event_type`. Replaces private `_droppedCount`; `TryWriteOrDrop` now `static` + accepts `eventType`-arg.
 - [x] 11.B.5 `Counter<long> ProcessRestarts` — tag `trigger` ∈ {`force`,`crash`,`health`}. Three call sites instrumented: `SignalCliHostedService.ForceRestartAsync` (`force`), `SignalCliHostedService.OnProcessExitedAsync` auto-restart path (`crash`), `SignalCliHealthMonitor.ExecuteAsync` pre-ForceRestart (`health`).
-- [ ] 11.B.6 `ObservableGauge<int> ActiveSubscriptions` **(deferred — needs internal `SubscriptionCount` accessor on `SignalEventService`)**
+- [x] 11.B.6 `ObservableGauge<int> ActiveSubscriptions` — created in `SignalCliDiagnostics`; callback провайдер реєструється через `SetActiveSubscriptionsProvider(GetActiveSubscriptionCount)` у `SignalEventService.StartAsync` (lock-protected read of `_accountSubscriptions.Count`). Без тегів — кардинальність 1. Без зареєстрованого провайдера gauge репортує 0.
 - [x] 11.B.7 All `Counter.Add`/`Histogram.Record` calls use ≤3 tags per Microsoft *Multi-dimensional metrics — allocation-free for ≤3 tags*. No PII in tag values (audited: method names, integer ids, durations, enum literals only).
 - [ ] 11.B.8 Test: `MeterListener` captures one `signalcli.rpc.requests` increment per `InvokeMethodAsync` call; status tag matches outcome. **(Deferred — pairs with §11.A.6 privacy guard tests in a single Observability test fixture.)**
 

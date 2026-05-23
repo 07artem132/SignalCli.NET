@@ -641,7 +641,24 @@ internal sealed class SignalEventService(
         // в порядку hosted-service startup), але НЕ зберігаємо у полі — клієнт міг бути
         // disposнутим до Dispose() через рестарт процесу.
         _notificationSubscription = _rpcClientProvider.Client.Notifications.Subscribe(OnNotificationReceived);
+        // post-modernize-tuning §11.B.6: реєструємо gauge-провайдер для активних підписок.
+        // Безпечно читати _accountSubscriptions.Count поза локом — Dictionary.Count є потокобезпечним
+        // для read-only-доступу (документація: read-thread-safe доки немає concurrent writes;
+        // у нас всі writes — під _subscriptionsLock, тож worst case — на 1 застаріле значення).
+        SignalCliDiagnostics.SetActiveSubscriptionsProvider(GetActiveSubscriptionCount);
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// post-modernize-tuning §11.B.6: потокобезпечне читання кількості активних підписок
+    /// для <see cref="SignalCliDiagnostics.ActiveSubscriptions"/> ObservableGauge.
+    /// </summary>
+    private int GetActiveSubscriptionCount()
+    {
+        lock (_subscriptionsLock)
+        {
+            return _accountSubscriptions.Count;
+        }
     }
 
     public Task StopAsync(CancellationToken cancellationToken)

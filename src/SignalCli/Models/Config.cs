@@ -142,7 +142,27 @@ public class Config
     /// <summary>
     /// Змінні середовища для процесу Signal CLI.
     /// </summary>
-    public IDictionary<string, string> EnvironmentVariables { get; set; } = new Dictionary<string, string>();
+    /// <remarks>
+    /// post-modernize-tuning §4.10 (audit D7): тип на читання — <see cref="IReadOnlyDictionary{TKey,TValue}"/>,
+    /// мутація — через <see cref="WithEnvironment"/> (повертає снапшот). Це усуває можливість
+    /// мутувати dictionary після того, як Config зареєстровано в DI як singleton — раніше
+    /// будь-хто з <c>IOptions&lt;&gt;</c>-resolve міг змінити вміст і вплинути на інші компоненти.
+    /// </remarks>
+    public IReadOnlyDictionary<string, string> EnvironmentVariables { get; set; } =
+        new Dictionary<string, string>();
+
+    /// <summary>
+    /// post-modernize-tuning §4.10 (audit D7): defensive copy. Замість того, щоб віддавати
+    /// викликачу мутабельне посилання, копіюємо передану мапу і запечатуємо її read-only-вʼю.
+    /// </summary>
+    /// <param name="environment">Початкова мапа змінних середовища.</param>
+    /// <returns>Те саме <see cref="Config"/>-посилання (fluent-стиль).</returns>
+    public Config WithEnvironment(IDictionary<string, string> environment)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+        EnvironmentVariables = new Dictionary<string, string>(environment);
+        return this;
+    }
 
     /// <summary>
     /// Створює конфігурацію процесу для запуску Signal CLI.

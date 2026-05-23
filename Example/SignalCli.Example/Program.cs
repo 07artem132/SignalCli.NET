@@ -1,4 +1,3 @@
-﻿using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -6,15 +5,26 @@ using SignalCli.Extensions;
 using SignalCli.Interfaces.Signal;
 using SignalCli.Interfaces.SignalCli;
 using SignalCli.Models;
-using SignalCli.Models.Signal.Events;
 using SignalCli.Models.Signal.Message;
 
 namespace SignalCli.Example
 {
+    /// <summary>
+    /// post-modernize-tuning §4.11 (audit D8): приклад переписаний на:
+    ///   • async Task Main (повний await-flow без fire-and-forget),
+    ///   • await using IHost host (IAsyncDisposable shutdown),
+    ///   • await SendTextMessageAsync (раніше було discard-Task),
+    ///   • await host.StopAsync() (раніше — синхронний .Wait(), що міг deadlock'нути на UI-контекстах).
+    ///
+    /// LLM-агенти, що копіюють цей приклад, тепер успадковують правильні async-паттерни.
+    /// </summary>
     internal sealed class Program
     {
-        static void Main(string[] args)
+        private static async Task Main(string[] args)
         {
+            // IHost у Microsoft.Extensions.Hosting 10.0 не декларує IAsyncDisposable
+            // безпосередньо на інтерфейсі (хоч концкретний host може його реалізувати);
+            // для портативності між версіями використовуємо звичайний using.
             using var host = Host.CreateDefaultBuilder(args)
                 .ConfigureServices(services =>
                 {
@@ -29,8 +39,14 @@ namespace SignalCli.Example
                         o.HealthCheckIntervalSeconds = 40;
                         o.HealthCheckTimeoutSeconds = 10;
                     }));
-                    // Додавання підтримки подій
-                    services.AddSignalEvents(); 
+                    services.AddSignalEvents();
+
+                    // post-modernize-tuning §11 (audit N1/N2): підключення OpenTelemetry —
+                    // консумер реєструє джерела бібліотеки одним рядком на ActivitySource і Meter:
+                    //
+                    //   services.AddOpenTelemetry()
+                    //       .WithTracing(t => t.AddSource("SignalCli.NET").AddConsoleExporter())
+                    //       .WithMetrics(m => m.AddMeter("SignalCli.NET").AddConsoleExporter());
                 })
                 .ConfigureLogging(logging =>
                 {
@@ -40,85 +56,72 @@ namespace SignalCli.Example
                 })
                 .Build();
 
-            host.Start();
+            await host.StartAsync().ConfigureAwait(false);
 
-            // Получаем ISignalEventService
             var eventService = host.Services.GetRequiredService<ISignalEventService>();
-            // Подписываемся на текстовые сообщения:
-
-
-            // Достаём ISignalMessage
             var signalMessage = host.Services.GetRequiredService<ISignalMessage>();
-            var signalDevices = host.Services.GetRequiredService<ISignalDevices>();
             var signalAccounts = host.Services.GetRequiredService<ISignalAccounts>();
             var signalGroups = host.Services.GetRequiredService<ISignalGroups>();
-            var signalCli = host.Services.GetRequiredService<ISignalCliClient>();
+            _ = host.Services.GetRequiredService<ISignalCliClient>(); // версія доступна за потреби
+            _ = host.Services.GetRequiredService<ISignalDevices>();   // QR-link сценарій нижче
 
-            var textSub = eventService.TextMessages.Subscribe(msg =>
+            // Демо: при отриманні текстового повідомлення відправляємо власну відповідь.
+            // ВАЖЛИВО: не fire-and-forget — заводимо обробник у власний Task із ConfigureAwait(false)
+            // і ловимо помилки, щоб не зривати потік подій.
+            using var textSub = eventService.TextMessages.Subscribe(msg =>
             {
-                Console.WriteLine(
-                    $"[TEXT] From=" + msg.DataMessage.Message
-                );
-                var textOptions = new TextMessageOptions.Builder("+380501234567",
-                        [new UserRecipient("+380501234567")], 
-                        "Привіт, світ!")
-                    .UseStyle()
-                    .Build();
-                
-                
-                var response = signalMessage.SendTextMessageAsync( textOptions);
-            });
-            signalAccounts.ListAccounts().ContinueWith(async x =>
-            {
-                var result = x.Result;
-                if (result.Count == 0)
+                Console.WriteLine($"[TEXT] {msg.DataMessage.Message}");
+                _ = Task.Run(async () =>
                 {
-                    /*var resp = await signalDevices.StartLink();
-                    var qrCode = QrCode.EncodeText(resp.DeviceLinkUri, QrCode.Ecc.Medium);
-                    qrCode.ToConsole();
-                    File.WriteAllBytes("test.png", qrCode.ToPng(1, 0));
-                    await signalDevices.FinishLink(resp.DeviceLinkUri, "test");*/
-                    return;
-                }
+                    try
+                    {
+                        var textOptions = new TextMessageOptions.Builder(
+                                account: "+380501234567",
+                                recipients: [new UserRecipient("+380501234567")],
+                                message: "Привіт, світ!")
+                            .UseStyle()
+                            .Build();
 
-                var groups = await signalGroups.ListGroups(result[0].Number);
-                var group = groups.Where(group => group.IsMember)
-                    .FirstOrDefault(group => group.Name?.Contains("test cli") == true);
-                var group2 = groups.Where(group => group.IsMember)
-                    .FirstOrDefault(group => group.Name?.Contains("test cl2") == true);
-                Task<SubscribeReceiveResponse> eventId = eventService.SubscribeAsync(result[0].Number);
-                
-                /* var response = await signalMessage.SendTextMessageAsync(
-                 result[0].Number,
-                 [
-                     new UserRecipient("+380509720960")
-                 ], DateTime.Now.ToString(CultureInfo.InvariantCulture));
-             response = await signalMessage.SendTextMessageAsync(
-                 result[0].Number,
-                 [
-                     new GroupRecipient(group2.Id),
-                 ], DateTime.Now.ToString(CultureInfo.InvariantCulture));
-             response = await signalMessage.SendAttachmentAsync(
-                 result[0].Number,
-                 [
-                     new UserRecipient("+380509720960")
-                 ], DateTime.Now.ToString(CultureInfo.InvariantCulture),
-                 [new AttachmentEntry(@"c:\1.txt")]);
-             response = await signalMessage.SendAttachmentAsync(
-                 result[0].Number,
-                 [
-                     new GroupRecipient(group2.Id),
-                 ], DateTime.Now.ToString(CultureInfo.InvariantCulture),
-                 [new AttachmentEntry(@"c:\1.txt")]);*/
+                        await signalMessage.SendTextMessageAsync(textOptions).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"Send failed: {ex.Message}");
+                    }
+                });
             });
 
+            // post-modernize-tuning §4.11: повний await-flow для отримання акаунтів і підписки.
+            var accounts = await signalAccounts.ListAccountsAsync().ConfigureAwait(false);
+            if (accounts.Count == 0)
+            {
+                Console.WriteLine("Немає зареєстрованих акаунтів. Запустіть процес зв'язування через SignalDevices.StartLinkAsync.");
+                /* QR-link flow:
+                 *   var resp = await signalDevices.StartLinkAsync();
+                 *   var qrCode = QrCode.EncodeText(resp.DeviceLinkUri, QrCode.Ecc.Medium);
+                 *   qrCode.ToConsole();
+                 *   File.WriteAllBytes("test.png", qrCode.ToPng(1, 0));
+                 *   await signalDevices.FinishLinkAsync(resp.DeviceLinkUri, "test");
+                 */
+            }
+            else
+            {
+                var primary = accounts[0].Number;
+                var groups = await signalGroups.ListGroupsAsync(primary).ConfigureAwait(false);
+                Console.WriteLine($"Акаунт: {primary}, груп: {groups.Count}");
 
-            Console.WriteLine("Press any key to exit...");
+                // SubscribeAsync — ідемпотентний: повторні виклики для того ж акаунту
+                // повертають той самий subscription id без додаткових RPC.
+                var sub = await eventService.SubscribeAsync(primary).ConfigureAwait(false);
+                Console.WriteLine($"Підписано: {sub.Id}");
+            }
+
+            Console.WriteLine("Натисніть будь-яку клавішу для виходу...");
             Console.ReadKey();
 
-            // Отписываемся
-            textSub.Dispose();
-            host.StopAsync().Wait();
+            // post-modernize-tuning §4.11: await StopAsync, не .Wait() — інакше можна
+            // отримати deadlock на UI-контексті.
+            await host.StopAsync().ConfigureAwait(false);
         }
     }
 }

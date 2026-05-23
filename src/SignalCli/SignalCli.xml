@@ -69,6 +69,27 @@
             `quote`, `edit`, `remote_delete`}. Replaces the private `_droppedCount` field.
             </summary>
         </member>
+        <member name="F:SignalCli.Diagnostics.SignalCliDiagnostics.s_activeSubscriptionsProvider">
+            <summary>
+            post-modernize-tuning §11.B.6 (audit N2): callback-провайдер для
+            `signalcli.subscriptions.active` ObservableGauge. <c>SignalEventService</c>
+            інжектить тут реальну функцію при ініціалізації (через
+            <see cref="M:SignalCli.Diagnostics.SignalCliDiagnostics.SetActiveSubscriptionsProvider(System.Func{System.Int32})"/>); до того — gauge репортує 0.
+            </summary>
+        </member>
+        <member name="F:SignalCli.Diagnostics.SignalCliDiagnostics.ActiveSubscriptions">
+            <summary>
+            Currently active receive subscriptions (gauge — поточне значення, не cumulative).
+            Без тегів — кардинальність 1.
+            </summary>
+        </member>
+        <member name="M:SignalCli.Diagnostics.SignalCliDiagnostics.SetActiveSubscriptionsProvider(System.Func{System.Int32})">
+            <summary>
+            Реєструє callback для <see cref="F:SignalCli.Diagnostics.SignalCliDiagnostics.ActiveSubscriptions"/>. Викликається
+            <c>SignalEventService</c>-ом у конструкторі/StartAsync. Не thread-safe —
+            очікується одна реєстрація на process (синглтон-сервіс через DI).
+            </summary>
+        </member>
         <member name="F:SignalCli.Diagnostics.SignalCliDiagnostics.RpcActivityNamePrefix">
             <summary>RPC client activity name prefix; full name = `rpc.{method}`.</summary>
         </member>
@@ -1155,6 +1176,20 @@
             <summary>
             Змінні середовища для процесу Signal CLI.
             </summary>
+            <remarks>
+            post-modernize-tuning §4.10 (audit D7): тип на читання — <see cref="T:System.Collections.Generic.IReadOnlyDictionary`2"/>,
+            мутація — через <see cref="M:SignalCli.Models.Config.WithEnvironment(System.Collections.Generic.IDictionary{System.String,System.String})"/> (повертає снапшот). Це усуває можливість
+            мутувати dictionary після того, як Config зареєстровано в DI як singleton — раніше
+            будь-хто з <c>IOptions&lt;&gt;</c>-resolve міг змінити вміст і вплинути на інші компоненти.
+            </remarks>
+        </member>
+        <member name="M:SignalCli.Models.Config.WithEnvironment(System.Collections.Generic.IDictionary{System.String,System.String})">
+            <summary>
+            post-modernize-tuning §4.10 (audit D7): defensive copy. Замість того, щоб віддавати
+            викликачу мутабельне посилання, копіюємо передану мапу і запечатуємо її read-only-вʼю.
+            </summary>
+            <param name="environment">Початкова мапа змінних середовища.</param>
+            <returns>Те саме <see cref="T:SignalCli.Models.Config"/>-посилання (fluent-стиль).</returns>
         </member>
         <member name="M:SignalCli.Models.Config.ToProcessConfig">
             <summary>
@@ -1287,32 +1322,8 @@
             </remarks>
         </member>
         <member name="P:SignalCli.Models.Rpc.JsonRpcRequest.JsonRpc">
-            <summary>
-            Версія протоколу JSON-RPC.
-            </summary>
+            <summary>Версія протоколу JSON-RPC.</summary>
             <value>Завжди "2.0" для JSON-RPC 2.0.</value>
-        </member>
-        <member name="P:SignalCli.Models.Rpc.JsonRpcRequest.Method">
-            <summary>
-            Назва методу, що викликається на сервері.
-            </summary>
-        </member>
-        <member name="P:SignalCli.Models.Rpc.JsonRpcRequest.Params">
-            <summary>
-            Параметри методу.
-            </summary>
-            <remarks>
-            Може бути об'єктом, масивом або примітивним типом даних,
-            залежно від вимог методу.
-            </remarks>
-        </member>
-        <member name="P:SignalCli.Models.Rpc.JsonRpcRequest.Id">
-            <summary>
-            Ідентифікатор запиту для співставлення з відповіддю.
-            </summary>
-            <remarks>
-            Використовується клієнтом для ідентифікації відповіді на конкретний запит.
-            </remarks>
         </member>
         <member name="T:SignalCli.Models.Rpc.JsonRpcResponse">
             <summary>
@@ -1471,6 +1482,11 @@
         </member>
         <member name="P:SignalCli.Models.SignalCliOptions.EnvironmentVariables">
             <summary>Змінні середовища, що передаються процесу signal-cli.</summary>
+            <remarks>
+            post-modernize-tuning §4.10 / §4.28 (audit D7/E2): на читання — <see cref="T:System.Collections.Generic.IReadOnlyDictionary`2"/>.
+            Викликач задає мапу через <c>opts.EnvironmentVariables = new Dictionary&lt;,&gt;{ … }</c> у Configure-делегаті,
+            а downstream-сервіси читають read-only-вʼю — мутації після StartAsync виключені.
+            </remarks>
         </member>
         <member name="M:SignalCli.Models.SignalCliOptions.ToConfig">
             <summary>
@@ -3797,7 +3813,8 @@
             Використовується для надсилання повідомлень у групові чати.
             </remarks>
             <param name="groupId">Ідентифікатор групи.</param>
-            <exception cref="T:System.ArgumentNullException">Виникає, якщо groupId є null або порожнім.</exception>
+            <exception cref="T:System.ArgumentNullException">Виникає, якщо <paramref name="groupId"/> є null.</exception>
+            <exception cref="T:System.ArgumentException">Виникає, якщо <paramref name="groupId"/> — порожній рядок.</exception>
         </member>
         <member name="M:SignalCli.Models.Signal.Message.GroupRecipient.#ctor(System.String)">
             <summary>
@@ -3808,7 +3825,8 @@
             Використовується для надсилання повідомлень у групові чати.
             </remarks>
             <param name="groupId">Ідентифікатор групи.</param>
-            <exception cref="T:System.ArgumentNullException">Виникає, якщо groupId є null або порожнім.</exception>
+            <exception cref="T:System.ArgumentNullException">Виникає, якщо <paramref name="groupId"/> є null.</exception>
+            <exception cref="T:System.ArgumentException">Виникає, якщо <paramref name="groupId"/> — порожній рядок.</exception>
         </member>
         <member name="P:SignalCli.Models.Signal.Message.GroupRecipient.IsGroup">
             <summary>
@@ -4160,7 +4178,8 @@
             Використовується для надсилання особистих повідомлень.
             </remarks>
             <param name="phoneNumberOrUuid">Номер телефону або UUID користувача.</param>
-            <exception cref="T:System.ArgumentNullException">Виникає, якщо phoneNumberOrUuid є null або порожнім.</exception>
+            <exception cref="T:System.ArgumentNullException">Виникає, якщо <paramref name="phoneNumberOrUuid"/> є null.</exception>
+            <exception cref="T:System.ArgumentException">Виникає, якщо <paramref name="phoneNumberOrUuid"/> — порожній рядок.</exception>
         </member>
         <member name="M:SignalCli.Models.Signal.Message.UserRecipient.#ctor(System.String)">
             <summary>
@@ -4171,7 +4190,8 @@
             Використовується для надсилання особистих повідомлень.
             </remarks>
             <param name="phoneNumberOrUuid">Номер телефону або UUID користувача.</param>
-            <exception cref="T:System.ArgumentNullException">Виникає, якщо phoneNumberOrUuid є null або порожнім.</exception>
+            <exception cref="T:System.ArgumentNullException">Виникає, якщо <paramref name="phoneNumberOrUuid"/> є null.</exception>
+            <exception cref="T:System.ArgumentException">Виникає, якщо <paramref name="phoneNumberOrUuid"/> — порожній рядок.</exception>
         </member>
         <member name="P:SignalCli.Models.Signal.Message.UserRecipient.IsGroup">
             <summary>
@@ -4184,6 +4204,12 @@
             Номер телефону або UUID користувача.
             </summary>
             <value>Ідентифікатор користувача для адресації повідомлень.</value>
+            <remarks>
+            post-modernize-tuning §4.18 (audit N4): null → <see cref="T:System.ArgumentNullException"/>;
+            empty → <see cref="T:System.ArgumentException"/>. Раніше обидва шляхи кидали NRE-замаскований
+            під ArgumentNullException, що порушувало контракт обох типів. .NET 8+ helper
+            <see cref="M:System.ArgumentException.ThrowIfNullOrEmpty(System.String,System.String)"/> робить цей розподіл правильно.
+            </remarks>
         </member>
         <member name="T:SignalCli.Serialization.SignalJson">
             <summary>
@@ -5223,6 +5249,12 @@
             <param name="subscriptionId">Ідентифікатор підписки.</param>
             <param name="account">Знайдений обліковий запис або null, якщо підписка не існує.</param>
             <returns>true, якщо підписка знайдена; інакше - false.</returns>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalEventService.GetActiveSubscriptionCount">
+            <summary>
+            post-modernize-tuning §11.B.6: потокобезпечне читання кількості активних підписок
+            для <see cref="F:SignalCli.Diagnostics.SignalCliDiagnostics.ActiveSubscriptions"/> ObservableGauge.
+            </summary>
         </member>
         <member name="M:SignalCli.Services.Signal.SignalMessage.SendTextMessageAsync(SignalCli.Models.Signal.Message.TextMessageOptions,System.Threading.CancellationToken)">
             <summary>

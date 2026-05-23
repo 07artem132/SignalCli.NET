@@ -99,7 +99,13 @@ public sealed class SignalCliOptions
     public int NotificationChannelCapacity { get; set; } = 1024;
 
     /// <summary>Змінні середовища, що передаються процесу signal-cli.</summary>
-    public IDictionary<string, string> EnvironmentVariables { get; set; } = new Dictionary<string, string>();
+    /// <remarks>
+    /// post-modernize-tuning §4.10 / §4.28 (audit D7/E2): на читання — <see cref="IReadOnlyDictionary{TKey,TValue}"/>.
+    /// Викликач задає мапу через <c>opts.EnvironmentVariables = new Dictionary&lt;,&gt;{ … }</c> у Configure-делегаті,
+    /// а downstream-сервіси читають read-only-вʼю — мутації після StartAsync виключені.
+    /// </remarks>
+    public IReadOnlyDictionary<string, string> EnvironmentVariables { get; set; } =
+        new Dictionary<string, string>();
 
     /// <summary>
     /// Конвертує <see cref="SignalCliOptions"/> у legacy-<see cref="Config"/>

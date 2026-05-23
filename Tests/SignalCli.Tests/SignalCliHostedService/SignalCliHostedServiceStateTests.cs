@@ -105,8 +105,13 @@ public class SignalCliHostedServiceStateTests : SignalCliHostedServiceTestsBase
     public async Task ProcessRunner_ShouldReceiveCorrectEnvironmentVariables()
     {
         // Arrange
-        Config.EnvironmentVariables.Add("JAVA_HOME", "");
-        Config.EnvironmentVariables.Add("PATH", "");
+        // post-modernize-tuning §4.10: EnvironmentVariables — IReadOnlyDictionary;
+        // мутація через WithEnvironment (defensive copy), а не Add() на shared посиланні.
+        Config.WithEnvironment(new Dictionary<string, string>
+        {
+            ["JAVA_HOME"] = "",
+            ["PATH"] = "",
+        });
         var service = CreateService();
 
         ProcessConfig? capturedConfig = null;

@@ -88,6 +88,31 @@ internal static class SignalCliDiagnostics
         unit: "{event}",
         description: "Channel overflows (DropOldest evictions) by event type");
 
+    /// <summary>
+    /// post-modernize-tuning §11.B.6 (audit N2): callback-провайдер для
+    /// `signalcli.subscriptions.active` ObservableGauge. <c>SignalEventService</c>
+    /// інжектить тут реальну функцію при ініціалізації (через
+    /// <see cref="SetActiveSubscriptionsProvider"/>); до того — gauge репортує 0.
+    /// </summary>
+    private static Func<int>? s_activeSubscriptionsProvider;
+
+    /// <summary>
+    /// Currently active receive subscriptions (gauge — поточне значення, не cumulative).
+    /// Без тегів — кардинальність 1.
+    /// </summary>
+    public static readonly ObservableGauge<int> ActiveSubscriptions = Meter.CreateObservableGauge(
+        "signalcli.subscriptions.active",
+        () => s_activeSubscriptionsProvider?.Invoke() ?? 0,
+        description: "Currently active receive subscriptions");
+
+    /// <summary>
+    /// Реєструє callback для <see cref="ActiveSubscriptions"/>. Викликається
+    /// <c>SignalEventService</c>-ом у конструкторі/StartAsync. Не thread-safe —
+    /// очікується одна реєстрація на process (синглтон-сервіс через DI).
+    /// </summary>
+    internal static void SetActiveSubscriptionsProvider(Func<int> provider)
+        => s_activeSubscriptionsProvider = provider;
+
     // ---- Activity helpers ----
     // post-modernize-tuning §11.A (audit N1). Activity names use hierarchical
     // dot-separated naming for consumer-side filtering.
