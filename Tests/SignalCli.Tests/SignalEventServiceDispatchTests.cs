@@ -82,14 +82,43 @@ public class SignalEventServiceDispatchTests
         Assert.Equal(1, count);
     }
 
+    // audit N5 / post-modernize-tuning §3.8: SubscribeAsync — ідемпотентний.
+    // Повторні виклики для того самого облікового запису повертають той самий ID
+    // БЕЗ повторного subscribeReceive-RPC. Перевіряємо обидва інваріанти:
     [Fact]
-    public async Task Subscribe_Twice_SameAccount_Throws()
+    public async Task SubscribeAsync_Idempotent_SameAccountThrice_ReturnsSameIdAndCallsRpcOnce()
+    {
+        var service = Create(out _, out var rpc);
+        await service.StartAsync(CancellationToken.None);
+
+        var first = await service.SubscribeAsync(Account);
+        var second = await service.SubscribeAsync(Account);
+        var third = await service.SubscribeAsync(Account);
+
+        // Усі три виклики повертають один і той самий ID (з RPC-мока — SubId).
+        Assert.Equal(SubId, first.id);
+        Assert.Equal(SubId, second.id);
+        Assert.Equal(SubId, third.id);
+        // subscribeReceive викликаний РІВНО ОДИН раз — другий і третій ішли коротким шляхом.
+        rpc.Verify(c => c.InvokeMethodAsync<JsonElement, SubscribeReceiveParameters>(
+            "subscribeReceive", It.IsAny<SubscribeReceiveParameters>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    // audit N5: null/empty account → ArgumentException (або ArgumentNullException для null),
+    // НЕ NullReferenceException і НЕ InvalidOperationException.
+    // ArgumentException.ThrowIfNullOrEmpty кидає ArgumentNullException для null,
+    // ArgumentException для empty — ловимо обидва через спільну базу ArgumentException.
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task SubscribeAsync_NullOrEmptyAccount_ThrowsArgumentException(string? account)
     {
         var service = Create(out _, out _);
         await service.StartAsync(CancellationToken.None);
-        await service.SubscribeAsync(Account);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.SubscribeAsync(Account));
+        var ex = await Assert.ThrowsAnyAsync<ArgumentException>(() => service.SubscribeAsync(account!));
+        Assert.Equal("account", ex.ParamName);
     }
 
     [Fact]

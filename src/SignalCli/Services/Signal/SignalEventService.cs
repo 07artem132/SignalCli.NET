@@ -14,6 +14,26 @@ using SignalCli.Models.Signal.Events;
 
 namespace SignalCli.Services.Signal;
 
+/// <summary>
+/// Внутрішня реалізація <see cref="ISignalEventService"/>: розбирає RPC-нотифікації
+/// signal-cli й роздає їх двома паралельними поверхнями — Rx <see cref="IObservable{T}"/>
+/// (broadcast/fan-out) та <see cref="IAsyncEnumerable{T}"/> поверх bounded-каналів
+/// (exclusive consumption, back-pressure через DropOldest).
+/// </summary>
+/// <remarks>
+/// <para>
+/// <b>SingleWriter invariant (audit N14).</b> Усі канали створюються з
+/// <c>BoundedChannelOptions.SingleWriter = true</c>. Це валідно ЛИШЕ доки
+/// <c>OnNotificationReceived</c> викликається ЛИШЕ з одного потоку RPC-нотифікацій
+/// (один <c>_rpcClient.Notifications.Subscribe(…)</c> у <c>StartAsync</c>).
+/// Якщо колись додасться другий писач (наприклад, multi-RPC fan-in або повторний
+/// <c>Subscribe</c> без диспозу попереднього) — <c>ChannelOptions.SingleWriter</c>
+/// має змінитися на <c>false</c>, інакше поведінка — undefined per
+/// <see href="https://learn.microsoft.com/dotnet/api/system.threading.channels.channeloptions.singlewriter">ChannelOptions.SingleWriter</see>.
+/// Підтримуємо інваріант через ідемпотентний <c>StartAsync</c> (Interlocked.Exchange
+/// + Dispose попередньої підписки) — другий-одночасний писач неможливий.
+/// </para>
+/// </remarks>
 internal class SignalEventService(
     ILogger<SignalEventService> logger,
     IJsonRpcClientProvider rpcClientProvider,
@@ -160,13 +180,20 @@ internal class SignalEventService(
     public async Task<SubscribeReceiveResponse> SubscribeAsync(string account,
         CancellationToken cancellationToken = default)
     {
-        // Перевіряємо наявність існуючої підписки
+        // audit N5: вхідні рядки валідуємо типізовано — ArgumentException, не NRE.
+        ArgumentException.ThrowIfNullOrEmpty(account);
+
+        // audit N5: ідемпотентність — повторний виклик для того самого облікового запису
+        // повертає існуючий subscriptionId замість того, щоб кидати локалізаційно-крихкий
+        // InvalidOperationException. Це усуває потребу в `catch(IOE) when (msg.Contains(...))`
+        // у викликачів і робить SubscribeAsync безпечним для повторного виклику —
+        // одна з ключових agent-friendly характеристик (Microsoft *Idempotency*).
         lock (_subscriptionsLock)
         {
-            if (_accountSubscriptions.ContainsKey(account))
+            if (_accountSubscriptions.TryGetValue(account, out var existingId))
             {
-                throw new InvalidOperationException(
-                    $"Обліковий запис '{account}' вже підписаний на події. Спочатку відпишіться.");
+                SignalEventServiceLog.SubscribeIdempotent(_logger, account, existingId);
+                return new SubscribeReceiveResponse(existingId);
             }
         }
 
@@ -180,10 +207,12 @@ internal class SignalEventService(
 
         lock (_subscriptionsLock)
         {
-            if (_accountSubscriptions.ContainsKey(account))
+            // Гонка: інший виклик міг вступити за час RPC. Поважаємо існуюче й
+            // не перетираємо — повертаємо саме той ID, який зараз у мапі.
+            if (_accountSubscriptions.TryGetValue(account, out var raceWinnerId))
             {
-                throw new InvalidOperationException(
-                    $"Обліковий запис '{account}' вже підписаний (гонка).");
+                SignalEventServiceLog.SubscribeIdempotent(_logger, account, raceWinnerId);
+                return new SubscribeReceiveResponse(raceWinnerId);
             }
 
             _accountSubscriptions[account] = subscriptionId;

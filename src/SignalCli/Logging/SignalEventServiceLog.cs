@@ -41,4 +41,10 @@ internal static partial class SignalEventServiceLog
     [LoggerMessage(EventId = 509, Level = LogLevel.Debug,
         Message = "E: канал {Type} переповнений — DropOldest. Сумарно дропів={Dropped}")]
     public static partial void ChannelOverflowed(ILogger logger, string type, long dropped);
+
+    // audit N5: повторний SubscribeAsync для облікового запису з вже наявною підпискою —
+    // повертаємо існуючий ID (ідемпотентність) і логуємо на Debug.
+    [LoggerMessage(EventId = 510, Level = LogLevel.Debug,
+        Message = "SubscribeAsync ідемпотентний: обліковий запис={Account} вже має підписку={SubId}, повертаємо існуючий ID без RPC")]
+    public static partial void SubscribeIdempotent(ILogger logger, string account, int subId);
 }

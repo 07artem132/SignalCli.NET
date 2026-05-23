@@ -91,6 +91,8 @@ public sealed class SignalCliOptions
     /// Конвертує <see cref="SignalCliOptions"/> у legacy-<see cref="Config"/>
     /// (внутрішні сервіси досі споживають <see cref="Config"/> як singleton).
     /// </summary>
+    /// <remarks>audit N7: internal compat-shim — зникне у 3.0 разом із <see cref="Config"/>.</remarks>
+#pragma warning disable CS0618 // Config is obsolete — internal compat-shim, removed in 3.0
     internal Config ToConfig() => new()
     {
         AppHome = AppHome,
@@ -110,4 +112,5 @@ public sealed class SignalCliOptions
         RestartWindowSeconds = RestartWindowSeconds,
         EnvironmentVariables = EnvironmentVariables,
     };
+#pragma warning restore CS0618
 }

@@ -113,18 +113,28 @@ public static class ServiceCollectionExtensions
     /// <summary>
     /// D.4: реєструє <see cref="IOptions{SignalCliOptions}"/> з валідаторами.
     /// </summary>
+    /// <remarks>
+    /// audit E1: <c>.ValidateDataAnnotations()</c> навмисно ПРИБРАНО — source-gen
+    /// <see cref="SignalCliOptionsValidator"/> ([OptionsValidator]) перевіряє ті ж самі
+    /// <c>[Required]</c>/<c>[Range]</c> атрибути <b>без reflection</b>. Подвійна валідація
+    /// тримала reflection-залежність <c>Microsoft.Extensions.Options.DataAnnotations</c>,
+    /// що блокувала <c>&lt;IsAotCompatible&gt;true&lt;/IsAotCompatible&gt;</c> (IL2026).
+    /// Cross-field правила (Java XOR Native) лишаються в <c>.Validate(...)</c> — source-gen
+    /// валідатор без проблем виконує custom-lambda поряд із згенерованими перевірками.
+    /// </remarks>
     private static void ConfigureOptions(IServiceCollection services, Action<SignalCliOptions>? configureOptions)
     {
         var builder = services.AddOptions<SignalCliOptions>();
         if (configureOptions != null)
             builder.Configure(configureOptions);
         builder
-            .ValidateDataAnnotations()
             .Validate(
                 o => !string.IsNullOrEmpty(o.JavaExecutable) || !string.IsNullOrEmpty(o.SignalCliExecutable),
-                "Потрібно задати JavaExecutable (для JVM-режиму) АБО SignalCliExecutable (для native-режиму).");
+                "Потрібно задати JavaExecutable (для JVM-режиму) АБО SignalCliExecutable (для native-режиму).")
+            .ValidateOnStart();
 
-        // D.9: компайл-тайм-валідатор (без reflection, AOT-safe).
+        // D.9: компайл-тайм-валідатор (без reflection, AOT-safe) — джерело істини для
+        // [Required]/[Range]-перевірок після видалення .ValidateDataAnnotations() (E1).
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<IValidateOptions<SignalCliOptions>, SignalCliOptionsValidator>());
     }
@@ -155,6 +165,12 @@ public static class ServiceCollectionExtensions
     /// </summary>
     private static void RegisterCoreServices(IServiceCollection services)
     {
+        // audit N4: реєструємо TimeProvider у DI, щоб сервіси, які приймають його як
+        // опціональну ctor-залежність (JsonRpcClient, JsonRpcClientFactory,
+        // SignalCliHostedService, SignalCliHealthMonitor), отримували System у проді
+        // й могли мати FakeTimeProvider у тестах через services.Replace(...).
+        services.TryAddSingleton(TimeProvider.System);
+
         // Менеджер стану процесу
         services.TryAddSingleton<ProcessStateManager>();
 

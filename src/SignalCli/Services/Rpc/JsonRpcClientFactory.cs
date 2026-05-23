@@ -19,21 +19,25 @@ internal class JsonRpcClientFactory : IJsonRpcClientFactory
     private readonly ILogger<JsonRpcClient> _logger;
     private readonly IStreamPairProvider _streamPairProvider;
     private readonly SignalCliOptions _options;
+    // audit N4: TimeProvider прокидається у JsonRpcClient для CancellationTokenSource(timeout, TimeProvider).
+    private readonly TimeProvider _timeProvider;
 
     public JsonRpcClientFactory(
         ILogger<JsonRpcClient> logger,
         IStreamPairProvider streamPairProvider,
-        IOptions<SignalCliOptions> options)
+        IOptions<SignalCliOptions> options,
+        TimeProvider? timeProvider = null)
     {
         _logger = logger;
         _streamPairProvider = streamPairProvider;
         _options = options.Value;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     /// <inheritdoc />
     public IJsonRpcClient Create()
     {
-        var client = new JsonRpcClient(_logger, _streamPairProvider, _options);
+        var client = new JsonRpcClient(_logger, _streamPairProvider, _options, _timeProvider);
         JsonRpcClientHostedServiceLog.FactoryClientCreated(_logger);
         return client;
     }

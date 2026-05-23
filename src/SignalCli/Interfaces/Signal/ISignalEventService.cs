@@ -17,13 +17,19 @@ public interface ISignalEventService : IHostedService
     /// <summary>
     /// Підписується на отримання подій з облікового запису Signal.
     /// </summary>
+    /// <remarks>
+    /// audit N5: ідемпотентно — повторні виклики для того самого <paramref name="account"/>
+    /// повертають той самий <see cref="SubscribeReceiveResponse.id"/> без додаткового
+    /// <c>subscribeReceive</c>-RPC. Безпечно викликати кілька разів (наприклад, після
+    /// перезапуску процесу або з гарячого reload).
+    /// </remarks>
     /// <param name="account">Номер телефону акаунту для підписки.</param>
     /// <param name="cancellationToken">Токен скасування операції.</param>
-    /// <returns>Відповідь з ідентифікатором підписки.</returns>
-    /// <exception cref="ArgumentNullException">Виникає, якщо account дорівнює null або порожній.</exception>
-    /// <exception cref="InvalidOperationException">Виникає, якщо акаунт вже підписаний або при помилці підписки.</exception>
+    /// <returns>Відповідь з ідентифікатором підписки (новим або існуючим).</returns>
+    /// <exception cref="ArgumentException">Виникає, якщо <paramref name="account"/> — null або порожній рядок.</exception>
     /// <exception cref="JsonRpcException">Виникає при помилці JSON-RPC запиту.</exception>
     /// <exception cref="OperationCanceledException">Виникає, якщо операцію скасовано.</exception>
+    /// <exception cref="TimeoutException">Виникає, якщо signal-cli не відповів за <see cref="Models.SignalCliOptions.RequestTimeoutSeconds"/>.</exception>
     Task<SubscribeReceiveResponse> SubscribeAsync(string account, CancellationToken cancellationToken = default);
 
     /// <summary>

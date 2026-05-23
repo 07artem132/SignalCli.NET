@@ -9,7 +9,12 @@ namespace SignalCli.Models;
 /// <remarks>
 /// Містить налаштування для запуску та контролю процесу Signal CLI,
 /// включаючи шляхи до файлів, параметри логування та автоперезапуску.
+/// <para>
+/// audit N7: legacy-тип, що зберігається для backward compat одного мажорного релізу.
+/// Новий код має використовувати <see cref="SignalCliOptions"/> + <c>IOptions{T}</c>-pipeline.
+/// </para>
 /// </remarks>
+[Obsolete("Use SignalCliOptions + AddSignalCli(Action<SignalCliOptions>?); will be removed in 3.0.", error: false)]
 public class Config
 {
     private const string DefaultJavaPath = "java";

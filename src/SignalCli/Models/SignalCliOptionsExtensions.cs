@@ -8,9 +8,11 @@ namespace SignalCli.Models;
 /// </summary>
 /// <remarks>
 /// D.4: реалізує побудову <see cref="ProcessConfig"/> із типованих опцій. Внутрішньо
-/// делегує legacy <see cref="Config.ToProcessConfig"/> через <see cref="SignalCliOptions.ToConfig"/>
+/// делегує legacy <c>Config.ToProcessConfig</c> через <see cref="SignalCliOptions.ToConfig"/>
 /// — щоб логіка побудови команди (native vs JVM, classpath, env) лишалась в одному місці.
+/// audit N7: усе цьому файлі — internal compat-shim, зникне у 3.0 разом із <see cref="Config"/>.
 /// </remarks>
+#pragma warning disable CS0618 // Config is obsolete — internal compat-shim, removed in 3.0
 internal static class SignalCliOptionsExtensions
 {
     /// <summary>Будує <see cref="ProcessConfig"/> для запуску signal-cli з опцій.</summary>
@@ -43,3 +45,4 @@ internal static class SignalCliOptionsExtensions
     /// <summary>Обгортає legacy <see cref="Config"/> в <see cref="IOptions{TOptions}"/>.</summary>
     public static IOptions<SignalCliOptions> ToIOptions(this Config c) => Options.Create(c.ToOptions());
 }
+#pragma warning restore CS0618

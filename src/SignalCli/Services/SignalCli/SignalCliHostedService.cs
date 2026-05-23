@@ -332,7 +332,9 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
 
                 // B.9: замість фіксованого Task.Delay чекаємо реального виходу процесу
                 // через WaitForExitAsync + linkedCts(timeout) — швидко за нормального exit.
-                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(_options.StopTimeoutSeconds));
+                // audit N4: TimeProvider-aware overload — тести з FakeTimeProvider можуть
+                // провернути StopTimeoutSeconds віртуально, без wall-clock-залежності.
+                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(_options.StopTimeoutSeconds), _timeProvider);
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
                 try
                 {

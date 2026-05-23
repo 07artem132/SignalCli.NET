@@ -30,6 +30,10 @@ internal sealed class JsonRpcClient : IJsonRpcClient
     private readonly ILogger<JsonRpcClient> _logger;
     private readonly IStreamPairProvider _streamProvider;
     private readonly TimeSpan _requestTimeout;
+    // audit N4: TimeProvider інжектиться, щоб `new CancellationTokenSource(timeout, _timeProvider)`
+    // не залежав від wall-clock у тестах timeout-шляхів (паттерн уже використано в
+    // SignalCliHealthMonitor.PingCliAsync — поширюємо).
+    private readonly TimeProvider _timeProvider;
     private readonly Subject<JsonRpcNotification<SubscriptionEventArgs>> _notificationSubject = new();
     private readonly ConcurrentDictionary<string, TaskCompletionSource<JsonRpcResponse?>> _pendingRequests = new();
     private readonly Nito.AsyncEx.AsyncLock _sendLock = new();
@@ -55,15 +59,22 @@ internal sealed class JsonRpcClient : IJsonRpcClient
     /// <param name="logger">Логер для запису діагностичної інформації.</param>
     /// <param name="streamProvider">Постачальник потоків для взаємодії з зовнішнім процесом.</param>
     /// <param name="options">Конфігурація — для отримання <see cref="SignalCliOptions.RequestTimeoutSeconds"/>.</param>
+    /// <param name="timeProvider">
+    /// audit N4: опціональний постачальник часу для <c>CancellationTokenSource(timeout, TimeProvider)</c>
+    /// у <see cref="InvokeMethodAsync"/>. За замовчуванням <see cref="TimeProvider.System"/>; у тестах
+    /// підставляється <c>FakeTimeProvider</c> — щоб віртуально провертати таймаут.
+    /// </param>
     /// <remarks>D.4: приймає типовану <see cref="SignalCliOptions"/> замість legacy <c>Config</c>.</remarks>
     internal JsonRpcClient(ILogger<JsonRpcClient> logger,
         IStreamPairProvider streamProvider,
-        SignalCliOptions options)
+        SignalCliOptions options,
+        TimeProvider? timeProvider = null)
     {
         _logger = logger;
         _streamProvider = streamProvider;
         var timeoutSeconds = Math.Max(1, options?.RequestTimeoutSeconds ?? 30);
         _requestTimeout = TimeSpan.FromSeconds(timeoutSeconds);
+        _timeProvider = timeProvider ?? TimeProvider.System;
 
         // Коли StreamPair змінюється — скидаємо всі pendingRequests і перезапускаємо читачів.
         var sub = _streamProvider.StreamPairChanged
@@ -348,6 +359,15 @@ internal sealed class JsonRpcClient : IJsonRpcClient
             throw new ArgumentNullException(nameof(parameters));
 
         var requestId = _requestIdCounter.Increment().ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        // audit N13: structured scope — усі вкладені JsonRpcClientLog.* (SentRequest,
+        // TrySetResultFailed тощо) автоматично несуть RpcMethod/RpcRequestId. Узгоджено
+        // з A.11 (BeginScope у SignalEventService.OnNotificationReceived).
+        using var scope = _logger.BeginScope(new Dictionary<string, object>
+        {
+            ["RpcMethod"] = method,
+            ["RpcRequestId"] = requestId,
+        });
         // ВАЖЛИВО: серіалізуємо параметри за КОНКРЕТНИМ типом TRequest у JsonElement.
         // Інакше STJ серіалізує властивість Params (тип object) як "{}" і всі параметри
         // запиту втрачаються (на відміну від Newtonsoft, який брав runtime-тип).
@@ -358,7 +378,9 @@ internal sealed class JsonRpcClient : IJsonRpcClient
         _pendingRequests[requestId] = tcs;
 
         // F1: окрема timeout-CTS, щоб відрізнити таймаут від callerCancel.
-        using var timeoutCts = new CancellationTokenSource(_requestTimeout);
+        // audit N4: TimeProvider-aware overload (.NET 8+) — тести з FakeTimeProvider
+        // можуть провернути таймаут віртуально, без wall-clock-залежності.
+        using var timeoutCts = new CancellationTokenSource(_requestTimeout, _timeProvider);
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
         try
