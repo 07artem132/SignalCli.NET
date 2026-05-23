@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using SignalCli.Interfaces.Rpc;
 using SignalCli.Interfaces.SignalCli;
+using SignalCli.Logging;
 using SignalCli.Models;
 
 namespace SignalCli.Services.Rpc;
@@ -34,7 +35,7 @@ internal class JsonRpcClientFactory : IJsonRpcClientFactory
     public IJsonRpcClient Create()
     {
         var client = new JsonRpcClient(_logger, _streamPairProvider, _config);
-        _logger.LogInformation("JsonRpcClient створено через JsonRpcClientFactory");
+        JsonRpcClientHostedServiceLog.FactoryClientCreated(_logger);
         return client;
     }
 }

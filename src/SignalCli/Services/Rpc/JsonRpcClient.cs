@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using SignalCli.Exceptions;
 using SignalCli.Interfaces.Rpc;
 using SignalCli.Interfaces.SignalCli;
+using SignalCli.Logging;
 using SignalCli.Models;
 using SignalCli.Models.Rpc;
 using SignalCli.Models.Signal.Events;
@@ -179,7 +180,7 @@ internal sealed class JsonRpcClient : IJsonRpcClient
         }
         catch (TimeoutException)
         {
-            _logger.LogWarning("Очікування завершення reader-циклів перевищило таймаут — продовжуємо disposal");
+            JsonRpcClientLog.ReaderStopTimeout(_logger);
         }
         catch (Exception)
         {
@@ -211,7 +212,7 @@ internal sealed class JsonRpcClient : IJsonRpcClient
                     var line = await pair.StandardOutput.ReadLineAsync(token).ConfigureAwait(false);
                     if (line is null) break;
                     // ПРИВАТНІСТЬ: сирий рядок містить вміст повідомлень/вкладення — лише Trace.
-                    _logger.LogTrace("Отримано рядок від signal-cli: {Line}", line);
+                    JsonRpcClientLog.StdoutLine(_logger, line);
                     ProcessMessage(line);
                 }
             }
@@ -220,7 +221,7 @@ internal sealed class JsonRpcClient : IJsonRpcClient
             // одна помилка не повинна зупиняти процес (логуємо й виходимо).
             catch (Exception ex) when (!_disposed && !token.IsCancellationRequested)
             {
-                _logger.LogError(ex, "Помилка читання з виходу процесу");
+                JsonRpcClientLog.StdoutReadFailed(_logger, ex);
             }
         }, token);
 
@@ -233,13 +234,13 @@ internal sealed class JsonRpcClient : IJsonRpcClient
                 {
                     var line = await pair.StandardError.ReadLineAsync(token).ConfigureAwait(false);
                     if (line is null) break;
-                    _logger.LogTrace("STDERR> {Line}", line);
+                    JsonRpcClientLog.StderrLine(_logger, line);
                 }
             }
             catch (OperationCanceledException) { /* очікувано на скасуванні */ }
             catch (Exception ex) when (!_disposed && !token.IsCancellationRequested)
             {
-                _logger.LogError(ex, "Помилка читання stderr процесу");
+                JsonRpcClientLog.StderrReadFailed(_logger, ex);
             }
         }, token);
 
@@ -273,7 +274,7 @@ internal sealed class JsonRpcClient : IJsonRpcClient
                     var response = rootElement.Deserialize<JsonRpcResponse>(SignalJson.Options);
                     if (!tcs.TrySetResult(response))
                     {
-                        _logger.LogWarning("Не вдалося встановити результат");
+                        JsonRpcClientLog.TrySetResultFailed(_logger);
                     }
 
                     return;
@@ -286,8 +287,8 @@ internal sealed class JsonRpcClient : IJsonRpcClient
                 {
                     // ПРИВАТНІСТЬ: RawParams містить вміст повідомлення — не логуємо його.
                     // На рівні Debug — лише метод; повний JSON доступний лише на Trace.
-                    _logger.LogDebug("Отримано повідомлення: Method={Method}", notificationRaw.Method);
-                    _logger.LogTrace("RawParams={Json}", notificationRaw.Params.GetRawText());
+                    JsonRpcClientLog.NotificationMethod(_logger, notificationRaw.Method);
+                    JsonRpcClientLog.NotificationRawParams(_logger, notificationRaw.Params.GetRawText());
 
                     // Далі «до-десеріалізуємо» Params у типізований об'єкт
                     var subscriptionEventArgs =
@@ -305,17 +306,17 @@ internal sealed class JsonRpcClient : IJsonRpcClient
                 }
             }
 
-            _logger.LogWarning("Невідоме повідомлення: {Json}", jsonLine);
+            JsonRpcClientLog.UnknownMessage(_logger, jsonLine);
         }
         catch (JsonException ex)
         {
-            _logger.LogError(ex, "Помилка розбору JSON: {Line}", jsonLine);
+            JsonRpcClientLog.JsonParseFailed(_logger, ex, jsonLine);
         }
         // Навмисний широкий catch: одне некоректне повідомлення не повинно
         // зривати обробку наступних (логуємо й продовжуємо).
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Неочікувана помилка обробки JSON-рядка: {Line}", jsonLine);
+            JsonRpcClientLog.UnexpectedProcessMessage(_logger, ex, jsonLine);
         }
     }
 
@@ -422,7 +423,7 @@ internal sealed class JsonRpcClient : IJsonRpcClient
             await pair.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
 
             // ПРИВАТНІСТЬ: json містить тіло повідомлення/вкладення — лише Trace.
-            _logger.LogTrace("Відправлено JSON-RPC запит: {Json}", json);
+            JsonRpcClientLog.SentRequest(_logger, json);
         }
     }
 

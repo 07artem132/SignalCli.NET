@@ -2,6 +2,7 @@
 using System.Text;
 using Microsoft.Extensions.Logging;
 using SignalCli.Interfaces.SignalCli;
+using SignalCli.Logging;
 using SignalCli.Models.SignalCli;
 
 namespace SignalCli.Services.SignalCli;
@@ -63,7 +64,7 @@ internal class ProcessRunner : IProcessRunner
             psi.Environment[kv.Key] = kv.Value;
         }
 
-        _logger.LogDebug("Запуск процесу: {Exe} {Args}", config.Executable, config.Arguments);
+        ProcessRunnerLog.StartingProcess(_logger, config.Executable, config.Arguments);
 
         var proc = _processFactory.CreateProcess(psi);
         
@@ -74,7 +75,7 @@ internal class ProcessRunner : IProcessRunner
                 throw new InvalidOperationException($"Не вдалося запустити процес: {config.Executable}");
             }
 
-            _logger.LogInformation("Процес {Exe} запущено з PID {Pid}", config.Executable, proc.Id);
+            ProcessRunnerLog.ProcessStarted(_logger, config.Executable, proc.Id);
 
             var streams = new StreamPair(
                 proc.StandardInput,
@@ -86,7 +87,7 @@ internal class ProcessRunner : IProcessRunner
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Помилка запуску процесу {Exe}", config.Executable);
+            ProcessRunnerLog.StartFailed(_logger, ex, config.Executable);
             proc.Dispose();
             throw;
         }

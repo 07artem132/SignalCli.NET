@@ -22,6 +22,7 @@ public class JsonRpcClientTests
     public JsonRpcClientTests()
     {
         _loggerMock = new Mock<ILogger<JsonRpcClient>>();
+        _loggerMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         _streamProviderMock = new Mock<IStreamPairProvider>();
         _streamPairSubject = new Subject<StreamPair?>();
 

@@ -1,6 +1,7 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using SignalCli.Interfaces.Rpc;
 using SignalCli.Interfaces.SignalCli;
+using SignalCli.Logging;
 using SignalCli.Models.SignalCli;
 
 namespace SignalCli.Services.Signal;
@@ -22,12 +23,11 @@ internal class SignalService : ISignalCliClient
         TRequest parameters,
         CancellationToken cancellationToken = default) where TResponse : notnull
     {
-
             try
             {
                 // ПРИВАТНІСТЬ: не логуємо параметри/результат — вони містять тіла повідомлень,
                 // номери телефонів та вкладення. Логуємо лише назву методу.
-                _logger.LogDebug("Виклик JSON-RPC методу: {Method}", method);
+                SignalServiceLog.InvokeMethod(_logger, method);
 
                 var response = await _rpcClient.Client
                     .InvokeMethodAsync<TResponse, TRequest>(method, parameters, cancellationToken)
@@ -35,23 +35,23 @@ internal class SignalService : ISignalCliClient
 
                 if (response is null)
                 {
-                    _logger.LogError("Отримано нульову відповідь від JSON-RPC методу {Method}", method);
+                    SignalServiceLog.InvokeMethodNullResponse(_logger, method);
                     throw new InvalidOperationException("Отримано нульову відповідь від сервера");
                 }
 
-                _logger.LogDebug("Метод {Method} повернув результат успішно", method);
+                SignalServiceLog.InvokeMethodOk(_logger, method);
                 return response;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.LogError(ex, "Помилка виклику JSON-RPC методу {Method}", method);
+                SignalServiceLog.InvokeMethodFailed(_logger, ex, method);
                 throw;
             }
     }
 
     public async Task<VersionResponse> VersionAsync(CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug("Отримання версії");
+        SignalServiceLog.VersionRequested(_logger);
 
         try
         {
@@ -59,18 +59,17 @@ internal class SignalService : ISignalCliClient
 
             if (response == null)
             {
-                _logger.LogError("Отримано нульову відповідь на запит версії");
+                SignalServiceLog.VersionNullResponse(_logger);
                 throw new InvalidOperationException("Отримано нульову відповідь від сервера");
             }
 
-            _logger.LogInformation(
-                "Версію отримано успішно. Версія={Version}", response.Version);
+            SignalServiceLog.VersionOk(_logger, response.Version);
 
             return response;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Помилка отримання версії");
+            SignalServiceLog.VersionFailed(_logger, ex);
             throw;
         }
     }

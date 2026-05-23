@@ -2,6 +2,7 @@
 using SignalCli.Interfaces.FileSystem;
 using SignalCli.Interfaces.Signal;
 using SignalCli.Interfaces.SignalCli;
+using SignalCli.Logging;
 using SignalCli.Models.Signal.Message;
 using SignalCli.Services.FileSystem;
 using SignalCli.Utilities;
@@ -184,16 +185,16 @@ namespace SignalCli.Services.Signal
 
                 if (response == null)
                 {
-                    _logger.LogError("Отримано null-відповідь від сервера при відправці повідомлення");
+                    SignalMessageLog.SendNullResponse(_logger);
                     throw new InvalidOperationException("Null response from server");
                 }
 
-                _logger.LogInformation("Повідомлення відправлено успішно. TimeStamp={TimeStamp}", response.TimeStamp);
+                SignalMessageLog.SendOk(_logger, response.TimeStamp);
                 return response;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Помилка при відправці повідомлення");
+                SignalMessageLog.SendFailed(_logger, ex);
                 throw;
             }
             finally

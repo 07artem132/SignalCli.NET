@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SignalCli.Interfaces.Rpc;
+using SignalCli.Logging;
 using SignalCli.Models.SignalCli;
 using SignalCli.Services.SignalCli;
 
@@ -51,7 +52,7 @@ internal sealed class JsonRpcClientHostedService : IHostedService, IJsonRpcClien
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        _logger.LogInformation("JsonRpcClientHostedService починає роботу...");
+        JsonRpcClientHostedServiceLog.StartBegin(_logger);
 
         try
         {
@@ -60,13 +61,13 @@ internal sealed class JsonRpcClientHostedService : IHostedService, IJsonRpcClien
             // A.7: фабрика тепер синхронна — створення клієнта не потребує await.
             _client = _factory.Create();
             var versionResp = await _client.InvokeMethodAsync<VersionResponse, VersionParameters>("version", new(), cancellationToken).ConfigureAwait(false);
-            _logger.LogInformation("Версія signal-cli JSON-RPC: {Version}", versionResp.Version);
+            JsonRpcClientHostedServiceLog.Version(_logger, versionResp.Version);
 
-            _logger.LogInformation("JsonRpcClientHostedService запущено - клієнт готовий");
+            JsonRpcClientHostedServiceLog.StartReady(_logger);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Помилка запуску JsonRpcClientHostedService");
+            JsonRpcClientHostedServiceLog.StartFailed(_logger, ex);
             throw;
         }
     }
@@ -81,7 +82,7 @@ internal sealed class JsonRpcClientHostedService : IHostedService, IJsonRpcClien
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        _logger.LogInformation("JsonRpcClientHostedService зупиняється...");
+        JsonRpcClientHostedServiceLog.StopBegin(_logger);
 
         try
         {
@@ -90,11 +91,11 @@ internal sealed class JsonRpcClientHostedService : IHostedService, IJsonRpcClien
                 await _client.DisposeAsync().ConfigureAwait(false);
 
             _client = null;
-            _logger.LogInformation("JsonRpcClientHostedService зупинено.");
+            JsonRpcClientHostedServiceLog.Stopped(_logger);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Помилка зупинки JsonRpcClientHostedService");
+            JsonRpcClientHostedServiceLog.StopFailed(_logger, ex);
             throw;
         }
     }
@@ -117,7 +118,7 @@ internal sealed class JsonRpcClientHostedService : IHostedService, IJsonRpcClien
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Помилка при DisposeAsync у JsonRpcClientHostedService");
+            JsonRpcClientHostedServiceLog.DisposeFailed(_logger, ex);
         }
     }
 }

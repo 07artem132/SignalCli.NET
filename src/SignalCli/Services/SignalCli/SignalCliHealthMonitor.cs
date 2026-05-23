@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SignalCli.Interfaces.Rpc;
+using SignalCli.Logging;
 using SignalCli.Models;
 using SignalCli.Models.SignalCli;
 
@@ -63,14 +64,14 @@ public sealed class SignalCliHealthMonitor : BackgroundService
         // Якщо ExecuteTask вже існує — повторний StartAsync не очікуваний.
         if (ExecuteTask is { IsCompleted: false })
         {
-            _logger.LogError("StartAsync викликано коли цикл вже працює, зупиніть монітор та викличте StartAsync.");
+            SignalCliHealthMonitorLog.AlreadyStarted(_logger);
             throw new InvalidOperationException("StartAsync викликано коли цикл вже працює, зупиніть монітор та викличте StartAsync.");
         }
         cancellationToken.ThrowIfCancellationRequested();
 
-        _logger.LogInformation("SignalCliHealthMonitor запускається...");
+        SignalCliHealthMonitorLog.StartBegin(_logger);
         var t = base.StartAsync(cancellationToken);
-        _logger.LogInformation("SignalCliHealthMonitor запущено.");
+        SignalCliHealthMonitorLog.Started(_logger);
         return t;
     }
 
@@ -80,9 +81,9 @@ public sealed class SignalCliHealthMonitor : BackgroundService
     /// </summary>
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("SignalCliHealthMonitor зупиняється...");
+        SignalCliHealthMonitorLog.StopBegin(_logger);
         await base.StopAsync(cancellationToken).ConfigureAwait(false);
-        _logger.LogInformation("SignalCliHealthMonitor зупинено.");
+        SignalCliHealthMonitorLog.Stopped(_logger);
     }
 
     /// <summary>
@@ -92,7 +93,7 @@ public sealed class SignalCliHealthMonitor : BackgroundService
     /// <param name="stoppingToken">Токен зупинки <see cref="BackgroundService"/>.</param>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Цикл моніторингу запущено в SignalCliHealthMonitor");
+        SignalCliHealthMonitorLog.LoopStarted(_logger);
 
         var interval = TimeSpan.FromSeconds(Math.Max(1, _config.HealthCheckIntervalSeconds));
         using var timer = new PeriodicTimer(interval, _timeProvider);
@@ -109,7 +110,7 @@ public sealed class SignalCliHealthMonitor : BackgroundService
                     ).ConfigureAwait(false);
 
                     if (isHealthy) continue;
-                    _logger.LogWarning("Signal CLI не відповідає. Запускаємо перезапуск...");
+                    SignalCliHealthMonitorLog.RestartTriggered(_logger);
                     await _signalCliHostedService.ForceRestartAsync(stoppingToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
@@ -121,7 +122,7 @@ public sealed class SignalCliHealthMonitor : BackgroundService
                 // ітерації не повинна зупиняти весь монітор (логуємо й продовжуємо).
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Неочікувана помилка в циклі моніторингу");
+                    SignalCliHealthMonitorLog.LoopIterationFailed(_logger, ex);
                 }
             }
         }
@@ -130,7 +131,7 @@ public sealed class SignalCliHealthMonitor : BackgroundService
             // PeriodicTimer.WaitForNextTickAsync кидає OCE при stoppingToken — очікувано.
         }
 
-        _logger.LogInformation("Цикл моніторингу завершено в SignalCliHealthMonitor");
+        SignalCliHealthMonitorLog.LoopFinished(_logger);
     }
 
     /// <summary>
@@ -148,7 +149,7 @@ public sealed class SignalCliHealthMonitor : BackgroundService
             // вважаємо CLI "не здоровим"
             if (_signalCliHostedService.CurrentStreamPair == null)
             {
-                _logger.LogDebug("PingCliAsync: немає поточного StreamPair => CLI не готовий");
+                SignalCliHealthMonitorLog.PingNoStreamPair(_logger);
                 return false;
             }
 
@@ -168,17 +169,17 @@ public sealed class SignalCliHealthMonitor : BackgroundService
             ).ConfigureAwait(false);
             // Якщо відповіли без помилки і є поле Version, значить все ок
             if (string.IsNullOrEmpty(response.Version)) return false;
-            _logger.LogDebug("PingCliAsync: CLI відповів з версією={Version}", response.Version);
+            SignalCliHealthMonitorLog.PingOk(_logger, response.Version);
             return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogError(ex, "PingCliAsync: пінг CLI невдалий");
+            SignalCliHealthMonitorLog.PingFailed(_logger, ex);
             return false;
         }
         catch (OperationCanceledException ex)
         {
-            _logger.LogError(ex, "Signal CLI не відповідає");
+            SignalCliHealthMonitorLog.PingTimedOut(_logger, ex);
             return false;
         }
     }

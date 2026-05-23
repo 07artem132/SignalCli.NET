@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Nito.AsyncEx;
 using SignalCli.Interfaces.SignalCli;
+using SignalCli.Logging;
 using SignalCli.Models;
 using SignalCli.Models.SignalCli;
 
@@ -87,7 +88,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         ObjectDisposedException.ThrowIf(_disposed, this);
         cancellationToken.ThrowIfCancellationRequested();
 
-        _logger.LogInformation("SignalCliHostedService запускається...");
+        SignalCliHostedServiceLog.StartBegin(_logger);
 
         try
         {
@@ -97,11 +98,11 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             {
                 await StartProcessInternalAsyncNoLock(cancellationToken).ConfigureAwait(false);
             }
-            _logger.LogInformation("SignalCliHostedService успішно запущено.");
+            SignalCliHostedServiceLog.Started(_logger);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Помилка запуску SignalCliHostedService");
+            SignalCliHostedServiceLog.StartFailed(_logger, ex);
             throw;
         }
     }
@@ -117,7 +118,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         ObjectDisposedException.ThrowIf(_disposed, this);
         cancellationToken.ThrowIfCancellationRequested();
 
-        _logger.LogInformation("SignalCliHostedService зупиняється...");
+        SignalCliHostedServiceLog.StopBegin(_logger);
 
         try
         {
@@ -126,17 +127,17 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
                 var currentState = _stateManager.CurrentState;
                 if (currentState != ProcessState.Running && currentState != ProcessState.Starting)
                 {
-                    _logger.LogInformation("StopProcessInternalAsync: поточний стан = {State}, пропускаємо зупинку.", currentState);
+                    SignalCliHostedServiceLog.StopProcessSkipped(_logger, currentState);
                     return;
                 }
                 // Зупиняємо процес
                 await StopProcessInternalAsyncNoLock(cancellationToken).ConfigureAwait(false);
             }
-            _logger.LogInformation("SignalCliHostedService зупинено.");
+            SignalCliHostedServiceLog.Stopped(_logger);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Помилка зупинки SignalCliHostedService");
+            SignalCliHostedServiceLog.StopFailed(_logger, ex);
             throw;
         }
     }
@@ -182,7 +183,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
     {
         if (_disposed || _stopping)
         {
-            _logger.LogWarning("ForceRestartAsync викликано, але сервіс утилізовано або зупиняється.");
+            SignalCliHostedServiceLog.ForceRestartIgnored(_logger);
             return;
         }
 
@@ -190,7 +191,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         {
             if (_disposed || _stopping)
             {
-                _logger.LogWarning("ForceRestartAsync: сервіс було утилізовано/зупинено під час очікування блокування.");
+                SignalCliHostedServiceLog.ForceRestartLockLost(_logger);
                 return;
             }
 
@@ -199,7 +200,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             if (currentState != ProcessState.Running &&
                 currentState != ProcessState.Failed)
             {
-                _logger.LogInformation("ForceRestartAsync: поточний стан = {State}, пропускаємо примусовий перезапуск.", currentState);
+                SignalCliHostedServiceLog.ForceRestartSkipped(_logger, currentState);
                 return;
             }
 
@@ -207,13 +208,11 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             _restartCount++;
             if (_config.MaxRestartAttempts > 0 && _restartCount > _config.MaxRestartAttempts)
             {
-                _logger.LogError("ForceRestartAsync: перевищено MaxRestartAttempts ({Max}) у вікні {Window}c. Скасування перезапуску.",
-                    _config.MaxRestartAttempts, _config.RestartWindowSeconds);
+                SignalCliHostedServiceLog.ForceRestartBudgetExceeded(_logger, _config.MaxRestartAttempts, _config.RestartWindowSeconds);
                 return;
             }
 
-            _logger.LogWarning("Примусовий перезапуск SignalCLI (спроба #{Count}/{Max})",
-                _restartCount, _config.MaxRestartAttempts);
+            SignalCliHostedServiceLog.ForceRestartAttempt(_logger, _restartCount, _config.MaxRestartAttempts);
 
             // 1) Зупинка
             await StopProcessInternalAsyncNoLock(cancellationToken).ConfigureAwait(false);
@@ -245,11 +244,11 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             currentState != ProcessState.Stopped &&
             currentState != ProcessState.Failed)
         {
-            _logger.LogWarning("Неможливо запустити у стані {State}", currentState);
+            SignalCliHostedServiceLog.CannotStartInState(_logger, currentState);
             return;
         }
 
-        _logger.LogInformation("Запуск процесу Signal CLI...");
+        SignalCliHostedServiceLog.StartingProcess(_logger);
         _stopping = false;
         // Лічильник скидаємо ЛИШЕ при початковому старті (з NotStarted); рестарти зберігають
         // лічильник, який потім скине таймер RestartWindow (див. ScheduleRestartWindowReset).
@@ -271,7 +270,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             // ProcessStateManager — єдине джерело істини; з нього похідні
             // CurrentStreamPair / StreamPairChanged / WaitForReadyAsync.
             _stateManager.UpdateState(ProcessState.Running, streams);
-            _logger.LogInformation("Процес Signal CLI запущено (PID={Pid})", _currentProcess.Id);
+            SignalCliHostedServiceLog.ProcessStarted(_logger, _currentProcess.Id);
 
             // B.4 (F3): стартуємо вікно стабільності — якщо процес проживе RestartWindowSeconds
             // у Running, _restartCount скинеться в 0, тобто поодинокі поодинокі збої перестануть
@@ -280,7 +279,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Не вдалося запустити процес Signal CLI");
+            SignalCliHostedServiceLog.ProcessStartFailed(_logger, ex);
             _stateManager.UpdateState(ProcessState.Failed, error: ex);
             throw;
         }
@@ -299,11 +298,11 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         var currentState = _stateManager.CurrentState;
         if (currentState != ProcessState.Running && currentState != ProcessState.Starting)
         {
-            _logger.LogInformation("StopProcessInternalAsync: поточний стан = {State}, пропускаємо зупинку.", currentState);
+            SignalCliHostedServiceLog.StopProcessSkipped(_logger, currentState);
             return;
         }
 
-        _logger.LogInformation("Зупинка процесу Signal CLI...");
+        SignalCliHostedServiceLog.StoppingProcess(_logger);
         _stopping = true;
         // Скасовуємо таймер вікна стабільності — далі stable-running не буде.
         CancelRestartWindowTimer();
@@ -323,7 +322,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
                     }
                     catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException)
                     {
-                        _logger.LogDebug(ex, "Не вдалося надіслати команду exit у stdin — перейдемо до wait/kill");
+                        SignalCliHostedServiceLog.ExitWriteFailed(_logger, ex);
                     }
                 }
 
@@ -342,18 +341,17 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
 
                 if (!_currentProcess.HasExited)
                 {
-                    _logger.LogWarning("Процес не завершився за {Timeout}c, примусово завершуємо його...",
-                        _config.StopTimeoutSeconds);
+                    SignalCliHostedServiceLog.ProcessKillTimeout(_logger, _config.StopTimeoutSeconds);
                     _currentProcess.Kill(entireProcessTree: true);
                 }
             }
 
             _stateManager.UpdateState(ProcessState.Stopped);
-            _logger.LogInformation("Процес Signal CLI зупинено.");
+            SignalCliHostedServiceLog.ProcessStopped(_logger);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Помилка зупинки Signal CLI");
+            SignalCliHostedServiceLog.ProcessStopFailed(_logger, ex);
             _stateManager.UpdateState(ProcessState.Failed, error: ex);
             throw;
         }
@@ -449,9 +447,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
 
                 if (_restartCount > 0)
                 {
-                    _logger.LogInformation(
-                        "Процес стабільно у Running {Window}c — скидаю _restartCount={Count} у 0",
-                        Math.Max(1, _config.RestartWindowSeconds), _restartCount);
+                    SignalCliHostedServiceLog.RestartCountReset(_logger, Math.Max(1, _config.RestartWindowSeconds), _restartCount);
                     _restartCount = 0;
                 }
             }
@@ -459,7 +455,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         catch (Exception ex)
         {
             // Колбек ITimer — фоновий потік; не дамо вилетіти.
-            _logger.LogError(ex, "Помилка у колбеку таймера вікна стабільності рестартів");
+            SignalCliHostedServiceLog.RestartWindowCallbackFailed(_logger, ex);
         }
     }
 
@@ -494,7 +490,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Незловлений виняток у OnProcessExited — проігноровано, щоб не зривати хост.");
+            SignalCliHostedServiceLog.OnExitedUnhandled(_logger, ex);
         }
     }
 
@@ -517,17 +513,17 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             // Якщо StopProcessInternalAsync уже встиг перевести стан у Stopped — нічого робити.
             if (_stateManager.CurrentState == ProcessState.Stopped)
             {
-                _logger.LogDebug("OnProcessExited: процес уже зупинено навмисно — пропускаємо.");
+                SignalCliHostedServiceLog.OnExitedAlreadyStopped(_logger);
                 return;
             }
 
-            _logger.LogWarning("Процес Signal CLI завершився неочікувано.");
+            SignalCliHostedServiceLog.ProcessExitedUnexpectedly(_logger);
             _stateManager.UpdateState(ProcessState.Failed);
             CleanupProcess();
 
             if (_config.MaxRestartAttempts <= 0)
             {
-                _logger.LogWarning("Автоперезапуск вимкнено (MaxRestartAttempts=0).");
+                SignalCliHostedServiceLog.AutoRestartDisabled(_logger);
                 return;
             }
 
@@ -536,13 +532,11 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             _restartCount++;
             if (_restartCount > _config.MaxRestartAttempts)
             {
-                _logger.LogError("Досягнуто максимальну кількість перезапусків ({Max}) у вікні {Window}c.",
-                    _config.MaxRestartAttempts, _config.RestartWindowSeconds);
+                SignalCliHostedServiceLog.AutoRestartBudgetExceeded(_logger, _config.MaxRestartAttempts, _config.RestartWindowSeconds);
                 return;
             }
 
-            _logger.LogInformation("Спроба автоперезапуску (#{Count}/{Max})...",
-                _restartCount, _config.MaxRestartAttempts);
+            SignalCliHostedServiceLog.AutoRestartAttempt(_logger, _restartCount, _config.MaxRestartAttempts);
             try
             {
                 // B.5: через _timeProvider для консистентності з ForceRestartAsync.
@@ -551,7 +545,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Не вдалося перезапустити процес Signal CLI.");
+                SignalCliHostedServiceLog.AutoRestartFailed(_logger, ex);
             }
         }
     }
@@ -569,7 +563,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         _disposed = true;
         GC.SuppressFinalize(this);
 
-        _logger.LogInformation("Disposing SignalCliHostedService...");
+        SignalCliHostedServiceLog.Disposing(_logger);
 
         try
         {
@@ -581,7 +575,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Помилка при disposing SignalCliHostedService");
+            SignalCliHostedServiceLog.DisposeFailed(_logger, ex);
         }
         finally
         {

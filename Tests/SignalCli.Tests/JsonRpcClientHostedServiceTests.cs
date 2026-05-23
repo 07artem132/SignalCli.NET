@@ -26,6 +26,7 @@ public class JsonRpcClientHostedServiceTests
     {
         // 1) Моки для JsonRpcClientHostedService
         _loggerMock = new Mock<ILogger<JsonRpcClientHostedService>>();
+        _loggerMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         _clientFactoryMock = new Mock<IJsonRpcClientFactory>();
         _clientMock = new Mock<IJsonRpcClient>();
 
@@ -44,6 +45,7 @@ public class JsonRpcClientHostedServiceTests
 
         // 2) Для реального SignalCliHostedService
         _scsLoggerMock = new Mock<ILogger<Services.SignalCli.SignalCliHostedService>>();
+        _scsLoggerMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         _processRunnerMock = new Mock<IProcessRunner>();
 
         // Налаштовуємо, щоб при запуску повертався «фейковий» IProcess і StreamPair
@@ -67,6 +69,7 @@ public class JsonRpcClientHostedServiceTests
             });
 
         var loggerPsMock = new Mock<ILogger<ProcessStateManager>>();
+        loggerPsMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         _stateManager = new ProcessStateManager(loggerPsMock.Object);
 
         // Конфіг, щоб не впасти при BuildClasspath

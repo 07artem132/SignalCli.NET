@@ -1,6 +1,7 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using SignalCli.Interfaces.Signal;
 using SignalCli.Interfaces.SignalCli;
+using SignalCli.Logging;
 using SignalCli.Models.Signal.Accounts;
 
 namespace SignalCli.Services.Signal;
@@ -16,7 +17,7 @@ internal class SignalAccounts(
 
     public async Task<ListAccountsResponse> ListAccounts(CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug("Отримання списку облікових записів");
+        SignalAccountsLog.ListAccountsRequested(_logger);
 
         try
         {
@@ -28,26 +29,20 @@ internal class SignalAccounts(
 
             if (response == null)
             {
-                _logger.LogError("Отримано нульову відповідь на listAccounts");
+                SignalAccountsLog.ListAccountsNullResponse(_logger);
                 throw new InvalidOperationException("Отримано нульову відповідь від сервера");
             }
 
             // ПРИВАТНІСТЬ (F5): на Information логуємо лише кількість; Account-record містить
             // номер телефону/UUID, тож деталі — лише на Trace.
-            _logger.LogInformation(
-                "Список облікових записів отримано успішно. Кількість={Count}",
-                response.Count
-            );
-            _logger.LogTrace(
-                "Облікові записи={AccountList}",
-                string.Join(", ", response)
-            );
+            SignalAccountsLog.ListAccountsOk(_logger, response.Count);
+            SignalAccountsLog.ListAccountsTrace(_logger, string.Join(", ", response));
 
             return response;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Помилка отримання списку облікових записів");
+            SignalAccountsLog.ListAccountsFailed(_logger, ex);
             throw;
         }
     }
@@ -55,7 +50,7 @@ internal class SignalAccounts(
     public async Task<SyncAccountsResponse> SyncAccount(CancellationToken cancellationToken = default)
     {
         //todo work
-        _logger.LogDebug("Синхронізація облікових записів");
+        SignalAccountsLog.SyncAccountRequested(_logger);
 
         try
         {
@@ -67,19 +62,19 @@ internal class SignalAccounts(
 
             if (response == null)
             {
-                _logger.LogError("Отримано нульову відповідь на sendSyncRequest");
+                SignalAccountsLog.SyncAccountNullResponse(_logger);
                 throw new InvalidOperationException("Отримано нульову відповідь від сервера");
             }
 
             // ПРИВАТНІСТЬ (F5): SyncAccountsResponse — порожній record (sendSyncRequest повертає лише факт),
             // тож на Information — лише факт виконання, без даних, які могли б містити PII.
-            _logger.LogInformation("Синхронізація облікових записів виконана успішно.");
+            SignalAccountsLog.SyncAccountOk(_logger);
 
             return response;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Помилка синхронізації облікових записів");
+            SignalAccountsLog.SyncAccountFailed(_logger, ex);
             throw;
         }
     }

@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using SignalCli.Interfaces.Signal;
 using SignalCli.Interfaces.SignalCli;
+using SignalCli.Logging;
 using SignalCli.Models.Signal.Devices;
 
 namespace SignalCli.Services.Signal;
@@ -33,7 +34,7 @@ internal class SignalDevices(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Помилка запуску процесу зв'язування пристрою");
+            SignalDevicesLog.StartLinkFailed(_logger, ex);
             throw;
         }
     }
@@ -57,7 +58,7 @@ internal class SignalDevices(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Помилка завершення процесу зв'язування пристрою");
+            SignalDevicesLog.FinishLinkFailed(_logger, ex);
             throw;
         }
     }

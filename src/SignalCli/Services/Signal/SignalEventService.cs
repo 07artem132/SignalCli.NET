@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using SignalCli.Interfaces.Rpc;
 using SignalCli.Interfaces.Signal;
 using SignalCli.Interfaces.SignalCli;
+using SignalCli.Logging;
 using SignalCli.Models.Rpc;
 using SignalCli.Models.Signal;
 using SignalCli.Models.Signal.Events;
@@ -150,9 +151,7 @@ internal class SignalEventService(
             var dropped = Interlocked.Increment(ref _droppedCount);
             if (dropped % 100 == 1)
             {
-                _logger.LogDebug(
-                    "E: канал {Type} переповнений — DropOldest. Сумарно дропів={Dropped}",
-                    typeof(T).Name, dropped);
+                SignalEventServiceLog.ChannelOverflowed(_logger, typeof(T).Name, dropped);
             }
         }
         channel.Writer.TryWrite(item);
@@ -190,8 +189,7 @@ internal class SignalEventService(
             _accountSubscriptions[account] = subscriptionId;
         }
 
-        _logger.LogInformation("SubscribeAsync: обліковий запис={Account}, ідентифікатор підписки={SubId}",
-            account, subscriptionId);
+        SignalEventServiceLog.Subscribed(_logger, account, subscriptionId);
 
         return new SubscribeReceiveResponse(subscriptionId);
     }
@@ -207,7 +205,7 @@ internal class SignalEventService(
 
         if (account == null)
         {
-            _logger.LogWarning("Не знайдено підписку з ідентифікатором={SubId}", subscriptionId);
+            SignalEventServiceLog.UnsubscribeMissing(_logger, subscriptionId);
             return new UnsubscribeReceiveResponse();
         }
 
@@ -222,7 +220,7 @@ internal class SignalEventService(
             _accountSubscriptions.Remove(account);
         }
 
-        _logger.LogInformation("Відписка успішна: Обліковий запис={Account}, ІдПідписки={SubscriptionId}", account, subscriptionId);
+        SignalEventServiceLog.Unsubscribed(_logger, account, subscriptionId);
 
         return resp;
     }
@@ -242,13 +240,13 @@ internal class SignalEventService(
             JsonMessageEnvelope? jsonEnvelope = eventArgs.Envelope;
             if (jsonEnvelope == null)
             {
-                _logger.LogWarning("Сповіщення без Envelope, пропускаємо...");
+                SignalEventServiceLog.EnvelopeMissing(_logger);
                 return;
             }
 
             if (!TryGetAccountBySubscriptionId(subscriptionId, out string? account))
             {
-                _logger.LogDebug("Подія для неактуальної підписки {SubId}, ігноруємо.", subscriptionId);
+                SignalEventServiceLog.StaleSubscription(_logger, subscriptionId);
                 return;
             }
 
@@ -472,17 +470,17 @@ internal class SignalEventService(
                 }
 
                 if (!emitted)
-                    _logger.LogDebug("DataMessage без впізнаваного payload (пусте/групове-метадані) — пропускаємо.");
+                    SignalEventServiceLog.DataMessageEmpty(_logger);
                 return;
             }
 
-            _logger.LogDebug("Невідомий тип події, пропускаємо...");
+            SignalEventServiceLog.UnknownEnvelope(_logger);
         }
         // Навмисний широкий catch: межа диспетчера сповіщень — одне погане
         // сповіщення не повинно зривати потік подій (логуємо й продовжуємо).
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Помилка при обробці вхідного сповіщення від Signal");
+            SignalEventServiceLog.NotificationDispatchFailed(_logger, ex);
         }
     }
 

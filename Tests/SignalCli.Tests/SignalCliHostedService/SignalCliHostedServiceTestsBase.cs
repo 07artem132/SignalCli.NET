@@ -23,6 +23,9 @@ public abstract class SignalCliHostedServiceTestsBase : IDisposable
     protected SignalCliHostedServiceTestsBase()
     {
         LoggerMock = new Mock<ILogger<Services.SignalCli.SignalCliHostedService>>();
+        // C.8: source-generated [LoggerMessage] методи спершу перевіряють IsEnabled —
+        // інакше Verify(...x.Log...) показав би 0 викликів. У тестах вмикаємо всі рівні.
+        LoggerMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         ProcessRunnerMock = new Mock<IProcessRunner>();
 
         // Подготовка ProcessRunner
@@ -30,6 +33,7 @@ public abstract class SignalCliHostedServiceTestsBase : IDisposable
 
         // Настройка ProcessStateManager
         var loggerSm = new Mock<ILogger<ProcessStateManager>>();
+        loggerSm.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         StateManager = new ProcessStateManager(loggerSm.Object);
 
         // Створення тимчасової директорії для тестів
