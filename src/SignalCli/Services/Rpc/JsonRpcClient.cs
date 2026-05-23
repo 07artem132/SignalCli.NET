@@ -24,7 +24,7 @@ namespace SignalCli.Services.Rpc;
 /// та коректний lifecycle читачів stdout/stderr: цикли скасовуються та чекаються до
 /// завершення на зміні <see cref="StreamPair"/> й при <see cref="DisposeAsync"/>.
 /// </remarks>
-internal sealed class JsonRpcClient : IJsonRpcClient, IAsyncDisposable
+internal sealed class JsonRpcClient : IJsonRpcClient
 {
     private readonly ILogger<JsonRpcClient> _logger;
     private readonly IStreamPairProvider _streamProvider;
@@ -34,6 +34,9 @@ internal sealed class JsonRpcClient : IJsonRpcClient, IAsyncDisposable
     private readonly Nito.AsyncEx.AsyncLock _sendLock = new();
     private readonly AtomicCounter _requestIdCounter = new();
     private readonly CompositeDisposable _disposables = new();
+    // A.9: маркерний токен для скасування pending-requests при DisposeAsync.
+    // Тримаємо як поле, щоб TrySetCanceled нес його у OperationCanceledException.
+    private readonly CancellationTokenSource _disposeCts = new();
     private bool _disposed;
 
     // Стан читачів захищаємо окремим локом, бо OnStreamPairChanged, StartReading
@@ -79,10 +82,13 @@ internal sealed class JsonRpcClient : IJsonRpcClient, IAsyncDisposable
     {
         if (_disposed) return;
 
-        // Скасовуємо всі очікуючі запити: пара змінилась — старі id більше не отримають відповідь.
+        // A.9: скасовуємо pending-requests маркерним токеном з причини «stream pair замінено».
+        // Власник запиту отримає OperationCanceledException, де CancellationToken == streamChangedCts.Token.
+        using var streamChangedCts = new CancellationTokenSource();
+        streamChangedCts.Cancel();
         foreach (var kv in _pendingRequests)
         {
-            kv.Value.TrySetCanceled();
+            kv.Value.TrySetCanceled(streamChangedCts.Token);
         }
 
         _pendingRequests.Clear();
@@ -420,20 +426,11 @@ internal sealed class JsonRpcClient : IJsonRpcClient, IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// Виконує очищення та вивільнення ресурсів (синхронна версія —
-    /// делегує асинхронній і чекає на завершення).
-    /// </summary>
-    public void Dispose()
-    {
-        if (_disposed) return;
-        // Викликаємо асинхронний шлях й блокуємось на ньому: для бекенду це коректно,
-        // бо StopReadersAsync має бути обмежений ReaderStopTimeout.
-        try { DisposeAsync().AsTask().GetAwaiter().GetResult(); }
-        catch { /* ковтаємо: помилки вже залоговано всередині */ }
-    }
-
     /// <inheritdoc />
+    /// <remarks>
+    /// A.6: <c>IDisposable</c> прибрано з контракту — асинхронний cleanup має тут
+    /// канонічний шлях через <see cref="IAsyncDisposable.DisposeAsync"/>.
+    /// </remarks>
     public async ValueTask DisposeAsync()
     {
         if (_disposed) return;
@@ -443,15 +440,19 @@ internal sealed class JsonRpcClient : IJsonRpcClient, IAsyncDisposable
         _disposables.Dispose();
         await StopReadersAsync().ConfigureAwait(false);
 
-        // 2) Скасовуємо всі очікуючі запити.
+        // 2) A.9: скасовуємо очікуючі запити з токеном диспозу — викликач побачить
+        //    OperationCanceledException, де CancellationToken == _disposeCts.Token.
+        _disposeCts.Cancel();
         foreach (var kv in _pendingRequests.Values)
         {
-            kv.TrySetCanceled();
+            kv.TrySetCanceled(_disposeCts.Token);
         }
         _pendingRequests.Clear();
 
         // 3) Звільняємо потік нотифікацій.
         _notificationSubject.OnCompleted();
         _notificationSubject.Dispose();
+
+        _disposeCts.Dispose();
     }
 }

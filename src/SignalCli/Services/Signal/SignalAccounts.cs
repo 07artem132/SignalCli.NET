@@ -5,14 +5,14 @@ using SignalCli.Models.Signal.Accounts;
 
 namespace SignalCli.Services.Signal;
 
+// A.13: IDisposable прибрано — клас не тримає жодних ресурсів, порожній Dispose() лише плутав.
 internal class SignalAccounts(
     ISignalCliClient signalCliClient,
     ILogger<SignalAccounts> logger)
-    : ISignalAccounts, IDisposable
+    : ISignalAccounts
 {
     private readonly ISignalCliClient _signalCliClient = signalCliClient ?? throw new ArgumentNullException(nameof(signalCliClient));
     private readonly ILogger<SignalAccounts> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    private bool _disposed;
 
     public async Task<ListAccountsResponse> ListAccounts(CancellationToken cancellationToken = default)
     {
@@ -84,9 +84,4 @@ internal class SignalAccounts(
         }
     }
 
-    public void Dispose()
-    {
-        if (_disposed) return;
-        _disposed = true;
-    }
 }

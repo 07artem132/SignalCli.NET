@@ -117,7 +117,7 @@ public class SignalApiFacadeTests
         var provider = new Mock<IJsonRpcClientProvider>();
         provider.Setup(p => p.Client).Returns(rpc.Object);
 
-        var version = await new SignalService(provider.Object, Mock.Of<ILogger<SignalService>>()).Version();
+        var version = await new SignalService(provider.Object, Mock.Of<ILogger<SignalService>>()).VersionAsync();
 
         Assert.Equal("0.14.3", version.Version);
     }
@@ -170,6 +170,6 @@ public class SignalApiFacadeTests
         provider.Setup(p => p.Client).Returns(rpc.Object);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => new SignalService(provider.Object, Mock.Of<ILogger<SignalService>>()).Version());
+            () => new SignalService(provider.Object, Mock.Of<ILogger<SignalService>>()).VersionAsync());
     }
 }

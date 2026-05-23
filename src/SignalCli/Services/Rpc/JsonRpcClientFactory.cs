@@ -30,22 +30,11 @@ internal class JsonRpcClientFactory : IJsonRpcClientFactory
         _config = config;
     }
 
-    /// <summary>
-    /// Асинхронно створює новий екземпляр JSON-RPC клієнта.
-    /// </summary>
-    /// <param name="cancellationToken">Токен скасування операції.</param>
-    /// <returns>Новий екземпляр JSON-RPC клієнта.</returns>
-    public Task<IJsonRpcClient> CreateAsync(CancellationToken cancellationToken = default)
+    /// <inheritdoc />
+    public IJsonRpcClient Create()
     {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        IJsonRpcClient client = new JsonRpcClient(
-            _logger,
-            _streamPairProvider,
-            _config
-        );
-
+        var client = new JsonRpcClient(_logger, _streamPairProvider, _config);
         _logger.LogInformation("JsonRpcClient створено через JsonRpcClientFactory");
-        return Task.FromResult(client);
+        return client;
     }
 }

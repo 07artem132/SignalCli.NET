@@ -128,7 +128,8 @@ public class JsonRpcClientTests
         var invokeTask = client.InvokeMethodAsync<object, object>("test", new { });
 
         // Act
-        client.Dispose(); // Диспоз → отмена всех pending-запросов
+        // A.6: IJsonRpcClient тепер IAsyncDisposable-only.
+        await client.DisposeAsync();
 
         // Assert
         await Assert.ThrowsAsync<TaskCanceledException>(() => invokeTask);

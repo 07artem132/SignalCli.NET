@@ -57,8 +57,8 @@ internal sealed class JsonRpcClientHostedService : IHostedService, IJsonRpcClien
         {
             // Чекаємо, поки SignalCliHostedService реально підніме процес
             await _signalCliHostedService.WaitForReadyAsync(cancellationToken).ConfigureAwait(false);
-            // Створюємо клієнт
-            _client = await _factory.CreateAsync(cancellationToken).ConfigureAwait(false);
+            // A.7: фабрика тепер синхронна — створення клієнта не потребує await.
+            _client = _factory.Create();
             var versionResp = await _client.InvokeMethodAsync<VersionResponse, VersionParameters>("version", new(), cancellationToken).ConfigureAwait(false);
             _logger.LogInformation("Версія signal-cli JSON-RPC: {Version}", versionResp.Version);
 
@@ -85,10 +85,9 @@ internal sealed class JsonRpcClientHostedService : IHostedService, IJsonRpcClien
 
         try
         {
-            if (_client is IAsyncDisposable asyncDisposable)
-                await asyncDisposable.DisposeAsync().ConfigureAwait(false);
-            else
-                _client?.Dispose();
+            // A.6: IJsonRpcClient — IAsyncDisposable; диспозимо саме асинхронно.
+            if (_client != null)
+                await _client.DisposeAsync().ConfigureAwait(false);
 
             _client = null;
             _logger.LogInformation("JsonRpcClientHostedService зупинено.");
@@ -112,10 +111,7 @@ internal sealed class JsonRpcClientHostedService : IHostedService, IJsonRpcClien
         {
             if (_client != null)
             {
-                if (_client is IAsyncDisposable ad)
-                    await ad.DisposeAsync().ConfigureAwait(false);
-                else
-                    _client.Dispose();
+                await _client.DisposeAsync().ConfigureAwait(false);
                 _client = null;
             }
         }

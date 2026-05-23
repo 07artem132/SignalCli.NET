@@ -5,14 +5,14 @@ using SignalCli.Models.Signal.Groups;
 
 namespace SignalCli.Services.Signal;
 
+// A.13: IDisposable прибрано — клас не тримає жодних ресурсів.
 internal class SignalGroups(
     ISignalCliClient signalCliClient,
     ILogger<SignalGroups> logger)
-    : ISignalGroups, IDisposable
+    : ISignalGroups
 {
     private readonly ISignalCliClient _signalCliClient = signalCliClient ?? throw new ArgumentNullException(nameof(signalCliClient));
     private readonly ILogger<SignalGroups> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    private bool _disposed;
 
     public async Task<ListGroupsResponse> ListGroups(string account, CancellationToken cancellationToken = default)
     {
@@ -52,9 +52,4 @@ internal class SignalGroups(
         }
     }
 
-    public void Dispose()
-    {
-        if (_disposed) return;
-        _disposed = true;
-    }
 }

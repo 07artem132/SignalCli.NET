@@ -5,11 +5,11 @@ using SignalCli.Models.SignalCli;
 
 namespace SignalCli.Services.Signal;
 
-internal class SignalService : ISignalCliClient, IDisposable
+// A.13: IDisposable прибрано — фасад над IJsonRpcClientProvider не тримає ресурсів.
+internal class SignalService : ISignalCliClient
 {
     private readonly IJsonRpcClientProvider _rpcClient;
     private readonly ILogger<SignalService> _logger;
-    private bool _disposed;
 
     public SignalService(IJsonRpcClientProvider jsonRpcClientProvider, ILogger<SignalService> logger)
     {
@@ -22,7 +22,6 @@ internal class SignalService : ISignalCliClient, IDisposable
         TRequest parameters,
         CancellationToken cancellationToken = default) where TResponse : notnull
     {
-        ObjectDisposedException.ThrowIf(_disposed, nameof(SignalService));
 
             try
             {
@@ -50,7 +49,7 @@ internal class SignalService : ISignalCliClient, IDisposable
             }
     }
 
-    public async Task<VersionResponse> Version(CancellationToken cancellationToken = default)
+    public async Task<VersionResponse> VersionAsync(CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Отримання версії");
 
@@ -76,11 +75,4 @@ internal class SignalService : ISignalCliClient, IDisposable
         }
     }
 
-    public void Dispose()
-    {
-        if (_disposed) return;
-        _disposed = true;
-
-        GC.SuppressFinalize(this);
-    }
 }

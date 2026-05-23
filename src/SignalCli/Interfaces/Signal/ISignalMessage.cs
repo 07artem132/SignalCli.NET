@@ -47,7 +47,8 @@ namespace SignalCli.Interfaces.Signal
         /// var result = await signalMessage.SendTextMessageAsync(textOptions);
         /// </code>
         /// </example>
-        public Task<List<SendMessageResponse>> SendTextMessageAsync(TextMessageOptions options);
+        /// <param name="cancellationToken">A.3: токен скасування — лінкується з <c>options.CancellationToken</c>, якщо обидва задано.</param>
+        public Task<List<SendMessageResponse>> SendTextMessageAsync(TextMessageOptions options, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Відправляє повідомлення з вкладеннями.
@@ -84,7 +85,8 @@ namespace SignalCli.Interfaces.Signal
         /// var result = await signalMessage.SendAttachmentAsync(attachmentOptions);
         /// </code>
         /// </example>
-        public Task<List<SendMessageResponse>> SendAttachmentAsync(AttachmentMessageOptions options);
+        /// <param name="cancellationToken">A.3: токен скасування — лінкується з <c>options.CancellationToken</c>, якщо обидва задано.</param>
+        public Task<List<SendMessageResponse>> SendAttachmentAsync(AttachmentMessageOptions options, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Відправляє стікер.
@@ -119,6 +121,7 @@ namespace SignalCli.Interfaces.Signal
         /// var result = await signalMessage.SendStickerAsync(stickerOptions);
         /// </code>
         /// </example>
-        public Task<List<SendMessageResponse>> SendStickerAsync(StickerMessageOptions options);
+        /// <param name="cancellationToken">A.3: токен скасування — лінкується з <c>options.CancellationToken</c>, якщо обидва задано.</param>
+        public Task<List<SendMessageResponse>> SendStickerAsync(StickerMessageOptions options, CancellationToken cancellationToken = default);
     }
 }

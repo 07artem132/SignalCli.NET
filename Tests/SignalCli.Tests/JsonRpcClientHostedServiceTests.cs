@@ -31,8 +31,8 @@ public class JsonRpcClientHostedServiceTests
 
         // За замовчуванням при створенні фабрика повертає _clientMock.Object
         _clientFactoryMock
-            .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(_clientMock.Object);
+            .Setup(f => f.Create())
+            .Returns(_clientMock.Object);
 
         // Коли викликаємо InvokeMethodAsync("version", ...)
         _clientMock
@@ -129,7 +129,7 @@ public class JsonRpcClientHostedServiceTests
 
         // Assert
         // 1) Перевіримо, що фабрика створила клієнт
-        _clientFactoryMock.Verify(f => f.CreateAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _clientFactoryMock.Verify(f => f.Create(), Times.Once);
 
         // 2) Перевіримо виклик "version"
         _clientMock.Verify(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(

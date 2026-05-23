@@ -8,14 +8,15 @@ using SignalCli.Utilities;
 
 namespace SignalCli.Services.Signal
 {
+    // A.13: IDisposable прибрано — клас не тримає жодних ресурсів (тимчасові файли вкладень
+    // диспозяться у finally внутрі SendUnifiedMessageAsync).
     internal sealed class SignalMessage(ISignalCliClient signalCliClient, ILogger<SignalMessage> logger)
-        : ISignalMessage, IDisposable
+        : ISignalMessage
     {
         private readonly ISignalCliClient _signalCliClient =
             signalCliClient ?? throw new ArgumentNullException(nameof(signalCliClient));
 
         private readonly ILogger<SignalMessage> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        private bool _disposed;
 
         // signal-cli приймає вкладення двома способами:
         //   1) data-URI з base64 — вбудовується прямо в JSON-RPC запит (не потребує
@@ -37,8 +38,8 @@ namespace SignalCli.Services.Signal
             string message,
             bool noteToSelf,
             bool endSession,
-            // Режим стилізації, наприклад "styled" або null
-            string? textMode,
+            // A.10: типобезпечний режим стилізації замість stringly-typed "styled"-прапорця.
+            TextStyleMode textMode,
             // Вкладення, що реалізують IAttachmentEntry (конвертуються в Data URI)
             IEnumerable<IAttachmentEntry>? attachments,
             IEnumerable<string>? mentions,
@@ -61,10 +62,9 @@ namespace SignalCli.Services.Signal
         {
             ValidateRecipients(recipients);
 
-            // Якщо увімкнено режим стилізації, обробляємо текст за допомогою TextStyleParser і отримуємо форматувальні рядки
+            // A.10: switch по enum-у замість порівняння рядків.
             List<string> parsedTextStyles = [];
-            if (!string.IsNullOrEmpty(textMode) &&
-                textMode.Equals("styled", StringComparison.OrdinalIgnoreCase))
+            if (textMode == TextStyleMode.Styled)
             {
                 var parser = new TextStyleParser(message);
                 (message, parsedTextStyles) = parser.Parse();
@@ -212,18 +212,25 @@ namespace SignalCli.Services.Signal
         /// Обгортка для відправки звичайного текстового повідомлення без вкладень.
         /// Підтримує цитування та прев’ю посилань.
         /// </summary>
-        public async Task<List<SendMessageResponse>> SendTextMessageAsync(TextMessageOptions options)
+        public async Task<List<SendMessageResponse>> SendTextMessageAsync(
+            TextMessageOptions options,
+            CancellationToken cancellationToken = default)
         {
             // F12: явний guard замість NRE при доступі до options.Account.
             ArgumentNullException.ThrowIfNull(options);
+            // A.3/A.4: лінкуємо токен-параметр з options.CancellationToken (deprecated),
+            // щоб обидва шляхи скасування продовжували працювати під час shim-вікна.
+#pragma warning disable CS0618 // A.5: shim-вікно — читаємо deprecated CancellationToken із options
+            using var linked = LinkTokens(cancellationToken, options.CancellationToken);
+#pragma warning restore CS0618
             var response = await SendUnifiedMessageAsync(
                 account: options.Account,
                 recipients: options.Recipients,
                 message: options.Message,
                 noteToSelf: false,
                 endSession: false,
-                // Если режим стилизации включён через UseStyle(), устанавливаем "styled"
-                textMode: options.UseStyle ? "styled" : null,
+                // A.10: enum замість stringly-typed "styled".
+                textMode: options.UseStyle ? TextStyleMode.Styled : TextStyleMode.None,
                 attachments: null,
                 mentions: options.Mentions,
                 // Параметры цитирования и прочие специфичные поля отсутствуют для текстового сообщения
@@ -242,7 +249,7 @@ namespace SignalCli.Services.Signal
                 previewImage: options.PreviewImage,
                 storyTimestamp: null,
                 storyAuthor: null,
-                cancellationToken: options.CancellationToken
+                cancellationToken: linked.Token
             ).ConfigureAwait(false);
 
 
@@ -253,10 +260,15 @@ namespace SignalCli.Services.Signal
         /// Обгортка для відправки повідомлення з вкладенням.
         /// Підтримує цитування. Для групових повідомлень допускається лише один отримувач.
         /// </summary>
-        public async Task<List<SendMessageResponse>> SendAttachmentAsync(AttachmentMessageOptions options)
+        public async Task<List<SendMessageResponse>> SendAttachmentAsync(
+            AttachmentMessageOptions options,
+            CancellationToken cancellationToken = default)
         {
             // F12: явний guard замість NRE при доступі до options.Account.
             ArgumentNullException.ThrowIfNull(options);
+#pragma warning disable CS0618 // A.5: shim-вікно — читаємо deprecated CancellationToken із options
+            using var linked = LinkTokens(cancellationToken, options.CancellationToken);
+#pragma warning restore CS0618
             var response = await SendUnifiedMessageAsync(
                 account: options.Account,
                 recipients: options.Recipients,
@@ -264,7 +276,7 @@ namespace SignalCli.Services.Signal
                 message: options.Message,
                 noteToSelf: false,
                 endSession: false,
-                textMode: options.UseStyle ? "styled" : null,
+                textMode: options.UseStyle ? TextStyleMode.Styled : TextStyleMode.None,
                 attachments: options.Attachments,
                 mentions: options.Mentions,
                 quoteTimestamp: null,
@@ -282,7 +294,7 @@ namespace SignalCli.Services.Signal
                 previewImage: null,
                 storyTimestamp: null,
                 storyAuthor: null,
-                cancellationToken: options.CancellationToken
+                cancellationToken: linked.Token
             ).ConfigureAwait(false);
 
 
@@ -293,10 +305,15 @@ namespace SignalCli.Services.Signal
         /// Обгортка для відправки стікера.
         /// Для групових повідомлень допускається лише один отримувач.
         /// </summary>
-        public async Task<List<SendMessageResponse>> SendStickerAsync(StickerMessageOptions options)
+        public async Task<List<SendMessageResponse>> SendStickerAsync(
+            StickerMessageOptions options,
+            CancellationToken cancellationToken = default)
         {
             // F12: явний guard замість NRE при доступі до options.Account.
             ArgumentNullException.ThrowIfNull(options);
+#pragma warning disable CS0618 // A.5: shim-вікно — читаємо deprecated CancellationToken із options
+            using var linked = LinkTokens(cancellationToken, options.CancellationToken);
+#pragma warning restore CS0618
             var response = await SendUnifiedMessageAsync(
                 account: options.Account,
                 recipients: options.Recipients,
@@ -304,7 +321,7 @@ namespace SignalCli.Services.Signal
                 message: string.Empty,
                 noteToSelf: false,
                 endSession: false,
-                textMode: null,
+                textMode: TextStyleMode.None,
                 attachments: null,
                 mentions: options.Mentions,
                 quoteTimestamp: null,
@@ -323,16 +340,35 @@ namespace SignalCli.Services.Signal
                 previewImage: null,
                 storyTimestamp: null,
                 storyAuthor: null,
-                cancellationToken: options.CancellationToken
+                cancellationToken: linked.Token
             ).ConfigureAwait(false);
 
             return [response];
         }
 
         /// <summary>
+        /// A.3: безпечно лінкує два токени: значення з аргументу метода та deprecated-поле в Options.
+        /// Якщо обидва None — повертає CTS без активної реєстрації (нульовий runtime-cost).
+        /// </summary>
+        private static CancellationTokenSource LinkTokens(CancellationToken a, CancellationToken b)
+        {
+            // CreateLinkedTokenSource приймає 0..N токенів; передаємо обидва.
+            // Якщо обидва — CancellationToken.None, повернений CTS просто ніколи не скасується.
+            return CancellationTokenSource.CreateLinkedTokenSource(a, b);
+        }
+
+        /// <summary>
         /// Перевіряє, що список отримувачів не порожній.
         /// </summary>
-        private static void ValidateRecipients(IEnumerable<IRecipient> recipients, string paramName = "recipients")
+        /// <remarks>
+        /// A.12: <c>paramName</c> автоматично береться з виразу-аргументу через
+        /// <see cref="System.Runtime.CompilerServices.CallerArgumentExpressionAttribute"/>;
+        /// викликачу не треба явно передавати ім’я (рефакторинг безпечний).
+        /// </remarks>
+        private static void ValidateRecipients(
+            IEnumerable<IRecipient> recipients,
+            [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(recipients))]
+            string? paramName = null)
         {
             if (recipients == null || !recipients.Any())
             {
@@ -340,11 +376,5 @@ namespace SignalCli.Services.Signal
             }
         }
 
-        public void Dispose()
-        {
-            if (_disposed)
-                return;
-            _disposed = true;
-        }
     }
 }

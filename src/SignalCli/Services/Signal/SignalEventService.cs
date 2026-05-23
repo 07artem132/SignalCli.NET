@@ -164,6 +164,14 @@ internal class SignalEventService(
                 return;
             }
 
+            // A.11: structured-scope, щоб усі логи цієї нотифікації несли SubscriptionId/Account
+            // як structured properties (а не повторювалися в шаблонах кожного повідомлення).
+            using var scope = _logger.BeginScope(new Dictionary<string, object>
+            {
+                ["SubscriptionId"] = subscriptionId,
+                ["Account"] = account!,
+            });
+
             // Якщо отримано подію набору тексту
             if (jsonEnvelope.TypingMessage is not null)
             {

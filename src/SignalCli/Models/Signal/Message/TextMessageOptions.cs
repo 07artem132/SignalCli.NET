@@ -27,6 +27,8 @@ public record TextMessageOptions
     /// <summary>Зображення попереднього перегляду посилання (шлях або URI).</summary>
     public string? PreviewImage { get; private set; }
     /// <summary>Токен скасування відправлення.</summary>
+    /// <remarks>A.5: deprecated — передавайте <c>CancellationToken</c> явно як параметр методу <c>SendTextMessageAsync(options, ct)</c>.</remarks>
+    [Obsolete("Pass CancellationToken to SendTextMessageAsync directly; will be removed in 3.0")]
     public CancellationToken CancellationToken { get; private set; } = CancellationToken.None;
 
 
@@ -81,9 +83,13 @@ public record TextMessageOptions
         }
 
         /// <summary>Задати токен скасування відправки.</summary>
+        /// <remarks>A.5: deprecated — передавайте <c>CancellationToken</c> прямо в <c>SendTextMessageAsync(options, ct)</c>.</remarks>
+        [Obsolete("Pass CancellationToken to SendTextMessageAsync directly; will be removed in 3.0")]
         public Builder WithCancellationToken(CancellationToken cancellationToken)
         {
+#pragma warning disable CS0618 // А.5: інстансер може писати в depr-property
             _options.CancellationToken = cancellationToken;
+#pragma warning restore CS0618
             return this;
         }
 
