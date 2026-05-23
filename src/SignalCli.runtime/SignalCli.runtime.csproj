@@ -16,6 +16,13 @@
         <Version>0.14.3.1</Version>
         <AssemblyVersion>0.14.3.1</AssemblyVersion>
         <FileVersion>0.14.3.1</FileVersion>
+
+        <!-- post-modernize-tuning §8d.4-§8d.6 (audit N6): canonical version + SHA-256 of the
+             upstream signal-cli archive live in this csproj. The download scripts accept
+             these as args; bumping signal-cli = edit two lines here, no script edits.
+             Verified value: GitHub Releases https://github.com/AsamK/signal-cli/releases/tag/v0.14.3 -->
+        <SignalCliVersion>0.14.3</SignalCliVersion>
+        <SignalCliSha256>60a0a51312d07ed0cd6f4d5080b2ffe6ee838ea99f92297f2803e24af1826c6f</SignalCliSha256>
     </PropertyGroup>
 
     <!-- Цілі для завантаження та копіювання signal-cli у вихідну папку (за потреби).
@@ -23,11 +30,11 @@
          не потребували мережі). Самі скрипти теж роблять ранній вихід. -->
     <Target Name="DownloadSignalCli" BeforeTargets="Build;Pack"
             Condition="!Exists('$(BaseIntermediateOutputPath)signal-cli/bin')">
-        <Message Text="🚀 Завантаження signal-cli..." Importance="High" />
+        <Message Text="🚀 Завантаження signal-cli $(SignalCliVersion)..." Importance="High" />
         <Exec Condition="'$(OS)' == 'Windows_NT'"
-              Command="powershell -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)download-signal-cli.ps1&quot; -OutDir &quot;$(BaseIntermediateOutputPath)signal-cli&quot;" />
+              Command="powershell -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)download-signal-cli.ps1&quot; -OutDir &quot;$(BaseIntermediateOutputPath)signal-cli&quot; -Version $(SignalCliVersion) -Sha256 $(SignalCliSha256)" />
         <Exec Condition="'$(OS)' != 'Windows_NT'"
-              Command="bash &quot;$(MSBuildThisFileDirectory)download-signal-cli.sh&quot; &quot;$(BaseIntermediateOutputPath)signal-cli&quot;" />
+              Command="bash &quot;$(MSBuildThisFileDirectory)download-signal-cli.sh&quot; &quot;$(BaseIntermediateOutputPath)signal-cli&quot; $(SignalCliVersion) $(SignalCliSha256)" />
     </Target>
 
     <Target Name="CopySignalCliToBin" AfterTargets="DownloadSignalCli">

@@ -10,7 +10,13 @@
   contain non-ASCII characters (e.g. a localized user-profile or folder name).
 #>
 param (
-    [string]$OutDir = "signal-cli"
+    [string]$OutDir = "signal-cli",
+    # post-modernize-tuning §8d.4-§8d.6 (audit N6): Version і Sha256 тепер передаються
+    # ззовні (з csproj <SignalCliVersion>/<SignalCliSha256> через Exec Command), щоб
+    # bump-version був single-csproj-edit. Дефолти лишаємо для прямого виклику скрипта
+    # без csproj-binding'у (наприклад, локальне дослідження).
+    [string]$Version = "0.14.3",
+    [string]$Sha256 = "60a0a51312d07ed0cd6f4d5080b2ffe6ee838ea99f92297f2803e24af1826c6f"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -22,11 +28,11 @@ if (Test-Path $SignalCliBin) {
     exit 0
 }
 
-$Version = "0.14.3"
 $Filename = "signal-cli-$Version.tar.gz"
 $Url = "https://github.com/AsamK/signal-cli/releases/download/v$Version/$Filename"
-# SHA-256 of the official release archive (verified against GitHub Releases).
-$ExpectedSha256 = "60a0a51312d07ed0cd6f4d5080b2ffe6ee838ea99f92297f2803e24af1826c6f"
+# SHA-256 verified against GitHub Releases; canonical value lives in
+# src/SignalCli.runtime/SignalCli.runtime.csproj <SignalCliSha256>.
+$ExpectedSha256 = $Sha256
 
 # Use a fresh ASCII temp directory for download + extraction.
 $temp = Join-Path ([System.IO.Path]::GetTempPath()) ("signal-cli-" + [System.Guid]::NewGuid().ToString())
