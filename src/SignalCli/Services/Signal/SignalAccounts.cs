@@ -25,7 +25,7 @@ internal sealed class SignalAccounts(
         SignalAccountsLog.ListAccountsRequested(_logger);
 
         var response = await _signalCliClient
-            .InvokeMethodAsync<ListAccountsResponse, ListAccountsParameters>(
+            .InvokeMethodAsync<ListAccountsParameters, ListAccountsResponse>(
                 "listAccounts",
                 new ListAccountsParameters(),
                 cancellationToken).ConfigureAwait(false);
@@ -55,7 +55,7 @@ internal sealed class SignalAccounts(
         SignalAccountsLog.SyncAccountRequested(_logger);
 
         var response = await _signalCliClient
-            .InvokeMethodAsync<SyncAccountsResponse, SyncAccountsParameters>(
+            .InvokeMethodAsync<SyncAccountsParameters, SyncAccountsResponse>(
                 "sendSyncRequest",
                 new SyncAccountsParameters(),
                 cancellationToken).ConfigureAwait(false);

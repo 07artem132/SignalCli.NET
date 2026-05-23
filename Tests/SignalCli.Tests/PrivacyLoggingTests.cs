@@ -22,7 +22,7 @@ public class PrivacyLoggingTests
         var response = new ListAccountsResponse { new Account(phoneNumber) };
 
         var client = new Mock<ISignalCliClient>();
-        client.Setup(c => c.InvokeMethodAsync<ListAccountsResponse, ListAccountsParameters>(
+        client.Setup(c => c.InvokeMethodAsync<ListAccountsParameters, ListAccountsResponse>(
                 "listAccounts", It.IsAny<ListAccountsParameters>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(response);
 
@@ -72,7 +72,7 @@ public class PrivacyLoggingTests
             GroupInviteLink: null));
 
         var client = new Mock<ISignalCliClient>();
-        client.Setup(c => c.InvokeMethodAsync<ListGroupsResponse, ListGroupsParameters>(
+        client.Setup(c => c.InvokeMethodAsync<ListGroupsParameters, ListGroupsResponse>(
                 "listGroups", It.IsAny<ListGroupsParameters>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(response);
 

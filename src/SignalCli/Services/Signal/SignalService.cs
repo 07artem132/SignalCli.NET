@@ -18,7 +18,7 @@ internal class SignalService : ISignalCliClient
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public async Task<TResponse> InvokeMethodAsync<TResponse, TRequest>(
+    public async Task<TResponse> InvokeMethodAsync<TRequest, TResponse>(
         string method,
         TRequest parameters,
         CancellationToken cancellationToken = default) where TResponse : notnull
@@ -30,7 +30,7 @@ internal class SignalService : ISignalCliClient
                 SignalServiceLog.InvokeMethod(_logger, method);
 
                 var response = await _rpcClient.Client
-                    .InvokeMethodAsync<TResponse, TRequest>(method, parameters, cancellationToken)
+                    .InvokeMethodAsync<TRequest, TResponse>(method, parameters, cancellationToken)
                     .ConfigureAwait(false);
 
                 if (response is null)
@@ -56,7 +56,7 @@ internal class SignalService : ISignalCliClient
         // span-error. Дублювати "version failed" без додавання context'у — шум.
         SignalServiceLog.VersionRequested(_logger);
 
-        var response = await InvokeMethodAsync<VersionResponse, VersionParameters>("version", new(), cancellationToken).ConfigureAwait(false);
+        var response = await InvokeMethodAsync<VersionParameters, VersionResponse>("version", new(), cancellationToken).ConfigureAwait(false);
 
         if (response == null)
         {

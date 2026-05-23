@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using SignalCli.Interfaces.Signal;
 
 namespace SignalCli.Models.Signal.Message;
@@ -19,17 +20,15 @@ public record TextMessageOptions
     /// <summary>Згадки (UUID/номери, на які слід посилатися у тексті).</summary>
     public IEnumerable<string>? Mentions { get; private set; }
     /// <summary>URL у попередньому перегляді посилання.</summary>
+    [StringSyntax(StringSyntaxAttribute.Uri)]
     public string? PreviewUrl { get; private set; }
     /// <summary>Заголовок попереднього перегляду посилання.</summary>
     public string? PreviewTitle { get; private set; }
     /// <summary>Опис попереднього перегляду посилання.</summary>
     public string? PreviewDescription { get; private set; }
     /// <summary>Зображення попереднього перегляду посилання (шлях або URI).</summary>
+    [StringSyntax(StringSyntaxAttribute.Uri)]
     public string? PreviewImage { get; private set; }
-    /// <summary>Токен скасування відправлення.</summary>
-    /// <remarks>A.5: deprecated — передавайте <c>CancellationToken</c> явно як параметр методу <c>SendTextMessageAsync(options, ct)</c>.</remarks>
-    [Obsolete("Pass CancellationToken to SendTextMessageAsync directly; will be removed in 3.0")]
-    public CancellationToken CancellationToken { get; private set; } = CancellationToken.None;
 
 
     /// <summary>Будівельник <see cref="TextMessageOptions"/>.</summary>
@@ -73,23 +72,16 @@ public record TextMessageOptions
         }
 
         /// <summary>Додати попередній перегляд посилання.</summary>
-        public Builder WithPreview(string previewUrl, string previewTitle, string previewDescription, string previewImage)
+        public Builder WithPreview(
+            [StringSyntax(StringSyntaxAttribute.Uri)] string previewUrl,
+            string previewTitle,
+            string previewDescription,
+            [StringSyntax(StringSyntaxAttribute.Uri)] string previewImage)
         {
             _options.PreviewUrl = previewUrl;
             _options.PreviewTitle = previewTitle;
             _options.PreviewDescription = previewDescription;
             _options.PreviewImage = previewImage;
-            return this;
-        }
-
-        /// <summary>Задати токен скасування відправки.</summary>
-        /// <remarks>A.5: deprecated — передавайте <c>CancellationToken</c> прямо в <c>SendTextMessageAsync(options, ct)</c>.</remarks>
-        [Obsolete("Pass CancellationToken to SendTextMessageAsync directly; will be removed in 3.0")]
-        public Builder WithCancellationToken(CancellationToken cancellationToken)
-        {
-#pragma warning disable CS0618 // А.5: інстансер може писати в depr-property
-            _options.CancellationToken = cancellationToken;
-#pragma warning restore CS0618
             return this;
         }
 

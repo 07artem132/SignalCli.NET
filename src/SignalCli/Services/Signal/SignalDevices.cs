@@ -22,7 +22,7 @@ internal sealed class SignalDevices(
         // у JsonRpcClient (§11.A.2) уже фіксує тип винятку. Entry-level log залишено.
         SignalDevicesLog.StartLinkRequested(_logger);
         var response = await _signalCliClient
-            .InvokeMethodAsync<StartLinkResponse, StartLinkParameters>(
+            .InvokeMethodAsync<StartLinkParameters, StartLinkResponse>(
                 "startLink",
                 new StartLinkParameters(),
                 cancellationToken).ConfigureAwait(false);
@@ -45,7 +45,7 @@ internal sealed class SignalDevices(
         // §8c.7: bare-catch прибрано.
         SignalDevicesLog.FinishLinkRequested(_logger, deviceName);
         var response = await _signalCliClient
-            .InvokeMethodAsync<FinishLinkResponse, FinishLinkParameters>(
+            .InvokeMethodAsync<FinishLinkParameters, FinishLinkResponse>(
                 "finishLink",
                 new FinishLinkParameters(deviceLinkUri, deviceName),
                 cancellationToken).ConfigureAwait(false);

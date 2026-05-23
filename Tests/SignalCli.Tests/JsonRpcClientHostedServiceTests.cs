@@ -37,7 +37,7 @@ public class JsonRpcClientHostedServiceTests
 
         // Коли викликаємо InvokeMethodAsync("version", ...)
         _clientMock
-            .Setup(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
+            .Setup(c => c.InvokeMethodAsync<VersionParameters, VersionResponse>(
                 "version",
                 It.IsAny<VersionParameters>(),
                 It.IsAny<CancellationToken>()))
@@ -135,7 +135,7 @@ public class JsonRpcClientHostedServiceTests
         _clientFactoryMock.Verify(f => f.Create(), Times.Once);
 
         // 2) Перевіримо виклик "version"
-        _clientMock.Verify(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
+        _clientMock.Verify(c => c.InvokeMethodAsync<VersionParameters, VersionResponse>(
                 "version",
                 It.IsAny<VersionParameters>(),
                 It.IsAny<CancellationToken>()),

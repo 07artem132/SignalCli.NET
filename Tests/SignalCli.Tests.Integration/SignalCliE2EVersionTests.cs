@@ -130,7 +130,7 @@ public class SignalCliE2EVersionTests
             // щоб E2E-перевірка не покладалася на JsonRpcClientHostedService startup-ping
             // (та startup-ping уже сам по собі асерт — failed startup тут би й кидав).
             var client = host.Services.GetRequiredService<ISignalCliClient>();
-            var version = await client.InvokeMethodAsync<VersionResponse, VersionParameters>(
+            var version = await client.InvokeMethodAsync<VersionParameters, VersionResponse>(
                 "version", new VersionParameters(), startCts.Token);
 
             Assert.NotNull(version);

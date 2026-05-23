@@ -20,6 +20,9 @@
 - `UserRecipient`/`GroupRecipient` ctor: null → `ArgumentNullException`, empty → `ArgumentException`. Раніше empty теж кидав `ArgumentNullException` (порушення контракту обох типів).
 - `SignalCliHostedService` тепер `sealed` — інхеріт не підтримується.
 - Стандартний шлях `dotnet publish /p:PublishAot=true` ще не enable'нений (deferred — потребує redesign на `JsonTypeInfo<T>` overloads), але всі предумови (drop Nito.AsyncEx, drop `.ValidateDataAnnotations()`, source-gen JSON fast-path) на місці.
+- **(round 9 §4.7)** `CancellationToken`-property + `WithCancellationToken`-Builder-method видалено з `TextMessageOptions` / `AttachmentMessageOptions` / `StickerMessageOptions`. Єдиний шлях скасування — параметр `Send*Async(options, cancellationToken)`. `[Obsolete]`-shim після одного major-релізу (як обіцяно в CLAUDE.md "Backward compatibility convention"). Migration: `.WithCancellationToken(ct).Build(); → .Build();` + передати `ct` другим аргументом.
+- **(round 9 §4.23/4.24)** `ISignalMessage.{SendText,SendAttachment,SendSticker}MessageAsync` повертають `Task<SendMessageResponse>` (single response), а не `Task<List<SendMessageResponse>>` — все одно завжди було `[response]`-wrap. Migration: `(await SendTextMessageAsync(opts))[0] → await SendTextMessageAsync(opts)`.
+- **(round 9 §4.27)** Generic-параметри `InvokeMethodAsync` поміняли порядок: `<TResponse, TRequest>` → `<TRequest, TResponse>` на `ISignalCliClient`, `IJsonRpcSender`, обох impls + ~22 callsites. Узгоджено з `JsonSerializer.Deserialize<TValue>`-конвенцією. **Shim неможливий** — C# не розрізняє overload'и за порядком typeparam'ів (same runtime signature). Migration: розверни `<X, Y>` → `<Y, X>` на кожному виклику.
 
 ### ✨ Додано
 
@@ -63,6 +66,9 @@
 - **(round 8)** Logging-perf analyzer rules: `CA1848 → warning` (блокує regression на direct `_logger.Log*` — кожна нова log-callsite має йти через `[LoggerMessage]`); `CA1873 → suggestion` (analyzer не розпізнає manual `IsEnabled`-guards, тож `warning`-рівень дає false-positives на legitimate Trace-only eager-eval сайтах). Trade-off задокументовано в `.editorconfig`.
 - **(round 8)** Manual `if (_logger.IsEnabled(LogLevel.Trace))` guards над `string.Join(", ", response)` у `SignalAccounts.ListAccountsAsync` + `SignalGroups.ListGroupsAsync` — `[LoggerMessage]`-внутрішній IsEnabled живе всередині generated-methоду, тож callsite-level allocation платилася на КОЖНОМУ виклику (навіть Info-level). Економить N × string-allocation на listAccounts/listGroups.
 - **(round 8)** `ObservabilityPrivacyTests` flake-fix: lock-snapshot pattern для `_capturedActivities`/`_capturedMeasurements`. ActivityListener/MeterListener реєструються глобально на ActivitySource/Meter, тож callback'и можуть прилітати з потоків паралельних тестів — `List<T>` не thread-safe → `Collection was modified` intermittent. Всі writes тепер під `Lock`, читачі enumerate'ять snapshot.
+- **(round 9 §4.9)** `.editorconfig` піднято `CA2007 (ConfigureAwait)` до `warning` після audit-перевірки: 0 missing-sites у `src/SignalCli/**`. Тепер регресія неможлива — будь-який майбутній bare `await` ловиться build-warning'ом.
+- **(round 9 §4.25)** `[StringSyntax(StringSyntaxAttribute.Uri)]` на `TextMessageOptions.PreviewUrl`, `PreviewImage`, та параметрах `Builder.WithPreview(previewUrl, …, previewImage)`. Zero runtime cost; IDEs тепер валідують URL-syntax.
+- **(round 9 §4.26)** XMLDoc'и на 3 `Send*Async`-методах в `ISignalMessage` отримали `<exception cref="TimeoutException">` із посиланням на `SignalCliOptions.RequestTimeoutSeconds`. Closes audit-doc-gap.
 
 ## [2.1.0] — неопубліковано
 

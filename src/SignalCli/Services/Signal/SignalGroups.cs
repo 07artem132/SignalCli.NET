@@ -24,7 +24,7 @@ internal sealed class SignalGroups(
         SignalGroupsLog.ListGroupsRequested(_logger);
 
         var response = await _signalCliClient
-            .InvokeMethodAsync<ListGroupsResponse, ListGroupsParameters>(
+            .InvokeMethodAsync<ListGroupsParameters, ListGroupsResponse>(
                 "listGroups",
                 new ListGroupsParameters(account),
                 cancellationToken).ConfigureAwait(false);

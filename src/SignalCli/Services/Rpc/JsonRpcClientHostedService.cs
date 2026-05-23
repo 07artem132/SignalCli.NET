@@ -62,7 +62,7 @@ internal sealed class JsonRpcClientHostedService : IHostedService, IJsonRpcClien
             await _signalCliHostedService.WaitForReadyAsync(cancellationToken).ConfigureAwait(false);
             // A.7: фабрика тепер синхронна — створення клієнта не потребує await.
             _client = _factory.Create();
-            var versionResp = await _client.InvokeMethodAsync<VersionResponse, VersionParameters>("version", new(), cancellationToken).ConfigureAwait(false);
+            var versionResp = await _client.InvokeMethodAsync<VersionParameters, VersionResponse>("version", new(), cancellationToken).ConfigureAwait(false);
             JsonRpcClientHostedServiceLog.Version(_logger, versionResp.Version);
 
             JsonRpcClientHostedServiceLog.StartReady(_logger);

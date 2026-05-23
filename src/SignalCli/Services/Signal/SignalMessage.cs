@@ -169,7 +169,7 @@ namespace SignalCli.Services.Signal
             try
             {
                 var response = await _signalCliClient
-                    .InvokeMethodAsync<SendMessageResponse, SendMessageFullParameters>("send", parameters,
+                    .InvokeMethodAsync<SendMessageFullParameters, SendMessageResponse>("send", parameters,
                         cancellationToken)
                     .ConfigureAwait(false);
 
@@ -203,17 +203,12 @@ namespace SignalCli.Services.Signal
         /// Обгортка для відправки звичайного текстового повідомлення без вкладень.
         /// Підтримує цитування та прев’ю посилань.
         /// </summary>
-        public async Task<List<SendMessageResponse>> SendTextMessageAsync(
+        public async Task<SendMessageResponse> SendTextMessageAsync(
             TextMessageOptions options,
             CancellationToken cancellationToken = default)
         {
             // F12: явний guard замість NRE при доступі до options.Account.
             ArgumentNullException.ThrowIfNull(options);
-            // A.3/A.4: лінкуємо токен-параметр з options.CancellationToken (deprecated),
-            // щоб обидва шляхи скасування продовжували працювати під час shim-вікна.
-#pragma warning disable CS0618 // A.5: shim-вікно — читаємо deprecated CancellationToken із options
-            using var linked = LinkTokens(cancellationToken, options.CancellationToken);
-#pragma warning restore CS0618
             // post-modernize-tuning §8c.6 (audit C7): UnifiedSendRequest DTO замість 23 params.
             var req = new UnifiedSendRequest(
                 Account: options.Account,
@@ -240,23 +235,19 @@ namespace SignalCli.Services.Signal
                 PreviewImage: options.PreviewImage,
                 StoryTimestamp: null,
                 StoryAuthor: null);
-            var response = await SendUnifiedMessageAsync(req, linked.Token).ConfigureAwait(false);
-            return [response];
+            return await SendUnifiedMessageAsync(req, cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>
         /// Обгортка для відправки повідомлення з вкладенням.
         /// Підтримує цитування. Для групових повідомлень допускається лише один отримувач.
         /// </summary>
-        public async Task<List<SendMessageResponse>> SendAttachmentAsync(
+        public async Task<SendMessageResponse> SendAttachmentAsync(
             AttachmentMessageOptions options,
             CancellationToken cancellationToken = default)
         {
             // F12: явний guard замість NRE при доступі до options.Account.
             ArgumentNullException.ThrowIfNull(options);
-#pragma warning disable CS0618 // A.5: shim-вікно — читаємо deprecated CancellationToken із options
-            using var linked = LinkTokens(cancellationToken, options.CancellationToken);
-#pragma warning restore CS0618
             var req = new UnifiedSendRequest(
                 Account: options.Account,
                 Recipients: options.Recipients,
@@ -281,23 +272,19 @@ namespace SignalCli.Services.Signal
                 PreviewImage: null,
                 StoryTimestamp: null,
                 StoryAuthor: null);
-            var response = await SendUnifiedMessageAsync(req, linked.Token).ConfigureAwait(false);
-            return [response];
+            return await SendUnifiedMessageAsync(req, cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>
         /// Обгортка для відправки стікера.
         /// Для групових повідомлень допускається лише один отримувач.
         /// </summary>
-        public async Task<List<SendMessageResponse>> SendStickerAsync(
+        public async Task<SendMessageResponse> SendStickerAsync(
             StickerMessageOptions options,
             CancellationToken cancellationToken = default)
         {
             // F12: явний guard замість NRE при доступі до options.Account.
             ArgumentNullException.ThrowIfNull(options);
-#pragma warning disable CS0618 // A.5: shim-вікно — читаємо deprecated CancellationToken із options
-            using var linked = LinkTokens(cancellationToken, options.CancellationToken);
-#pragma warning restore CS0618
             var req = new UnifiedSendRequest(
                 Account: options.Account,
                 Recipients: options.Recipients,
@@ -322,19 +309,7 @@ namespace SignalCli.Services.Signal
                 PreviewImage: null,
                 StoryTimestamp: null,
                 StoryAuthor: null);
-            var response = await SendUnifiedMessageAsync(req, linked.Token).ConfigureAwait(false);
-            return [response];
-        }
-
-        /// <summary>
-        /// A.3: безпечно лінкує два токени: значення з аргументу метода та deprecated-поле в Options.
-        /// Якщо обидва None — повертає CTS без активної реєстрації (нульовий runtime-cost).
-        /// </summary>
-        private static CancellationTokenSource LinkTokens(CancellationToken a, CancellationToken b)
-        {
-            // CreateLinkedTokenSource приймає 0..N токенів; передаємо обидва.
-            // Якщо обидва — CancellationToken.None, повернений CTS просто ніколи не скасується.
-            return CancellationTokenSource.CreateLinkedTokenSource(a, b);
+            return await SendUnifiedMessageAsync(req, cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>

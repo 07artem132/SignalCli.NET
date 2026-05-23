@@ -368,12 +368,12 @@
             Підтримує типізовані запити та відповіді через узагальнені параметри.
             </remarks>
         </member>
-        <member name="M:SignalCli.Interfaces.Rpc.IJsonRpcSender.InvokeMethodAsync``2(System.String,``1,System.Threading.CancellationToken)">
+        <member name="M:SignalCli.Interfaces.Rpc.IJsonRpcSender.InvokeMethodAsync``2(System.String,``0,System.Threading.CancellationToken)">
             <summary>
             Асинхронно викликає метод JSON-RPC.
             </summary>
-            <typeparam name="TResponse">Тип об'єкта відповіді.</typeparam>
             <typeparam name="TRequest">Тип об'єкта запиту.</typeparam>
+            <typeparam name="TResponse">Тип об'єкта відповіді.</typeparam>
             <param name="method">Назва методу, який потрібно викликати.</param>
             <param name="parameters">Параметри для виклику методу.</param>
             <param name="cancellationToken">Токен скасування операції.</param>
@@ -382,9 +382,13 @@
             <exception cref="T:System.InvalidOperationException">Виникає при помилці десеріалізації відповіді.</exception>
             <exception cref="T:SignalCli.Exceptions.JsonRpcException">Виникає, якщо сервер повернув помилку.</exception>
             <exception cref="T:System.OperationCanceledException">Виникає, якщо операцію скасовано.</exception>
+            <remarks>
+            post-modernize-tuning §4.27 (audit N11): порядок generic-параметрів узгоджено
+            з `JsonSerializer.Deserialize&lt;TValue&gt;` — запит спершу, відповідь другою.
+            </remarks>
             <example>
             <code>
-            var response = await jsonRpcSender.InvokeMethodAsync&lt;VersionResponse, VersionParameters&gt;(
+            var response = await jsonRpcSender.InvokeMethodAsync&lt;VersionParameters, VersionResponse&gt;(
                 "version",
                 new VersionParameters(),
                 cancellationToken);
@@ -493,16 +497,22 @@
             Надає можливість взаємодії з Signal месенджером через його CLI інтерфейс.
             </summary>
         </member>
-        <member name="M:SignalCli.Interfaces.SignalCli.ISignalCliClient.InvokeMethodAsync``2(System.String,``1,System.Threading.CancellationToken)">
+        <member name="M:SignalCli.Interfaces.SignalCli.ISignalCliClient.InvokeMethodAsync``2(System.String,``0,System.Threading.CancellationToken)">
             <summary>
             Асинхронно викликає вказаний метод Signal CLI з переданими параметрами.
             </summary>
-            <typeparam name="TResponse">Тип об'єкта відповіді.</typeparam>
             <typeparam name="TRequest">Тип об'єкта запиту.</typeparam>
+            <typeparam name="TResponse">Тип об'єкта відповіді.</typeparam>
             <param name="method">Назва методу Signal CLI, який потрібно викликати.</param>
             <param name="parameters">Параметри для виклику методу.</param>
             <param name="cancellationToken">Токен скасування для переривання операції.</param>
             <returns>Об'єкт відповіді від Signal CLI.</returns>
+            <remarks>
+            post-modernize-tuning §4.27 (audit N11): порядок generic-параметрів узгоджено
+            з `JsonSerializer.Deserialize&lt;TValue&gt;` — запит спершу, відповідь другою.
+            Сумісність-shim неможливий: C# overload-resolution не розрізняє методи
+            з однаковим runtime-сигнатурою, що відрізняються лише порядком typeparam'ів.
+            </remarks>
         </member>
         <member name="M:SignalCli.Interfaces.SignalCli.ISignalCliClient.VersionAsync(System.Threading.CancellationToken)">
             <summary>
@@ -887,17 +897,20 @@
             <exception cref="T:System.OperationCanceledException">
             Виникає, якщо операцію скасовано.
             </exception>
+            <exception cref="T:System.TimeoutException">
+            Виникає, якщо signal-cli не відповів за <see cref="P:SignalCli.Models.SignalCliOptions.RequestTimeoutSeconds"/>.
+            </exception>
             <example>
             <code>
-            var textOptions = new TextMessageOptions.Builder("+380501234567", 
-                                     [new UserRecipient("+380501234567")], 
+            var textOptions = new TextMessageOptions.Builder("+380501234567",
+                                     [new UserRecipient("+380501234567")],
                                      "Привіт, світ!")
                                      .UseStyle()
                                      .Build();
-            var result = await signalMessage.SendTextMessageAsync(textOptions);
+            var response = await signalMessage.SendTextMessageAsync(textOptions);
             </code>
             </example>
-            <param name="cancellationToken">A.3: токен скасування — лінкується з <c>options.CancellationToken</c>, якщо обидва задано.</param>
+            <param name="cancellationToken">Токен скасування операції.</param>
         </member>
         <member name="M:SignalCli.Interfaces.Signal.ISignalMessage.SendAttachmentAsync(SignalCli.Models.Signal.Message.AttachmentMessageOptions,System.Threading.CancellationToken)">
             <summary>
@@ -925,17 +938,20 @@
             <exception cref="T:System.OperationCanceledException">
             Виникає, якщо операцію скасовано.
             </exception>
+            <exception cref="T:System.TimeoutException">
+            Виникає, якщо signal-cli не відповів за <see cref="P:SignalCli.Models.SignalCliOptions.RequestTimeoutSeconds"/>.
+            </exception>
             <example>
             <code>
-            var attachmentOptions = new AttachmentMessageOptions.Builder("+380501234567", 
-                                           [new UserRecipient("+380501234567")], 
+            var attachmentOptions = new AttachmentMessageOptions.Builder("+380501234567",
+                                           [new UserRecipient("+380501234567")],
                                            attachmentsList)
                                            .WithMessage("Привіт, світ з вкладенням!")
                                            .Build();
-            var result = await signalMessage.SendAttachmentAsync(attachmentOptions);
+            var response = await signalMessage.SendAttachmentAsync(attachmentOptions);
             </code>
             </example>
-            <param name="cancellationToken">A.3: токен скасування — лінкується з <c>options.CancellationToken</c>, якщо обидва задано.</param>
+            <param name="cancellationToken">Токен скасування операції.</param>
         </member>
         <member name="M:SignalCli.Interfaces.Signal.ISignalMessage.SendStickerAsync(SignalCli.Models.Signal.Message.StickerMessageOptions,System.Threading.CancellationToken)">
             <summary>
@@ -962,16 +978,19 @@
             <exception cref="T:System.OperationCanceledException">
             Виникає, якщо операцію скасовано.
             </exception>
+            <exception cref="T:System.TimeoutException">
+            Виникає, якщо signal-cli не відповів за <see cref="P:SignalCli.Models.SignalCliOptions.RequestTimeoutSeconds"/>.
+            </exception>
             <example>
             <code>
-            var stickerOptions = new StickerMessageOptions.Builder("+380501234567", 
-                                     [new UserRecipient("+380501234567")], 
+            var stickerOptions = new StickerMessageOptions.Builder("+380501234567",
+                                     [new UserRecipient("+380501234567")],
                                      "stickerPackId:stickerId")
                                      .Build();
-            var result = await signalMessage.SendStickerAsync(stickerOptions);
+            var response = await signalMessage.SendStickerAsync(stickerOptions);
             </code>
             </example>
-            <param name="cancellationToken">A.3: токен скасування — лінкується з <c>options.CancellationToken</c>, якщо обидва задано.</param>
+            <param name="cancellationToken">Токен скасування операції.</param>
         </member>
         <member name="T:SignalCli.Logging.JsonRpcClientHostedServiceLog">
             <summary>
@@ -3805,10 +3824,6 @@
         <member name="P:SignalCli.Models.Signal.Message.AttachmentMessageOptions.Mentions">
             <summary>Згадки користувачів у тексті.</summary>
         </member>
-        <member name="P:SignalCli.Models.Signal.Message.AttachmentMessageOptions.CancellationToken">
-            <summary>Токен скасування відправки.</summary>
-            <remarks>A.5: deprecated — передавайте <c>CancellationToken</c> явно як параметр методу <c>SendAttachmentAsync(options, ct)</c>.</remarks>
-        </member>
         <member name="T:SignalCli.Models.Signal.Message.AttachmentMessageOptions.Builder">
             <summary>Будівельник <see cref="T:SignalCli.Models.Signal.Message.AttachmentMessageOptions"/>.</summary>
         </member>
@@ -3826,10 +3841,6 @@
         </member>
         <member name="M:SignalCli.Models.Signal.Message.AttachmentMessageOptions.Builder.WithMentions(System.Collections.Generic.IEnumerable{System.String})">
             <summary>Додати згадки користувачів.</summary>
-        </member>
-        <member name="M:SignalCli.Models.Signal.Message.AttachmentMessageOptions.Builder.WithCancellationToken(System.Threading.CancellationToken)">
-            <summary>Задати токен скасування.</summary>
-            <remarks>A.5: deprecated — передавайте <c>CancellationToken</c> прямо в <c>SendAttachmentAsync(options, ct)</c>.</remarks>
         </member>
         <member name="M:SignalCli.Models.Signal.Message.AttachmentMessageOptions.Builder.Build">
             <summary>Будує <see cref="T:SignalCli.Models.Signal.Message.AttachmentMessageOptions"/>.</summary>
@@ -4098,10 +4109,6 @@
         <member name="P:SignalCli.Models.Signal.Message.StickerMessageOptions.Mentions">
             <summary>Згадки користувачів (рідкісне використання для стікерів).</summary>
         </member>
-        <member name="P:SignalCli.Models.Signal.Message.StickerMessageOptions.CancellationToken">
-            <summary>Токен скасування.</summary>
-            <remarks>A.5: deprecated — передавайте <c>CancellationToken</c> явно як параметр методу <c>SendStickerAsync(options, ct)</c>.</remarks>
-        </member>
         <member name="T:SignalCli.Models.Signal.Message.StickerMessageOptions.Builder">
             <summary>Будівельник <see cref="T:SignalCli.Models.Signal.Message.StickerMessageOptions"/>.</summary>
         </member>
@@ -4113,10 +4120,6 @@
         </member>
         <member name="M:SignalCli.Models.Signal.Message.StickerMessageOptions.Builder.WithMentions(System.Collections.Generic.IEnumerable{System.String})">
             <summary>Додати згадки користувачів.</summary>
-        </member>
-        <member name="M:SignalCli.Models.Signal.Message.StickerMessageOptions.Builder.WithCancellationToken(System.Threading.CancellationToken)">
-            <summary>Задати токен скасування.</summary>
-            <remarks>A.5: deprecated — передавайте <c>CancellationToken</c> прямо в <c>SendStickerAsync(options, ct)</c>.</remarks>
         </member>
         <member name="M:SignalCli.Models.Signal.Message.StickerMessageOptions.Builder.Build">
             <summary>Будує <see cref="T:SignalCli.Models.Signal.Message.StickerMessageOptions"/>.</summary>
@@ -4154,10 +4157,6 @@
         <member name="P:SignalCli.Models.Signal.Message.TextMessageOptions.PreviewImage">
             <summary>Зображення попереднього перегляду посилання (шлях або URI).</summary>
         </member>
-        <member name="P:SignalCli.Models.Signal.Message.TextMessageOptions.CancellationToken">
-            <summary>Токен скасування відправлення.</summary>
-            <remarks>A.5: deprecated — передавайте <c>CancellationToken</c> явно як параметр методу <c>SendTextMessageAsync(options, ct)</c>.</remarks>
-        </member>
         <member name="T:SignalCli.Models.Signal.Message.TextMessageOptions.Builder">
             <summary>Будівельник <see cref="T:SignalCli.Models.Signal.Message.TextMessageOptions"/>.</summary>
         </member>
@@ -4175,10 +4174,6 @@
         </member>
         <member name="M:SignalCli.Models.Signal.Message.TextMessageOptions.Builder.WithPreview(System.String,System.String,System.String,System.String)">
             <summary>Додати попередній перегляд посилання.</summary>
-        </member>
-        <member name="M:SignalCli.Models.Signal.Message.TextMessageOptions.Builder.WithCancellationToken(System.Threading.CancellationToken)">
-            <summary>Задати токен скасування відправки.</summary>
-            <remarks>A.5: deprecated — передавайте <c>CancellationToken</c> прямо в <c>SendTextMessageAsync(options, ct)</c>.</remarks>
         </member>
         <member name="M:SignalCli.Models.Signal.Message.TextMessageOptions.Builder.Build">
             <summary>Будує <see cref="T:SignalCli.Models.Signal.Message.TextMessageOptions"/>.</summary>
@@ -4793,7 +4788,7 @@
             <param name="options">Конфігурація — для отримання <see cref="P:SignalCli.Models.SignalCliOptions.RequestTimeoutSeconds"/>.</param>
             <param name="timeProvider">
             audit N4: опціональний постачальник часу для <c>CancellationTokenSource(timeout, TimeProvider)</c>
-            у <see cref="M:SignalCli.Services.Rpc.JsonRpcClient.InvokeMethodAsync``2(System.String,``1,System.Threading.CancellationToken)"/>. За замовчуванням <see cref="P:System.TimeProvider.System"/>; у тестах
+            у <see cref="M:SignalCli.Services.Rpc.JsonRpcClient.InvokeMethodAsync``2(System.String,``0,System.Threading.CancellationToken)"/>. За замовчуванням <see cref="P:System.TimeProvider.System"/>; у тестах
             підставляється <c>FakeTimeProvider</c> — щоб віртуально провертати таймаут.
             </param>
             <remarks>D.4: приймає типовану <see cref="T:SignalCli.Models.SignalCliOptions"/> замість legacy <c>Config</c>.</remarks>
@@ -4847,7 +4842,7 @@
             <param name="jsonLine">JSON-рядок для обробки.</param>
             <param name="cancellationToken">Токен скасування — пов'язаний із stdout-циклом.</param>
         </member>
-        <member name="M:SignalCli.Services.Rpc.JsonRpcClient.InvokeMethodAsync``2(System.String,``1,System.Threading.CancellationToken)">
+        <member name="M:SignalCli.Services.Rpc.JsonRpcClient.InvokeMethodAsync``2(System.String,``0,System.Threading.CancellationToken)">
             <summary>
             Асинхронно викликає вказаний метод JSON-RPC з переданими параметрами.
             </summary>
@@ -5316,12 +5311,6 @@
             <summary>
             Обгортка для відправки стікера.
             Для групових повідомлень допускається лише один отримувач.
-            </summary>
-        </member>
-        <member name="M:SignalCli.Services.Signal.SignalMessage.LinkTokens(System.Threading.CancellationToken,System.Threading.CancellationToken)">
-            <summary>
-            A.3: безпечно лінкує два токени: значення з аргументу метода та deprecated-поле в Options.
-            Якщо обидва None — повертає CTS без активної реєстрації (нульовий runtime-cost).
             </summary>
         </member>
         <member name="M:SignalCli.Services.Signal.SignalMessage.ValidateRecipients(System.Collections.Generic.IEnumerable{SignalCli.Interfaces.Signal.IRecipient},System.String)">

@@ -183,7 +183,7 @@ public sealed class SignalCliHealthMonitor : BackgroundService
             // Отримуємо готовий клієнт
             var client = _clientProvider.Client;
             // Викликаємо "version"
-            var response = await client.InvokeMethodAsync<VersionResponse, VersionParameters>(
+            var response = await client.InvokeMethodAsync<VersionParameters, VersionResponse>(
                 "version",
                 new VersionParameters(),
                 localCts.Token

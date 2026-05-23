@@ -15,7 +15,7 @@ public class SignalMessageValidationTests
     {
         SendMessageFullParameters? captured = null;
         var client = new Mock<ISignalCliClient>();
-        client.Setup(c => c.InvokeMethodAsync<SendMessageResponse, SendMessageFullParameters>(
+        client.Setup(c => c.InvokeMethodAsync<SendMessageFullParameters, SendMessageResponse>(
                 "send", It.IsAny<SendMessageFullParameters>(), It.IsAny<CancellationToken>()))
             .Callback<string, SendMessageFullParameters, CancellationToken>((_, p, _) => captured = p)
             .ReturnsAsync(new SendMessageResponse(null, 1));

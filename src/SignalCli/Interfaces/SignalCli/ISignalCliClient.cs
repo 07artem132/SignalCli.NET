@@ -11,13 +11,19 @@ public interface ISignalCliClient
     /// <summary>
     /// Асинхронно викликає вказаний метод Signal CLI з переданими параметрами.
     /// </summary>
-    /// <typeparam name="TResponse">Тип об'єкта відповіді.</typeparam>
     /// <typeparam name="TRequest">Тип об'єкта запиту.</typeparam>
+    /// <typeparam name="TResponse">Тип об'єкта відповіді.</typeparam>
     /// <param name="method">Назва методу Signal CLI, який потрібно викликати.</param>
     /// <param name="parameters">Параметри для виклику методу.</param>
     /// <param name="cancellationToken">Токен скасування для переривання операції.</param>
     /// <returns>Об'єкт відповіді від Signal CLI.</returns>
-    Task<TResponse> InvokeMethodAsync<TResponse, TRequest>(
+    /// <remarks>
+    /// post-modernize-tuning §4.27 (audit N11): порядок generic-параметрів узгоджено
+    /// з `JsonSerializer.Deserialize&lt;TValue&gt;` — запит спершу, відповідь другою.
+    /// Сумісність-shim неможливий: C# overload-resolution не розрізняє методи
+    /// з однаковим runtime-сигнатурою, що відрізняються лише порядком typeparam'ів.
+    /// </remarks>
+    Task<TResponse> InvokeMethodAsync<TRequest, TResponse>(
         string method,
         TRequest parameters,
         CancellationToken cancellationToken = default

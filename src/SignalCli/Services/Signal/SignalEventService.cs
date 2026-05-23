@@ -242,7 +242,7 @@ internal sealed class SignalEventService(
         try
         {
             var responseToken = await _signalCliClient
-                .InvokeMethodAsync<JsonElement, SubscribeReceiveParameters>(
+                .InvokeMethodAsync<SubscribeReceiveParameters, JsonElement>(
                     "subscribeReceive",
                     new SubscribeReceiveParameters(account),
                     cancellationToken).ConfigureAwait(false);
@@ -296,7 +296,7 @@ internal sealed class SignalEventService(
         }
 
         var resp = await _signalCliClient
-            .InvokeMethodAsync<UnsubscribeReceiveResponse, UnsubscribeReceiveParameters>(
+            .InvokeMethodAsync<UnsubscribeReceiveParameters, UnsubscribeReceiveResponse>(
                 "unsubscribeReceive",
                 new UnsubscribeReceiveParameters(subscriptionId),
                 cancellationToken).ConfigureAwait(false);

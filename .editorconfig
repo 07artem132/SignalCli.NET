@@ -108,6 +108,11 @@ dotnet_diagnostic.CA1873.severity = suggestion
 # *EventArgs types are deliberate event payloads carried through observables.
 dotnet_diagnostic.CA1711.severity = none
 
+# ConfigureAwait(false) is the law in library code (CLAUDE.md "Conventions").
+# Audit-verified: every public-path await in src/SignalCli/** already has it.
+# `warning` enforces zero-regression. `post-modernize-tuning` §4.9 (D6).
+dotnet_diagnostic.CA2007.severity = warning
+
 # STJ DTOs: non-nullable members are populated by the deserializer / config
 # delegate. Making every one `required` is a larger public-API change (own task),
 # so keep these as suggestions rather than warnings for now.

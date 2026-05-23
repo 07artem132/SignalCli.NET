@@ -421,7 +421,7 @@ internal sealed class JsonRpcClient : IJsonRpcClient
     /// <exception cref="OperationCanceledException">Виникає, якщо викликач скасував запит через <paramref name="cancellationToken"/>.</exception>
     /// <exception cref="InvalidOperationException">Виникає, якщо отримано нульову відповідь або не вдалося перетворити результат.</exception>
     /// <exception cref="JsonRpcException">Виникає, якщо сервер повернув помилку.</exception>
-    public async Task<TResponse> InvokeMethodAsync<TResponse, TRequest>(
+    public async Task<TResponse> InvokeMethodAsync<TRequest, TResponse>(
         string method,
         TRequest parameters,
         CancellationToken cancellationToken = default)

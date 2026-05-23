@@ -31,7 +31,7 @@ public class SignalCliHealthMonitorLoopTests : SignalCliHealthMonitorTestBase
             });
 
         JsonRpcClientMock
-            .Setup(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
+            .Setup(c => c.InvokeMethodAsync<VersionParameters, VersionResponse>(
                 It.IsAny<string>(),
                 It.IsAny<VersionParameters>(),
                 It.IsAny<CancellationToken>()
@@ -100,7 +100,7 @@ public class SignalCliHealthMonitorLoopTests : SignalCliHealthMonitorTestBase
         var pingObserved = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var pingCount = 0;
         JsonRpcClientMock
-            .Setup(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
+            .Setup(c => c.InvokeMethodAsync<VersionParameters, VersionResponse>(
                 It.IsAny<string>(),
                 It.IsAny<VersionParameters>(),
                 It.IsAny<CancellationToken>()
@@ -180,7 +180,7 @@ public class SignalCliHealthMonitorLoopTests : SignalCliHealthMonitorTestBase
         var fakeTime = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(DateTimeOffset.UtcNow);
 
         JsonRpcClientMock
-            .Setup(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
+            .Setup(c => c.InvokeMethodAsync<VersionParameters, VersionResponse>(
                 It.IsAny<string>(),
                 It.IsAny<VersionParameters>(),
                 It.IsAny<CancellationToken>()))

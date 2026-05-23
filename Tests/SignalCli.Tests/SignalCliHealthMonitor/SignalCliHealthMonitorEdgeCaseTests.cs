@@ -34,7 +34,7 @@ public class SignalCliHealthMonitorEdgeCaseTests : SignalCliHealthMonitorTestBas
 
         var pingCount = 0;
         JsonRpcClientMock
-            .Setup(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
+            .Setup(c => c.InvokeMethodAsync<VersionParameters, VersionResponse>(
                 It.IsAny<string>(),
                 It.IsAny<VersionParameters>(),
                 It.IsAny<CancellationToken>()
@@ -83,7 +83,7 @@ public class SignalCliHealthMonitorEdgeCaseTests : SignalCliHealthMonitorTestBas
 
         var errorThrown = false;
         JsonRpcClientMock
-            .Setup(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
+            .Setup(c => c.InvokeMethodAsync<VersionParameters, VersionResponse>(
                 It.IsAny<string>(),
                 It.IsAny<VersionParameters>(),
                 It.IsAny<CancellationToken>()

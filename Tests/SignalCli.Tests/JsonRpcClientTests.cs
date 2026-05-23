@@ -150,7 +150,7 @@ public class JsonRpcClientTests
         PushStreamPair(inputWriter, outputReader, errorReader);
 
         // Запускаємо запит
-        var invokeTask = client.InvokeMethodAsync<TestResponse, object>("someMethod", new { param = 123 });
+        var invokeTask = client.InvokeMethodAsync<object, TestResponse>("someMethod", new { param = 123 });
 
         // Імітація «відповіді» з id=1 (якщо лічильник 0 => перший запит → "1")
         var json = @"{ ""id"": ""1"", ""result"": { ""Foo"": ""bar"" } }";
@@ -234,7 +234,7 @@ public class JsonRpcClientTests
         PushStreamPair(inputWriter, outputReader, errorReader);
 
         // Act — отправляем запрос
-        _ = client.InvokeMethodAsync<JsonElement, object>("myMethod", new { Hello = "world" });
+        _ = client.InvokeMethodAsync<object, JsonElement>("myMethod", new { Hello = "world" });
 
         // Даємо трохи часу, щоб SendRequestAsync встиг записати
         await Task.Delay(50);
@@ -271,7 +271,7 @@ public class JsonRpcClientTests
         var errorReader = new StreamReader(new MemoryStream());
         PushStreamPair(inputWriter, outputReader, errorReader);
 
-        var invokeTask = client.InvokeMethodAsync<TestResponse, object>("silent", new { });
+        var invokeTask = client.InvokeMethodAsync<object, TestResponse>("silent", new { });
 
         // Очікуємо точно TimeoutException у межах кількох таймаутів (бо є тонкі race-вікна).
         var ex = await Assert.ThrowsAsync<TimeoutException>(async () =>
@@ -292,7 +292,7 @@ public class JsonRpcClientTests
         PushStreamPair(inputWriter, outputReader, errorReader);
 
         using var cts = new CancellationTokenSource();
-        var invokeTask = client.InvokeMethodAsync<TestResponse, object>("cancel-me", new { }, cts.Token);
+        var invokeTask = client.InvokeMethodAsync<object, TestResponse>("cancel-me", new { }, cts.Token);
         await Task.Delay(50);
         cts.Cancel();
 
@@ -315,7 +315,7 @@ public class JsonRpcClientTests
         PushStreamPair(inputA, outA, errA);
 
         // Pending запит на першій парі.
-        var first = client.InvokeMethodAsync<TestResponse, object>("first", new { });
+        var first = client.InvokeMethodAsync<object, TestResponse>("first", new { });
 
         // Друга пара — push має скасувати pending.
         var inputB = new StreamWriter(new MemoryStream());

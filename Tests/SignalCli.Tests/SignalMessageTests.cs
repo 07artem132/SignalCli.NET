@@ -17,7 +17,7 @@ public class SignalMessageTests
         string? passedAttachmentPath = null;
         var signalCli = new Mock<ISignalCliClient>();
         signalCli
-            .Setup(c => c.InvokeMethodAsync<SendMessageResponse, SendMessageFullParameters>(
+            .Setup(c => c.InvokeMethodAsync<SendMessageFullParameters, SendMessageResponse>(
                 It.IsAny<string>(), It.IsAny<SendMessageFullParameters>(), It.IsAny<CancellationToken>()))
             .Callback<string, SendMessageFullParameters, CancellationToken>(
                 (_, p, _) => passedAttachmentPath = p.Attachments?.FirstOrDefault())

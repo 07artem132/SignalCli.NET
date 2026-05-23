@@ -20,7 +20,7 @@ public class SignalApiFacadeTests
     {
         var client = Client();
         var expected = new ListAccountsResponse { new Account("+1") };
-        client.Setup(c => c.InvokeMethodAsync<ListAccountsResponse, ListAccountsParameters>(
+        client.Setup(c => c.InvokeMethodAsync<ListAccountsParameters, ListAccountsResponse>(
             "listAccounts", It.IsAny<ListAccountsParameters>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expected);
 
@@ -33,7 +33,7 @@ public class SignalApiFacadeTests
     public async Task ListAccounts_WhenNull_Throws()
     {
         var client = Client();
-        client.Setup(c => c.InvokeMethodAsync<ListAccountsResponse, ListAccountsParameters>(
+        client.Setup(c => c.InvokeMethodAsync<ListAccountsParameters, ListAccountsResponse>(
             It.IsAny<string>(), It.IsAny<ListAccountsParameters>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((ListAccountsResponse)null!);
 
@@ -46,7 +46,7 @@ public class SignalApiFacadeTests
     public async Task StartLink_ReturnsResponse()
     {
         var client = Client();
-        client.Setup(c => c.InvokeMethodAsync<StartLinkResponse, StartLinkParameters>(
+        client.Setup(c => c.InvokeMethodAsync<StartLinkParameters, StartLinkResponse>(
             "startLink", It.IsAny<StartLinkParameters>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new StartLinkResponse("sgnl://linkdevice?uuid=x"));
 
@@ -60,7 +60,7 @@ public class SignalApiFacadeTests
     {
         var client = Client();
         FinishLinkParameters? captured = null;
-        client.Setup(c => c.InvokeMethodAsync<FinishLinkResponse, FinishLinkParameters>(
+        client.Setup(c => c.InvokeMethodAsync<FinishLinkParameters, FinishLinkResponse>(
             "finishLink", It.IsAny<FinishLinkParameters>(), It.IsAny<CancellationToken>()))
             .Callback<string, FinishLinkParameters, CancellationToken>((_, p, _) => captured = p)
             .ReturnsAsync(new FinishLinkResponse("+380501234567"));
@@ -78,7 +78,7 @@ public class SignalApiFacadeTests
     public async Task StartLink_WhenNull_Throws()
     {
         var client = Client();
-        client.Setup(c => c.InvokeMethodAsync<StartLinkResponse, StartLinkParameters>(
+        client.Setup(c => c.InvokeMethodAsync<StartLinkParameters, StartLinkResponse>(
             It.IsAny<string>(), It.IsAny<StartLinkParameters>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((StartLinkResponse)null!);
 
@@ -93,7 +93,7 @@ public class SignalApiFacadeTests
         var client = Client();
         ListGroupsParameters? captured = null;
         var expected = new ListGroupsResponse();
-        client.Setup(c => c.InvokeMethodAsync<ListGroupsResponse, ListGroupsParameters>(
+        client.Setup(c => c.InvokeMethodAsync<ListGroupsParameters, ListGroupsResponse>(
             "listGroups", It.IsAny<ListGroupsParameters>(), It.IsAny<CancellationToken>()))
             .Callback<string, ListGroupsParameters, CancellationToken>((_, p, _) => captured = p)
             .ReturnsAsync(expected);
@@ -111,7 +111,7 @@ public class SignalApiFacadeTests
     public async Task SignalService_Version_ReturnsResponse()
     {
         var rpc = new Mock<IJsonRpcClient>();
-        rpc.Setup(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
+        rpc.Setup(c => c.InvokeMethodAsync<VersionParameters, VersionResponse>(
             "version", It.IsAny<VersionParameters>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new VersionResponse("0.14.3"));
         var provider = new Mock<IJsonRpcClientProvider>();
@@ -126,7 +126,7 @@ public class SignalApiFacadeTests
     public async Task SyncAccount_ReturnsResponse()
     {
         var client = Client();
-        client.Setup(c => c.InvokeMethodAsync<SyncAccountsResponse, SyncAccountsParameters>(
+        client.Setup(c => c.InvokeMethodAsync<SyncAccountsParameters, SyncAccountsResponse>(
             "sendSyncRequest", It.IsAny<SyncAccountsParameters>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SyncAccountsResponse());
 
@@ -139,7 +139,7 @@ public class SignalApiFacadeTests
     public async Task FinishLink_WhenNull_Throws()
     {
         var client = Client();
-        client.Setup(c => c.InvokeMethodAsync<FinishLinkResponse, FinishLinkParameters>(
+        client.Setup(c => c.InvokeMethodAsync<FinishLinkParameters, FinishLinkResponse>(
             It.IsAny<string>(), It.IsAny<FinishLinkParameters>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((FinishLinkResponse)null!);
 
@@ -151,7 +151,7 @@ public class SignalApiFacadeTests
     public async Task ListGroups_WhenNull_Throws()
     {
         var client = Client();
-        client.Setup(c => c.InvokeMethodAsync<ListGroupsResponse, ListGroupsParameters>(
+        client.Setup(c => c.InvokeMethodAsync<ListGroupsParameters, ListGroupsResponse>(
             It.IsAny<string>(), It.IsAny<ListGroupsParameters>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((ListGroupsResponse)null!);
 
@@ -163,7 +163,7 @@ public class SignalApiFacadeTests
     public async Task SignalService_InvokeMethod_WhenNull_Throws()
     {
         var rpc = new Mock<IJsonRpcClient>();
-        rpc.Setup(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
+        rpc.Setup(c => c.InvokeMethodAsync<VersionParameters, VersionResponse>(
             It.IsAny<string>(), It.IsAny<VersionParameters>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((VersionResponse)null!);
         var provider = new Mock<IJsonRpcClientProvider>();
