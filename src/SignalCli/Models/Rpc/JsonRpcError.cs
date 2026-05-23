@@ -1,3 +1,4 @@
+using System.Text.Json;
 using JetBrains.Annotations;
 using System.Text.Json.Serialization;
 
@@ -19,11 +20,12 @@ public record JsonRpcError
     /// Повідомлення про помилку.
     /// </summary>
     [JsonPropertyName("message")]
-    public string Message { get; init; }
+    public string? Message { get; init; }
 
     /// <summary>
-    /// Додаткові дані про помилку.
+    /// Додаткові дані про помилку (опціонально). Залишаємо як <see cref="JsonElement"/>?,
+    /// щоб STJ source-gen не падав на нетипізованому <c>object</c> (H.20/F20).
     /// </summary>
     [JsonPropertyName("data")]
-    public object Data { get; init; }
+    public JsonElement? Data { get; init; }
 }

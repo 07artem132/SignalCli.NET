@@ -1,4 +1,4 @@
-﻿using System.Reactive.Linq;
+using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -12,7 +12,8 @@ namespace SignalCli.Services.SignalCli;
 /// <summary>
 /// HostedService, який:
 /// 1) Запускає та зупиняє Signal-CLI при старті/зупинці застосунку.
-/// 2) Автоматично перезапускає його при аварійному завершенні (до MaxRestartAttempts).
+/// 2) Автоматично перезапускає його при аварійному завершенні (до MaxRestartAttempts
+///    у межах вікна <see cref="Config.RestartWindowSeconds"/>).
 /// 3) Надає доступ до StreamPair через IStreamPairProvider.
 /// </summary>
 public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisposable
@@ -31,7 +32,14 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
     private StreamPair? _currentStreamPair;
     private bool _disposed;
     private bool _stopping;
+    // _restartCount має читатися/писатися лише під _operationLock — щоб B.5 (windowed
+    // budget) узгоджувалося із гонкою між ForceRestartAsync і OnProcessExited.
     private int _restartCount;
+
+    // B.4 (F3): таймер, який скидає _restartCount у 0, якщо процес стабільно у Running
+    // довше за RestartWindowSeconds. Створюється у StartProcessInternalAsyncNoLock після
+    // UpdateState(Running, ...) і скасовується у CleanupProcess / при наступному рестарті.
+    private CancellationTokenSource? _restartWindowCts;
 
     // Сигнал завершення для StreamPairChanged (щоб потік завершувався при Dispose сервісу).
     private readonly Subject<bool> _disposeSignal = new();
@@ -72,8 +80,12 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
 
         try
         {
-            // Запускаємо процес (перший старт)
-            await StartProcessInternalAsyncNoLock(cancellationToken).ConfigureAwait(false);
+            // Запускаємо процес (перший старт) — під операційним локом, щоб
+            // конкурентний OnProcessExited не міг перезапустити в той самий момент.
+            using (await _operationLock.LockAsync(cancellationToken))
+            {
+                await StartProcessInternalAsyncNoLock(cancellationToken).ConfigureAwait(false);
+            }
             _logger.LogInformation("SignalCliHostedService успішно запущено.");
         }
         catch (Exception ex)
@@ -98,14 +110,17 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
 
         try
         {
-            var currentState = _stateManager.CurrentState;
-            if (currentState != ProcessState.Running && currentState != ProcessState.Starting)
+            using (await _operationLock.LockAsync(cancellationToken))
             {
-                _logger.LogInformation("StopProcessInternalAsync: поточний стан = {State}, пропускаємо зупинку.", currentState);
-                return;
+                var currentState = _stateManager.CurrentState;
+                if (currentState != ProcessState.Running && currentState != ProcessState.Starting)
+                {
+                    _logger.LogInformation("StopProcessInternalAsync: поточний стан = {State}, пропускаємо зупинку.", currentState);
+                    return;
+                }
+                // Зупиняємо процес
+                await StopProcessInternalAsyncNoLock(cancellationToken).ConfigureAwait(false);
             }
-            // Зупиняємо процес
-            await StopProcessInternalAsyncNoLock(cancellationToken).ConfigureAwait(false);
             _logger.LogInformation("SignalCliHostedService зупинено.");
         }
         catch (Exception ex)
@@ -177,15 +192,17 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
                 return;
             }
 
-            // Враховуємо лічильник перезапусків
+            // B.5: інкремент під локом — гонка з OnProcessExited неможлива.
             _restartCount++;
             if (_config.MaxRestartAttempts > 0 && _restartCount > _config.MaxRestartAttempts)
             {
-                _logger.LogError("ForceRestartAsync: перевищено MaxRestartAttempts ({Max}). Скасування перезапуску.", _config.MaxRestartAttempts);
+                _logger.LogError("ForceRestartAsync: перевищено MaxRestartAttempts ({Max}) у вікні {Window}c. Скасування перезапуску.",
+                    _config.MaxRestartAttempts, _config.RestartWindowSeconds);
                 return;
             }
 
-            _logger.LogWarning("Примусовий перезапуск SignalCLI (спроба #{Count}/{Max})", _restartCount, _config.MaxRestartAttempts);
+            _logger.LogWarning("Примусовий перезапуск SignalCLI (спроба #{Count}/{Max})",
+                _restartCount, _config.MaxRestartAttempts);
 
             // 1) Зупинка
             await StopProcessInternalAsyncNoLock(cancellationToken).ConfigureAwait(false);
@@ -211,7 +228,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
     {
         if (_disposed) return;
         cancellationToken.ThrowIfCancellationRequested();
-            
+
         var currentState = _stateManager.CurrentState;
         if (currentState != ProcessState.NotStarted &&
             currentState != ProcessState.Stopped &&
@@ -223,8 +240,8 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
 
         _logger.LogInformation("Запуск процесу Signal CLI...");
         _stopping = false;
-        // Якщо це реальний старт (не авто/force), можна скинути _restartCount в 0
-        // Але для автоперезапуску робимо інакше — в OnProcessExited / ForceRestartAsync
+        // Лічильник скидаємо ЛИШЕ при початковому старті (з NotStarted); рестарти зберігають
+        // лічильник, який потім скине таймер RestartWindow (див. ScheduleRestartWindowReset).
         if (currentState == ProcessState.NotStarted)
             _restartCount = 0;
 
@@ -244,6 +261,11 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             // CurrentStreamPair / StreamPairChanged / WaitForReadyAsync.
             _stateManager.UpdateState(ProcessState.Running, streams);
             _logger.LogInformation("Процес Signal CLI запущено (PID={Pid})", _currentProcess.Id);
+
+            // B.4 (F3): стартуємо вікно стабільності — якщо процес проживе RestartWindowSeconds
+            // у Running, _restartCount скинеться в 0, тобто поодинокі поодинокі збої перестануть
+            // спалювати "бюджет" перезапусків назавжди.
+            ScheduleRestartWindowReset();
         }
         catch (Exception ex)
         {
@@ -272,26 +294,45 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
 
         _logger.LogInformation("Зупинка процесу Signal CLI...");
         _stopping = true;
+        // Скасовуємо таймер вікна стабільності — далі stable-running не буде.
+        CancelRestartWindowTimer();
         _stateManager.UpdateState(ProcessState.Stopping);
 
         try
         {
             if (_currentProcess != null && !_currentProcess.HasExited)
             {
-                // Спробуємо "exit"
+                // B.9: stdin "exit" — у власному try/catch (наприклад, потік уже міг закритися).
                 if (_currentStreamPair != null)
                 {
-                    await _currentStreamPair.StandardInput.WriteLineAsync("exit").ConfigureAwait(false);
-                    await _currentStreamPair.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
+                    try
+                    {
+                        await _currentStreamPair.StandardInput.WriteLineAsync("exit").ConfigureAwait(false);
+                        await _currentStreamPair.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException)
+                    {
+                        _logger.LogDebug(ex, "Не вдалося надіслати команду exit у stdin — перейдемо до wait/kill");
+                    }
                 }
 
-                // Чекаємо граційного завершення (інтервал з Config)
-                await Task.Delay(TimeSpan.FromSeconds(_config.StopTimeoutSeconds), cancellationToken)
-                    .ConfigureAwait(false);
+                // B.9: замість фіксованого Task.Delay чекаємо реального виходу процесу
+                // через WaitForExitAsync + linkedCts(timeout) — швидко за нормального exit.
+                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(_config.StopTimeoutSeconds));
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+                try
+                {
+                    await _currentProcess.WaitForExitAsync(linked.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+                {
+                    // Timeout під WaitForExitAsync — далі fall through до Kill із попередженням.
+                }
 
                 if (!_currentProcess.HasExited)
                 {
-                    _logger.LogWarning("Процес не завершився, примусово завершуємо його...");
+                    _logger.LogWarning("Процес не завершився за {Timeout}c, примусово завершуємо його...",
+                        _config.StopTimeoutSeconds);
                     _currentProcess.Kill(entireProcessTree: true);
                 }
             }
@@ -317,6 +358,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
     /// </summary>
     private void CleanupProcess()
     {
+        CancelRestartWindowTimer();
         if (_currentProcess != null)
         {
             _currentProcess.Exited -= OnProcessExited;
@@ -331,51 +373,133 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         _currentStreamPair = null;
     }
 
+    /// <summary>
+    /// Стартує таймер, який після <see cref="Config.RestartWindowSeconds"/> у стані Running
+    /// скине лічильник перезапусків у 0. Викликається тільки тоді, коли процес щойно перейшов
+    /// у Running; будь-який наступний рестарт/стоп має скасувати цей таймер.
+    /// </summary>
+    private void ScheduleRestartWindowReset()
+    {
+        CancelRestartWindowTimer();
+        var window = TimeSpan.FromSeconds(Math.Max(1, _config.RestartWindowSeconds));
+        var cts = new CancellationTokenSource();
+        _restartWindowCts = cts;
+        var token = cts.Token;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(window, token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { return; }
+
+            // Скидати лічильник можна лише під операційним локом і лише якщо процес
+            // справді все ще Running та таймер той самий (не змінився при наступному рестарті).
+            using (await _operationLock.LockAsync().ConfigureAwait(false))
+            {
+                if (_disposed || token.IsCancellationRequested) return;
+                if (!ReferenceEquals(_restartWindowCts, cts)) return;
+                if (_stateManager.CurrentState != ProcessState.Running) return;
+
+                if (_restartCount > 0)
+                {
+                    _logger.LogInformation("Процес стабільно у Running {Window}c — скидаю _restartCount={Count} у 0",
+                        window.TotalSeconds, _restartCount);
+                    _restartCount = 0;
+                }
+            }
+        }, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Скасовує таймер вікна стабільності (якщо запущено).
+    /// </summary>
+    private void CancelRestartWindowTimer()
+    {
+        var cts = Interlocked.Exchange(ref _restartWindowCts, null);
+        if (cts == null) return;
+        try { cts.Cancel(); } catch (ObjectDisposedException) { /* ок */ }
+        cts.Dispose();
+    }
+
     #endregion
 
     #region Обробка Exited та автоперезапуск
 
     /// <summary>
-    /// Обробник події Exited процесу. Запускає автоматичний перезапуск за потреби.
+    /// Обробник події Exited процесу. Тонка async-void обгортка, що в try/catch делегує
+    /// важку логіку <see cref="OnProcessExitedAsync"/> — щоб виняток не зриває хост.
     /// </summary>
     /// <param name="sender">Джерело події.</param>
     /// <param name="e">Аргументи події.</param>
     private async void OnProcessExited(object? sender, EventArgs e)
     {
-        // Якщо сервіс вже Dispose / Stop, то ігноруємо
+        // B.1/B.2 (F2): не мутуємо стан до взяття локу і ловимо все, що могло б "втекти"
+        // в SynchronizationContext (async void) — щоб не вбити процес-хост.
+        try
+        {
+            await OnProcessExitedAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Незловлений виняток у OnProcessExited — проігноровано, щоб не зривати хост.");
+        }
+    }
+
+    /// <summary>
+    /// Реальна логіка обробки Exited: серіалізована через <see cref="_operationLock"/>,
+    /// щоб не змагатися з <see cref="StopAsync"/> / <see cref="ForceRestartAsync"/>.
+    /// </summary>
+    private async Task OnProcessExitedAsync()
+    {
+        // Ранні дешеві перевірки (без локу) — не змінюємо стан тут.
         if (_disposed) return;
         if (_stopping) return; // умисна зупинка
 
-        _logger.LogWarning("Процес Signal CLI завершився неочікувано.");
-        _stateManager.UpdateState(ProcessState.Failed);
-
-        CleanupProcess();
-
-        if (_config.MaxRestartAttempts <= 0)
+        using (await _operationLock.LockAsync().ConfigureAwait(false))
         {
-            _logger.LogWarning("Автоперезапуск вимкнено (MaxRestartAttempts=0).");
-            return;
-        }
+            // Повторна перевірка під локом — стан міг змінитися, поки чекали.
+            if (_disposed) return;
+            if (_stopping) return;
 
-        _restartCount++;
-        if (_restartCount <= _config.MaxRestartAttempts)
-        {
-            _logger.LogInformation("Спроба автоперезапуску (#{Count}/{Max})...", _restartCount, _config.MaxRestartAttempts);
+            // Якщо StopProcessInternalAsync уже встиг перевести стан у Stopped — нічого робити.
+            if (_stateManager.CurrentState == ProcessState.Stopped)
+            {
+                _logger.LogDebug("OnProcessExited: процес уже зупинено навмисно — пропускаємо.");
+                return;
+            }
+
+            _logger.LogWarning("Процес Signal CLI завершився неочікувано.");
+            _stateManager.UpdateState(ProcessState.Failed);
+            CleanupProcess();
+
+            if (_config.MaxRestartAttempts <= 0)
+            {
+                _logger.LogWarning("Автоперезапуск вимкнено (MaxRestartAttempts=0).");
+                return;
+            }
+
+            // B.5: під локом. B.4: лічильник скидатиметься таймером вікна стабільності
+            // (ScheduleRestartWindowReset), коли наступний старт проживе RestartWindowSeconds.
+            _restartCount++;
+            if (_restartCount > _config.MaxRestartAttempts)
+            {
+                _logger.LogError("Досягнуто максимальну кількість перезапусків ({Max}) у вікні {Window}c.",
+                    _config.MaxRestartAttempts, _config.RestartWindowSeconds);
+                return;
+            }
+
+            _logger.LogInformation("Спроба автоперезапуску (#{Count}/{Max})...",
+                _restartCount, _config.MaxRestartAttempts);
             try
             {
                 await Task.Delay(TimeSpan.FromSeconds(_config.RestartDelaySeconds)).ConfigureAwait(false);
-                // Можна було викликати ForceRestartAsync, але ми вже знаємо що процес мертвий,
-                // тож просто StartProcessInternalAsync:
                 await StartProcessInternalAsyncNoLock(CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Не вдалося перезапустити процес Signal CLI.");
             }
-        }
-        else
-        {
-            _logger.LogError("Досягнуто максимальну кількість перезапусків ({Max}). Більше не перезапускатимемо.", _config.MaxRestartAttempts);
         }
     }
 

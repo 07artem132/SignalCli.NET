@@ -13,10 +13,32 @@ public class MimeTypeHelperTests
     [InlineData("47494638", "image/gif")]
     [InlineData("25504446", "application/pdf")]
     [InlineData("504B0304", "application/zip")]
-    [InlineData("0000000066747970", "video/mp4")]   // "ftyp" at offset 4
+    // F16: ISO-BMFF тепер дискримінує major-brand на байтах 8..11.
+    // isom/mp42/avc1 → MP4; qt → MOV; heic/M4A/3gpp → відповідно.
+    [InlineData("000000006674797069736F6D", "video/mp4")]      // isom
+    [InlineData("000000006674797071742020", "video/quicktime")] // "qt  "
+    [InlineData("000000006674797068656963", "image/heic")]      // heic
+    [InlineData("000000006674797033677034", "video/3gpp")]      // 3gp4
+    [InlineData("000000006674797033673261", "video/3gpp2")]     // 3g2a
     public void GetMimeType_DetectsBySignature(string hex, string expected)
     {
         Assert.Equal(expected, MimeTypeHelper.GetMimeType(Hex(hex)));
+    }
+
+    [Fact]
+    public void GetMimeType_IsoBmff_M4A_ReturnsAudioMp4()
+    {
+        // "M4A " — пробіл наприкінці значимий (4 символи).
+        var bytes = Hex("00000000667479704D344120");
+        Assert.Equal("audio/mp4", MimeTypeHelper.GetMimeType(bytes));
+    }
+
+    [Fact]
+    public void GetMimeType_IsoBmff_UnknownBrand_FallsBackToMp4()
+    {
+        // Невідомий major brand — fallback на video/mp4 (зворотна сумісність зі signal-cli).
+        var bytes = Hex("00000000667479706162636400");
+        Assert.Equal("video/mp4", MimeTypeHelper.GetMimeType(bytes));
     }
 
     [Fact]

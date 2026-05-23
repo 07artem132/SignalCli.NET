@@ -22,10 +22,10 @@ public abstract class SignalCliHealthMonitorTestBase : IDisposable
     protected readonly Config ServiceConfig;
 
     //todo:
-    //❌ Тест Dispose (включая повторный вызов)
-    //❌ Проверка поведения при разных CancellationToken (при пинге)
-    //❌ Тест на таймаут пинга
-    //❌ Тест на обработку неожиданных исключений в MonitorLoop
+    //❌ Тест Dispose (зокрема повторний виклик)
+    //❌ Перевірка поведінки при різних CancellationToken (при пінгу)
+    //❌ Тест на таймаут пінга
+    //❌ Тест на обробку неочікуваних винятків у MonitorLoop
 
     protected SignalCliHealthMonitorTestBase()
     {
@@ -34,7 +34,7 @@ public abstract class SignalCliHealthMonitorTestBase : IDisposable
 
         // 2. Моки для JSON-RPC
         JsonRpcClientMock = new Mock<IJsonRpcClient>();
-        // По умолчанию успешный "Ping"
+        // За замовчуванням — успішний "Ping"
         JsonRpcClientMock
             .Setup(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
                 It.IsAny<string>(),
@@ -84,19 +84,19 @@ public abstract class SignalCliHealthMonitorTestBase : IDisposable
             LibDirectory = "lib",
             JavaExecutable = "java",
             MaxRestartAttempts = 2,
-            RestartDelaySeconds = 0, // Ускоряем тесты
+            RestartDelaySeconds = 0, // Прискорюємо тести
             HealthCheckIntervalSeconds = 0,
             HealthCheckTimeoutSeconds = 1
         };
 
-        // Создаём структуру директорий для тестов
+        // Створюємо структуру директорій для тестів
         var libDir = Path.Combine(tempDir, "lib");
         Directory.CreateDirectory(libDir);
         var fakeJarPath = Path.Combine(libDir, "test.jar");
         File.WriteAllText(fakeJarPath, "fake jar content");
     }
 
-    // Вспомогательные методы для создания тестируемых объектов
+    // Допоміжні методи для створення об'єктів, що тестуються
     protected Services.SignalCli.SignalCliHostedService CreateHostedService()
     {
         return new Services.SignalCli.SignalCliHostedService(
@@ -107,17 +107,22 @@ public abstract class SignalCliHealthMonitorTestBase : IDisposable
         );
     }
 
-    protected Services.SignalCli.SignalCliHealthMonitor CreateMonitor(Services.SignalCli.SignalCliHostedService hostedService)
+    protected Services.SignalCli.SignalCliHealthMonitor CreateMonitor(
+        Services.SignalCli.SignalCliHostedService hostedService,
+        TimeProvider? timeProvider = null)
     {
+        // G.14: дозволяє конкретним тестам підставити FakeTimeProvider — без нього
+        // монітор лишається у реальному часі (значення за замовчуванням TimeProvider.System).
         return new Services.SignalCli.SignalCliHealthMonitor(
             LoggerMonitorMock.Object,
             _clientProviderMock.Object,
             hostedService,
-            ServiceConfig
+            ServiceConfig,
+            timeProvider
         );
     }
 
-    // Вспомогательные методы для проверки логов
+    // Допоміжні методи для перевірки логів
     protected void VerifyInfoLog(string messageContains, Times? times = null)
     {
         times ??= Times.Once();
@@ -172,7 +177,7 @@ public abstract class SignalCliHealthMonitorTestBase : IDisposable
         }
         catch
         {
-            // Игнорируем ошибки при очистке
+            // Ігноруємо помилки під час очищення
         }
     }
 }

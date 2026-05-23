@@ -22,6 +22,9 @@ public sealed class ProcessStateManager : IProcessStateNotifier, IDisposable
 
     private readonly ILogger<ProcessStateManager> _logger;
 
+    /// <summary>
+    /// Потік (Rx) повних знімків стану процесу — стан + поточна пара потоків + остання помилка.
+    /// </summary>
     public IObservable<ProcessStateInfo> ProcessState => _stateSubject.AsObservable();
 
     /// <summary>
@@ -58,6 +61,8 @@ public sealed class ProcessStateManager : IProcessStateNotifier, IDisposable
                 : Observable.Return(true))
             .ToTask(cancellationToken);
 
+    /// <summary>Створює менеджер стану в початковому стані <see cref="Models.SignalCli.ProcessState.NotStarted"/>.</summary>
+    /// <param name="logger">Логер для діагностики переходів стану.</param>
     public ProcessStateManager(ILogger<ProcessStateManager> logger)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -65,19 +70,36 @@ public sealed class ProcessStateManager : IProcessStateNotifier, IDisposable
         _stateSubject = new BehaviorSubject<ProcessStateInfo>(_currentStateInfo);
     }
 
+    /// <summary>
+    /// Атомарно оновлює стан процесу і публікує новий знімок у потік <see cref="ProcessState"/>.
+    /// Запізнілі виклики після <see cref="Dispose"/> тихо ігноруються (F25/B.25).
+    /// </summary>
+    /// <param name="newState">Новий стан процесу.</param>
+    /// <param name="streamPair">Поточна пара потоків (за наявності — для Running).</param>
+    /// <param name="error">Помилка, що супроводжує перехід (для Failed).</param>
     public void UpdateState(ProcessState newState, StreamPair? streamPair = null, Exception? error = null)
     {
-        ProcessStateInfo newInfo;
+        // F25 (B.25): Dispose і UpdateState мають серіалізуватися — інакше OnNext
+        // може потрапити в уже задиспоужений BehaviorSubject (-> ObjectDisposedException).
+        // Тримаємо _lock на час OnNext (Rx-підписники з нашої програми відпрацьовують
+        // швидко й не блокують одне одного на цьому самому локі).
         lock (_lock)
         {
-            _currentStateInfo = new ProcessStateInfo(newState, streamPair, error);
-            newInfo = _currentStateInfo;
-        }
+            if (_disposed)
+            {
+                // Тихо ігноруємо запізнілі переходи, щоб не зривати ні викликача,
+                // ні фоновий handler (наприклад, OnProcessExited після Dispose).
+                _logger.LogDebug("UpdateState({NewState}) проігноровано — ProcessStateManager уже задиспоужений.", newState);
+                return;
+            }
 
-        _logger.LogInformation("Стан процесу змінено на {NewState}", newState);
-        _stateSubject.OnNext(newInfo);
+            _currentStateInfo = new ProcessStateInfo(newState, streamPair, error);
+            _logger.LogInformation("Стан процесу змінено на {NewState}", newState);
+            _stateSubject.OnNext(_currentStateInfo);
+        }
     }
 
+    /// <summary>Поточний стан процесу (потокобезпечне читання).</summary>
     public ProcessState CurrentState
     {
         get
@@ -89,10 +111,16 @@ public sealed class ProcessStateManager : IProcessStateNotifier, IDisposable
         }
     }
 
+    /// <inheritdoc />
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
-        _stateSubject.Dispose();
+        // F25 (B.25): беремо ТОЙ САМИЙ лок, що й UpdateState, щоб конкурентний
+        // UpdateState не міг викликати OnNext на задиспоуженому Subject.
+        lock (_lock)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _stateSubject.Dispose();
+        }
     }
 }

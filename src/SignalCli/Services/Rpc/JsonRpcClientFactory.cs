@@ -1,6 +1,7 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using SignalCli.Interfaces.Rpc;
 using SignalCli.Interfaces.SignalCli;
+using SignalCli.Models;
 
 namespace SignalCli.Services.Rpc;
 
@@ -11,18 +12,22 @@ internal class JsonRpcClientFactory : IJsonRpcClientFactory
 {
     private readonly ILogger<JsonRpcClient> _logger;
     private readonly IStreamPairProvider _streamPairProvider;
+    private readonly Config _config;
 
     /// <summary>
     /// Створює новий екземпляр фабрики JSON-RPC клієнтів.
     /// </summary>
     /// <param name="logger">Логер для запису діагностичної інформації.</param>
     /// <param name="streamPairProvider">Постачальник потоків для взаємодії з зовнішнім процесом.</param>
+    /// <param name="config">Конфігурація — використовується для отримання таймауту запитів.</param>
     public JsonRpcClientFactory(
         ILogger<JsonRpcClient> logger,
-        IStreamPairProvider streamPairProvider)
+        IStreamPairProvider streamPairProvider,
+        Config config)
     {
         _logger = logger;
         _streamPairProvider = streamPairProvider;
+        _config = config;
     }
 
     /// <summary>
@@ -36,7 +41,8 @@ internal class JsonRpcClientFactory : IJsonRpcClientFactory
 
         IJsonRpcClient client = new JsonRpcClient(
             _logger,
-            _streamPairProvider
+            _streamPairProvider,
+            _config
         );
 
         _logger.LogInformation("JsonRpcClient створено через JsonRpcClientFactory");

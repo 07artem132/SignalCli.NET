@@ -10,5 +10,6 @@ Please read it before generating or editing code. It covers:
 - C# conventions (match the existing code; comments/logs are in Ukrainian);
 - **critical non-regression rules** (no PII above `Trace`, `ArgumentList` for process
   args, attachment filename sanitization, composite event dispatch, System.Text.Json
-  with source generation, SHA-256 + UTF-8-BOM in the download scripts);
+  with source generation, SHA-256 verification + **ASCII-only, no BOM** in the
+  download scripts so they parse under Windows PowerShell 5.1);
 - the OpenSpec planning workflow under `openspec/`.

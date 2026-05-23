@@ -41,6 +41,10 @@ internal class SignalEventService(
     private readonly Subject<TypingEventArgs> _typing = new();
     private readonly Subject<ReceiptEventArgs> _receipts = new();
     private readonly Subject<SyncEventArgs> _syncs = new();
+    // F13: окремі потоки для Quote/Edit/RemoteDelete — раніше дропалися як "unknown".
+    private readonly Subject<QuoteEventArgs> _quotes = new();
+    private readonly Subject<EditEventArgs> _edits = new();
+    private readonly Subject<RemoteDeleteEventArgs> _remoteDeletes = new();
 
     private bool _disposed;
 
@@ -59,6 +63,12 @@ internal class SignalEventService(
     public IObservable<ReceiptEventArgs> Receipts => _receipts.AsObservable();
 
     public IObservable<SyncEventArgs> Syncs => _syncs.AsObservable();
+
+    public IObservable<QuoteEventArgs> Quotes => _quotes.AsObservable();
+
+    public IObservable<EditEventArgs> Edits => _edits.AsObservable();
+
+    public IObservable<RemoteDeleteEventArgs> RemoteDeletes => _remoteDeletes.AsObservable();
 
     public async Task<SubscribeReceiveResponse> SubscribeAsync(string account,
         CancellationToken cancellationToken = default)
@@ -211,6 +221,25 @@ internal class SignalEventService(
                 return;
             }
 
+            // F13: подія редагування — на рівні конверта окремо від DataMessage.
+            if (jsonEnvelope.EditMessage is not null)
+            {
+                var editEvent = new EditEventArgs(
+                    subscriptionId,
+                    account,
+                    jsonEnvelope.EditMessage,
+                    jsonEnvelope.Source,
+                    jsonEnvelope.SourceNumber,
+                    jsonEnvelope.SourceUuid,
+                    jsonEnvelope.SourceName,
+                    jsonEnvelope.SourceDevice,
+                    jsonEnvelope.Timestamp,
+                    jsonEnvelope.ServerReceivedTimestamp,
+                    jsonEnvelope.ServerDeliveredTimestamp);
+                _edits.OnNext(editEvent);
+                return;
+            }
+
             // Якщо отримано подію, що містить дані повідомлення.
             // Одне повідомлення може одночасно містити кілька payload'ів
             // (наприклад, текст-підпис + вкладення), тому перевіряємо їх НЕЗАЛЕЖНО,
@@ -296,8 +325,48 @@ internal class SignalEventService(
                     emitted = true;
                 }
 
+                // F13: RemoteDelete — окрема подія (відправник прибрав повідомлення в одержувача).
+                if (data.RemoteDelete is not null)
+                {
+                    var rd = new RemoteDeleteEventArgs(
+                        subscriptionId,
+                        account,
+                        data.RemoteDelete,
+                        jsonEnvelope.Source,
+                        jsonEnvelope.SourceNumber,
+                        jsonEnvelope.SourceUuid,
+                        jsonEnvelope.SourceName,
+                        jsonEnvelope.SourceDevice,
+                        jsonEnvelope.Timestamp,
+                        jsonEnvelope.ServerReceivedTimestamp,
+                        jsonEnvelope.ServerDeliveredTimestamp);
+                    _remoteDeletes.OnNext(rd);
+                    emitted = true;
+                }
+
+                // F13: Quote-only — DataMessage без тіла/реакції/стікера/вкладень, але з Quote.
+                // Без цієї гілки повідомлення «відповідь без власного тексту» (рідко, але буває)
+                // мовчки губилося як "unknown".
+                if (!emitted && data.Quote is not null)
+                {
+                    var qe = new QuoteEventArgs(
+                        subscriptionId,
+                        account,
+                        data,
+                        jsonEnvelope.Source,
+                        jsonEnvelope.SourceNumber,
+                        jsonEnvelope.SourceUuid,
+                        jsonEnvelope.SourceName,
+                        jsonEnvelope.SourceDevice,
+                        jsonEnvelope.Timestamp,
+                        jsonEnvelope.ServerReceivedTimestamp,
+                        jsonEnvelope.ServerDeliveredTimestamp);
+                    _quotes.OnNext(qe);
+                    emitted = true;
+                }
+
                 if (!emitted)
-                    _logger.LogDebug("Невідомий тип DataMessage, пропускаємо...");
+                    _logger.LogDebug("DataMessage без впізнаваного payload (пусте/групове-метадані) — пропускаємо.");
                 return;
             }
 
@@ -342,27 +411,40 @@ internal class SignalEventService(
 
         // Спершу припиняємо приймати нові нотифікації, потім завершуємо потоки подій.
         _notificationSubscription?.Dispose();
+        _notificationSubscription = null;
 
-        _textMessages.OnCompleted();
-        _reaction.OnCompleted();
-        _attachments.OnCompleted();
-        _sticker.OnCompleted();
-        _typing.OnCompleted();
-        _receipts.OnCompleted();
-        _syncs.OnCompleted();
+        // F17 (H.17): OnCompleted ПЛЮС Dispose — раніше Subject не диспоузувся
+        // (раніше теж так було, але якщо StartAsync викликався двічі — _notificationSubscription
+        // підмінювалася, і попередня губилась; нижче в StartAsync це теж виправлено).
+        _textMessages.OnCompleted(); _textMessages.Dispose();
+        _reaction.OnCompleted(); _reaction.Dispose();
+        _attachments.OnCompleted(); _attachments.Dispose();
+        _sticker.OnCompleted(); _sticker.Dispose();
+        _typing.OnCompleted(); _typing.Dispose();
+        _receipts.OnCompleted(); _receipts.Dispose();
+        _syncs.OnCompleted(); _syncs.Dispose();
+        _quotes.OnCompleted(); _quotes.Dispose();
+        _edits.OnCompleted(); _edits.Dispose();
+        _remoteDeletes.OnCompleted(); _remoteDeletes.Dispose();
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        // Підписуємося на потік сповіщень від JSON-RPC клієнта
+        // F17 (H.17): ідемпотентність — другий StartAsync не повинен «згубити» попередню підписку.
+        // Диспоузимо стару, якщо була, і встановлюємо нову атомарно.
+        var oldSub = Interlocked.Exchange(ref _notificationSubscription, null);
+        oldSub?.Dispose();
+
         _rpcClient = _rpcClientProvider.Client;
-        // Зберігаємо підписку, щоб коректно звільнити її у Dispose (раніше IDisposable губився).
         _notificationSubscription = _rpcClient.Notifications.Subscribe(OnNotificationReceived);
         return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
+        // Симетрично StartAsync: відписуємось від нотифікацій, щоб повторний Start був чистим.
+        var sub = Interlocked.Exchange(ref _notificationSubscription, null);
+        sub?.Dispose();
         return Task.CompletedTask;
     }
 }

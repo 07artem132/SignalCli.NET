@@ -1,0 +1,109 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+        <!-- E2E-тести запускають справжній signal-cli; не пакуємось у NuGet. -->
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0"/>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1"/>
+        <PackageReference Include="xunit" Version="2.9.2"/>
+        <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Using Include="Xunit"/>
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\src\SignalCli\SignalCli.csproj" />
+    </ItemGroup>
+
+    <!-- G.7b: вибір рантайму signal-cli залежно від платформи виконавця.
+         Споживаємо in-repo runtime-проєкт як ProjectReference з ReferenceOutputAssembly=false
+         (нам потрібен ЕФЕКТ build-targets, але не складальна збірка — у пакетів усе одно
+         IncludeBuildOutput=false). Артефакти збираються в obj/ runtime-проєкту і потім
+         копіюються нашим CopyRuntimePayload-таргетом нижче. -->
+    <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+        <ProjectReference Include="..\..\src\SignalCli.runtime.jre.win-x64\SignalCli.runtime.jre.win-x64.csproj">
+            <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+            <PrivateAssets>all</PrivateAssets>
+            <Private>false</Private>
+        </ProjectReference>
+    </ItemGroup>
+    <ItemGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+        <ProjectReference Include="..\..\src\SignalCli.runtime.jre.osx-arm64\SignalCli.runtime.jre.osx-arm64.csproj">
+            <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+            <PrivateAssets>all</PrivateAssets>
+            <Private>false</Private>
+        </ProjectReference>
+    </ItemGroup>
+    <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+        <ProjectReference Include="..\..\src\SignalCli.runtime.native\SignalCli.runtime.native.csproj">
+            <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+            <PrivateAssets>all</PrivateAssets>
+            <Private>false</Private>
+        </ProjectReference>
+    </ItemGroup>
+
+    <!-- Шляхи до розпакованих рантайм-артефактів усередині obj/ runtime-проєктів. -->
+    <PropertyGroup>
+        <_RuntimeJreWinDir>$(MSBuildThisFileDirectory)..\..\src\SignalCli.runtime.jre.win-x64\obj\jre</_RuntimeJreWinDir>
+        <_RuntimeCliWinDir>$(MSBuildThisFileDirectory)..\..\src\SignalCli.runtime.jre.win-x64\obj\signal-cli</_RuntimeCliWinDir>
+        <_RuntimeJreOsxDir>$(MSBuildThisFileDirectory)..\..\src\SignalCli.runtime.jre.osx-arm64\obj\jre</_RuntimeJreOsxDir>
+        <_RuntimeCliOsxDir>$(MSBuildThisFileDirectory)..\..\src\SignalCli.runtime.jre.osx-arm64\obj\signal-cli</_RuntimeCliOsxDir>
+        <_RuntimeNativeDir>$(MSBuildThisFileDirectory)..\..\src\SignalCli.runtime.native\obj\signal-cli-native</_RuntimeNativeDir>
+    </PropertyGroup>
+
+    <!-- G.7c: копіюємо вже завантажені рантайм-артефакти у TargetDir тестового хоста,
+         щоб Config.ResolveBundledJava знайшов <TargetDir>/jre/bin/java[.exe] і щоб
+         LibDirectory="signal-cli/lib" вказував на наявний classpath. -->
+    <Target Name="CopyRuntimePayload" AfterTargets="Build">
+        <!-- Windows -->
+        <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+            <_JreSrc Include="$(_RuntimeJreWinDir)\**\*" />
+            <_CliSrc Include="$(_RuntimeCliWinDir)\**\*" />
+        </ItemGroup>
+        <Copy Condition="$([MSBuild]::IsOSPlatform('Windows'))"
+              SourceFiles="@(_JreSrc)"
+              DestinationFiles="@(_JreSrc->'$(TargetDir)jre\%(RecursiveDir)%(Filename)%(Extension)')"
+              SkipUnchangedFiles="true" />
+        <Copy Condition="$([MSBuild]::IsOSPlatform('Windows'))"
+              SourceFiles="@(_CliSrc)"
+              DestinationFiles="@(_CliSrc->'$(TargetDir)signal-cli\%(RecursiveDir)%(Filename)%(Extension)')"
+              SkipUnchangedFiles="true" />
+
+        <!-- macOS -->
+        <ItemGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+            <_JreSrcOsx Include="$(_RuntimeJreOsxDir)\**\*" />
+            <_CliSrcOsx Include="$(_RuntimeCliOsxDir)\**\*" />
+        </ItemGroup>
+        <Copy Condition="$([MSBuild]::IsOSPlatform('OSX'))"
+              SourceFiles="@(_JreSrcOsx)"
+              DestinationFiles="@(_JreSrcOsx->'$(TargetDir)jre/%(RecursiveDir)%(Filename)%(Extension)')"
+              SkipUnchangedFiles="true" />
+        <Copy Condition="$([MSBuild]::IsOSPlatform('OSX'))"
+              SourceFiles="@(_CliSrcOsx)"
+              DestinationFiles="@(_CliSrcOsx->'$(TargetDir)signal-cli/%(RecursiveDir)%(Filename)%(Extension)')"
+              SkipUnchangedFiles="true" />
+        <!-- Відновлюємо exec-біт (zip-розпаковка втрачає unix-режим). -->
+        <Exec Condition="$([MSBuild]::IsOSPlatform('OSX')) and Exists('$(TargetDir)jre/bin/java')"
+              Command="chmod -R +x &quot;$(TargetDir)jre/bin&quot;" />
+
+        <!-- Linux: нативний бінарник signal-cli, без Java. -->
+        <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+            <_NativeSrc Include="$(_RuntimeNativeDir)\**\*" />
+        </ItemGroup>
+        <Copy Condition="$([MSBuild]::IsOSPlatform('Linux'))"
+              SourceFiles="@(_NativeSrc)"
+              DestinationFiles="@(_NativeSrc->'$(TargetDir)signal-cli-native/%(RecursiveDir)%(Filename)%(Extension)')"
+              SkipUnchangedFiles="true" />
+        <Exec Condition="$([MSBuild]::IsOSPlatform('Linux')) and Exists('$(TargetDir)signal-cli-native/signal-cli')"
+              Command="chmod +x &quot;$(TargetDir)signal-cli-native/signal-cli&quot;" />
+    </Target>
+
+</Project>

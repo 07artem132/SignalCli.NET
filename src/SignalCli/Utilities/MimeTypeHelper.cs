@@ -1,4 +1,4 @@
-﻿namespace SignalCli.Utilities;
+namespace SignalCli.Utilities;
 
 /// <summary>
 /// Утилітний клас для визначення MIME-типів файлів на основі їх даних та імен.
@@ -77,13 +77,22 @@ internal static class MimeTypeHelper
         {
             return "application/zip";
         }
-        
-        // Перевірка MP4: наявність "ftyp" на позиції 4
-        if (data.Length >= 8 &&
+
+        // F16: ISO-BMFF (mp4/mov/m4a/heic/3gp) — позначається "ftyp" на байтах 4-7,
+        // а реальний тип файлу визначається "major brand" на байтах 8-11.
+        // Раніше будь-який ISO-BMFF відмічався як video/mp4 — некоректно для mov/heic/m4a/3gp.
+        if (data.Length >= 12 &&
             data[4] == 0x66 && data[5] == 0x74 &&
             data[6] == 0x79 && data[7] == 0x70)
         {
-            return "video/mp4";
+            // Major brand — 4-літерний ASCII код. Інтерпретуємо як рядок,
+            // далі порівнюємо префікси/точні значення відомих типів.
+            var brand = new string(new[]
+            {
+                (char)data[8], (char)data[9], (char)data[10], (char)data[11]
+            });
+
+            return MapIsoBmffBrand(brand);
         }
 
         // Якщо не вдалося визначити за вмістом, спробуємо за розширенням файлу
@@ -101,6 +110,31 @@ internal static class MimeTypeHelper
     }
 
     /// <summary>
+    /// Визначає MIME-тип за "major brand" контейнера ISO-BMFF (offset 8..11).
+    /// </summary>
+    /// <param name="brand">4-літерний код типу контейнера.</param>
+    private static string MapIsoBmffBrand(string brand)
+    {
+        // Найпоширеніші відповідності — список не повний, але покриває реальні випадки signal.
+        return brand switch
+        {
+            // Apple QuickTime
+            "qt  " => "video/quicktime",
+            // HEIC / HEIF (фото-формати на iOS) — Signal може надсилати як вкладення.
+            "heic" or "heix" or "hevc" or "hevx" => "image/heic",
+            "heim" or "heis" or "hevm" or "hevs" => "image/heic-sequence",
+            "mif1" or "msf1" => "image/heif",
+            // M4A — аудіо
+            "M4A " or "M4B " => "audio/mp4",
+            // 3GP / 3GPP
+            "3gp4" or "3gp5" or "3gp6" or "3gp7" or "3gpp" => "video/3gpp",
+            "3g2a" or "3g2b" or "3g2c" => "video/3gpp2",
+            // Усе інше з ftyp вважаємо MP4 (isom, mp41, mp42, avc1, …).
+            _ => "video/mp4"
+        };
+    }
+
+    /// <summary>
     /// Визначає MIME-тип, зчитуючи дані з потоку.
     /// Потік повертається у початкову позицію, якщо це можливо.
     /// </summary>
@@ -111,8 +145,11 @@ internal static class MimeTypeHelper
     {
         ArgumentNullException.ThrowIfNull(stream);
 
-        byte[] buffer = new byte[8];
-        int bytesRead = stream.Read(buffer, 0, buffer.Length);
+        // F16: одинарний Read() може дати <12 байт на pipe/network потоках (CA2022/CA2022 в .NET 10).
+        // Читаємо щонайменше 12 байт (потрібно для ISO-BMFF major brand) або до EOF.
+        const int bufferSize = 12;
+        byte[] buffer = new byte[bufferSize];
+        int bytesRead = stream.ReadAtLeast(buffer, bufferSize, throwOnEndOfStream: false);
 
         if (stream.CanSeek)
             stream.Position = 0;

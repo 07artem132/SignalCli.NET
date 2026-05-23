@@ -91,8 +91,37 @@ internal class TextStyleParser
             _output.Append(c);
             _pos++;
         }
+
+        // F18: маркери, що залишилися на стеку незакритими, повертаємо в текст як літерали,
+        // щоб користувач бачив свій ввід без мовчазного «з'їдання» символу. Обробляємо у
+        // порядку спадання BeginPos — інакше попередні вставки зсувають пізніші позиції.
+        if (_tokens.Count > 0)
+        {
+            var unclosed = _tokens.ToArray(); // Stack.ToArray() — від top до bottom (LIFO).
+            // Сортуємо за BeginPos спаданням — спершу найправіша, потім лівіша.
+            Array.Sort(unclosed, (a, b) => b.BeginPos.CompareTo(a.BeginPos));
+            foreach (var state in unclosed)
+            {
+                _output.Insert(state.BeginPos, MarkerForToken(state.Token));
+            }
+        }
+
         return (_output.ToString(), _formatStrings);
     }
+
+    /// <summary>
+    /// Літеральний маркер, який відповідає типу токена (для повернення в текст
+    /// при незакритому маркері — F18).
+    /// </summary>
+    private static string MarkerForToken(TokenType token) => token switch
+    {
+        TokenType.Italic => "*",
+        TokenType.Bold => "**",
+        TokenType.Monospace => "`",
+        TokenType.Strikethrough => "~",
+        TokenType.Spoiler => "||",
+        _ => string.Empty
+    };
 
     /// <summary>
     /// Обробляє маркер стилю, відкриваючи або закриваючи форматування.

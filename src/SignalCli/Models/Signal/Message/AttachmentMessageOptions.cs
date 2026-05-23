@@ -1,72 +1,85 @@
-﻿using SignalCli.Interfaces.FileSystem;
+using SignalCli.Interfaces.FileSystem;
 using SignalCli.Interfaces.Signal;
 
 namespace SignalCli.Models.Signal.Message;
 
-      // Опции для отправки сообщения с вложениями
-    public record AttachmentMessageOptions
+/// <summary>Опції для відправки повідомлення з вкладеннями. Створюється через <see cref="Builder"/>.</summary>
+public record AttachmentMessageOptions
+{
+    /// <summary>Номер акаунту-відправника.</summary>
+    public string Account { get; private set; } = string.Empty;
+    /// <summary>Один або кілька отримувачів.</summary>
+    public IEnumerable<IRecipient> Recipients { get; private set; } = [];
+    /// <summary>Опціональне тіло повідомлення (підпис до вкладень).</summary>
+    public string Message { get; private set; } = "";
+    /// <summary>Список вкладень для відправки.</summary>
+    public IEnumerable<IAttachmentEntry> Attachments { get; private set; } = [];
+    /// <summary>Чи парсити markdown-стилізацію в тексті.</summary>
+    public bool UseStyle { get; private set; }
+    /// <summary>Згадки користувачів у тексті.</summary>
+    public IEnumerable<string>? Mentions { get; private set; }
+    /// <summary>Токен скасування відправки.</summary>
+    public CancellationToken CancellationToken { get; private set; } = CancellationToken.None;
+
+
+    /// <summary>Будівельник <see cref="AttachmentMessageOptions"/>.</summary>
+    public class Builder
     {
-        public string Account { get; private set; }
-        public IEnumerable<IRecipient> Recipients { get; private set; }
-        // Сообщение оставляем опциональным
-        public string Message { get; private set; } = "";
-        public IEnumerable<IAttachmentEntry> Attachments { get; private set; }
-        public bool UseStyle { get; private set; }
-        public IEnumerable<string>? Mentions { get; private set; }
-        public CancellationToken CancellationToken { get; private set; } = CancellationToken.None;
-        
-        
-        public class Builder
+        private readonly AttachmentMessageOptions _options;
+
+        /// <summary>Створює будівельник з обов'язковими акаунтом, отримувачами та списком вкладень.</summary>
+        /// <param name="account">Номер акаунту-відправника.</param>
+        /// <param name="recipients">Отримувачі.</param>
+        /// <param name="attachments">Вкладення.</param>
+        public Builder(string account, List<IRecipient> recipients, List<IAttachmentEntry> attachments)
         {
-            private readonly AttachmentMessageOptions _options;
-            
-            // Обязательные параметры: первые 2 (Account, Recipients) и 4-й (Attachments).
-            public Builder(string account, List<IRecipient> recipients, List<IAttachmentEntry> attachments)
+            if (string.IsNullOrEmpty(account))
+                throw new ArgumentException("Account обов'язковий.", nameof(account));
+            if (recipients == null || recipients.Count == 0)
+                throw new ArgumentException("Recipients обов'язковий.", nameof(recipients));
+            if (attachments == null || attachments.Count == 0)
+                throw new ArgumentException("Attachments обов'язковий.", nameof(attachments));
+
+            _options = new AttachmentMessageOptions
             {
-                if (string.IsNullOrEmpty(account))
-                    throw new ArgumentException("Account обязателен.", nameof(account));
-                if (recipients == null || recipients.Count == 0)
-                    throw new ArgumentException("Recipients обязателен.", nameof(recipients));
-                if (attachments == null || attachments.Count == 0)
-                    throw new ArgumentException("Attachments обязателен.", nameof(attachments));
-                    
-                _options = new AttachmentMessageOptions
-                {
-                    Account = account,
-                    Recipients = recipients,
-                    Attachments = attachments
-                };
-            }
-            
-            // Опциональное задание сообщения
-            public Builder WithMessage(string message)
-            {
-                _options.Message = message;
-                return this;
-            }
-            
-            public Builder UseStyle()
-            {
-                _options.UseStyle = true;
-                return this;
-            }
-            
-            public Builder WithMentions(IEnumerable<string> mentions)
-            {
-                _options.Mentions = mentions;
-                return this;
-            }
-            
-            public Builder WithCancellationToken(CancellationToken cancellationToken)
-            {
-                _options.CancellationToken = cancellationToken;
-                return this;
-            }
-            
-            public AttachmentMessageOptions Build()
-            {
-                // Проверка обязательных полей уже выполнена в конструкторе.
-                return _options;
-            }
+                Account = account,
+                Recipients = recipients,
+                Attachments = attachments
+            };
+        }
+
+        /// <summary>Додати опціональний текст-підпис до вкладень.</summary>
+        public Builder WithMessage(string message)
+        {
+            _options.Message = message;
+            return this;
+        }
+
+        /// <summary>Увімкнути парсинг markdown-стилізації тексту.</summary>
+        public Builder UseStyle()
+        {
+            _options.UseStyle = true;
+            return this;
+        }
+
+        /// <summary>Додати згадки користувачів.</summary>
+        public Builder WithMentions(IEnumerable<string> mentions)
+        {
+            _options.Mentions = mentions;
+            return this;
+        }
+
+        /// <summary>Задати токен скасування.</summary>
+        public Builder WithCancellationToken(CancellationToken cancellationToken)
+        {
+            _options.CancellationToken = cancellationToken;
+            return this;
+        }
+
+        /// <summary>Будує <see cref="AttachmentMessageOptions"/>.</summary>
+        public AttachmentMessageOptions Build()
+        {
+            return _options;
         }
     }
+}

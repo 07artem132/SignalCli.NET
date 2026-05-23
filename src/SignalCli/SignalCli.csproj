@@ -10,8 +10,10 @@
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <DocumentationFile>$(OutputPath)$(AssemblyName).xml</DocumentationFile>
 
-        <!-- Попередження про відсутність XML-коментарів для публічних членів -->
-        <NoWarn>$(NoWarn);1591</NoWarn>
+        <!-- H.21 (F21): CS1591 більше НЕ глушимо — отже регресії XML-документації
+             публічних членів буде видно як попередження (а з TreatWarningsAsErrors — як помилку). -->
+        <!-- <NoWarn>$(NoWarn);1591</NoWarn> -->
+        <NoWarn>$(NoWarn)</NoWarn>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <Authors>07artem132</Authors>
         <PackageId>SignalCli.NET</PackageId>

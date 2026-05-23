@@ -16,6 +16,9 @@ public sealed class SignalCliHealthMonitor : IHostedService, IDisposable
     private readonly IJsonRpcClientProvider _clientProvider;
     private readonly SignalCliHostedService _signalCliHostedService;
     private readonly Config _config;
+    // G.14 (F14): абстракція часу — у проді System (wall-clock), у тестах
+    // FakeTimeProvider, тож інтервал між пінгами стає віртуальним і flake-вільним.
+    private readonly TimeProvider _timeProvider;
 
     private CancellationTokenSource? _monitorCts;
     private Task? _monitorTask;
@@ -28,17 +31,24 @@ public sealed class SignalCliHealthMonitor : IHostedService, IDisposable
     /// <param name="clientProvider">Постачальник JSON-RPC клієнта.</param>
     /// <param name="signalCliHostedService">Хостований сервіс Signal CLI.</param>
     /// <param name="config">Конфігурація Signal CLI.</param>
+    /// <param name="timeProvider">
+    /// Опціональний постачальник часу для <c>Task.Delay</c> та <c>CancelAfter</c>.
+    /// За замовчуванням <see cref="TimeProvider.System"/>; у тестах підставляється
+    /// <c>FakeTimeProvider</c>, щоб монітор-цикл працював у віртуальному часі.
+    /// </param>
     public SignalCliHealthMonitor(
         ILogger<SignalCliHealthMonitor> logger,
         IJsonRpcClientProvider clientProvider,
         SignalCliHostedService signalCliHostedService,
-        Config config
+        Config config,
+        TimeProvider? timeProvider = null
     )
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _clientProvider = clientProvider ?? throw new ArgumentNullException(nameof(clientProvider));
         _signalCliHostedService = signalCliHostedService ?? throw new ArgumentNullException(nameof(signalCliHostedService));
         _config = config ?? throw new ArgumentNullException(nameof(config));
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     /// <summary>
@@ -85,8 +95,10 @@ public sealed class SignalCliHealthMonitor : IHostedService, IDisposable
         {
             try
             {
-                // Чекаємо інтервал моніторингу (з Config)
-                await Task.Delay(TimeSpan.FromSeconds(_config.HealthCheckIntervalSeconds), ct).ConfigureAwait(false);
+                // Чекаємо інтервал моніторингу (з Config) через TimeProvider —
+                // дозволяє тестам використовувати FakeTimeProvider замість реальних секунд.
+                await Task.Delay(TimeSpan.FromSeconds(_config.HealthCheckIntervalSeconds),
+                    _timeProvider, ct).ConfigureAwait(false);
 
                 // "Пінгуємо"
                 var isHealthy = await PingCliAsync(
@@ -133,9 +145,11 @@ public sealed class SignalCliHealthMonitor : IHostedService, IDisposable
                 return false;
             }
 
-            // Створюємо локальний CancellationToken на випадок таймауту
-            using var localCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            localCts.CancelAfter(timeout);
+            // G.14: таймаут пінга — через _timeProvider, щоб FakeTimeProvider у тестах
+            // міг віртуально провернути час. CancellationTokenSource(TimeSpan, TimeProvider)
+            // створює auto-cancel CTS на віртуальному годиннику; лінкуємо з caller-токеном.
+            using var timeoutCts = new CancellationTokenSource(timeout, _timeProvider);
+            using var localCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
 
             // Отримуємо готовий клієнт
             var client = _clientProvider.Client;

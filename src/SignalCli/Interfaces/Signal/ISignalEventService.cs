@@ -92,4 +92,23 @@ public interface ISignalEventService : IHostedService
     /// Містить події синхронізації між пристроями користувача.
     /// </remarks>
     IObservable<SyncEventArgs> Syncs { get; }
+
+    /// <summary>
+    /// Потік повідомлень-цитат (DataMessage містить лише <see cref="Models.Signal.JsonQuote"/>
+    /// без власного тексту, реакції, стікера чи вкладень).
+    /// </summary>
+    /// <remarks>F13: раніше такі повідомлення дропалися як "unknown".</remarks>
+    IObservable<QuoteEventArgs> Quotes { get; }
+
+    /// <summary>
+    /// Потік подій редагування — відправник змінив раніше надіслане повідомлення.
+    /// </summary>
+    /// <remarks>F13: новий потік для envelope.EditMessage.</remarks>
+    IObservable<EditEventArgs> Edits { get; }
+
+    /// <summary>
+    /// Потік подій віддаленого видалення повідомлень.
+    /// </summary>
+    /// <remarks>F13: новий потік для DataMessage.RemoteDelete.</remarks>
+    IObservable<RemoteDeleteEventArgs> RemoteDeletes { get; }
 }

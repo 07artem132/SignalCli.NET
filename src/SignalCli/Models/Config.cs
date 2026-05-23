@@ -60,32 +60,64 @@ public class Config
     public int StopTimeoutSeconds { get; set; } = 2;
 
     /// <summary>
+    /// Максимальний час очікування на відповідь JSON-RPC запиту (у секундах).
+    /// </summary>
+    /// <remarks>
+    /// Кожен запит обмежується цим таймаутом; за його перевищення таск
+    /// фолтиться <see cref="TimeoutException"/>, що відрізняється від
+    /// <see cref="OperationCanceledException"/> ініційованого викликачем.
+    /// За замовчуванням 30 с.
+    /// </remarks>
+    public int RequestTimeoutSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// Вікно стабільності, після якого лічильник перезапусків скидається в 0 (у секундах).
+    /// </summary>
+    /// <remarks>
+    /// Якщо процес залишається у стані Running протягом цього інтервалу,
+    /// "бюджет" перезапусків (<see cref="MaxRestartAttempts"/>) відновлюється
+    /// — щоб поодинокі транзитивні збої за тривалу роботу не вимикали авто-рестарт назавжди.
+    /// За замовчуванням 60 с.
+    /// </remarks>
+    public int RestartWindowSeconds { get; set; } = 60;
+
+    /// <summary>
     /// Головна директорія програми.
     /// </summary>
     /// <remarks>
     /// Директорія, де розташовані піддиректорії /config, /log, /lib та інші.
     /// </remarks>
-    public string AppHome { get; set; }
+    public required string AppHome { get; set; }
 
     /// <summary>
     /// Рівень логування для Signal CLI.
     /// </summary>
     public CliLogLevel CliLogLevelCli { get; set; } = CliLogLevel.Info;
-    
+
     /// <summary>
     /// Шлях до файлу логу Signal CLI.
     /// </summary>
-    public string LogFileCli { get; set; } = $"{AppDomain.CurrentDomain.BaseDirectory}/signal.log";
-    
+    /// <remarks>
+    /// За замовчуванням (через <see cref="CreateDefault"/>) обчислюється
+    /// як <c>Path.Combine(AppHome, "signal.log")</c> — змінення <see cref="AppHome"/>
+    /// автоматично переносить лог-файл.
+    /// </remarks>
+    public string? LogFileCli { get; set; }
+
     /// <summary>
     /// Шлях до директорії з даними Signal CLI.
     /// </summary>
-    public string StoragePathCli { get; set; } = $"{AppDomain.CurrentDomain.BaseDirectory}/SignalCliStorageData";
+    /// <remarks>
+    /// За замовчуванням (через <see cref="CreateDefault"/>) обчислюється
+    /// як <c>Path.Combine(AppHome, "SignalCliStorageData")</c> — змінення
+    /// <see cref="AppHome"/> автоматично переносить сховище даних.
+    /// </remarks>
+    public string? StoragePathCli { get; set; }
 
     /// <summary>
     /// Шлях до виконуваного файлу Java.
     /// </summary>
-    public string JavaExecutable { get; set; }
+    public required string JavaExecutable { get; set; }
 
     /// <summary>
     /// Шлях до нативного (GraalVM) виконуваного файлу signal-cli.
@@ -100,7 +132,7 @@ public class Config
     /// <summary>
     /// Піддиректорія з JAR-файлами Signal CLI.
     /// </summary>
-    public string LibDirectory { get; set; }
+    public required string LibDirectory { get; set; }
 
     /// <summary>
     /// Змінні середовища для процесу Signal CLI.
@@ -129,8 +161,16 @@ public class Config
         var signalCliArgs = new List<string>();
         if (!string.IsNullOrEmpty(logLevelArg))
             signalCliArgs.Add(logLevelArg);
-        signalCliArgs.Add($"--log-file={LogFileCli}");
-        signalCliArgs.Add($"--config={StoragePathCli}");
+        // F11: якщо користувач не задав свої шляхи — обчислюємо від AppHome,
+        // щоб зміна AppHome завжди мала ефект (не лишався baseDirectory часів CreateDefault).
+        var logFile = string.IsNullOrEmpty(LogFileCli)
+            ? Path.Combine(AppHome, "signal.log")
+            : LogFileCli;
+        var storagePath = string.IsNullOrEmpty(StoragePathCli)
+            ? Path.Combine(AppHome, "SignalCliStorageData")
+            : StoragePathCli;
+        signalCliArgs.Add($"--log-file={logFile}");
+        signalCliArgs.Add($"--config={storagePath}");
         signalCliArgs.Add("jsonRpc");
         signalCliArgs.Add(receiveModeArg);
 

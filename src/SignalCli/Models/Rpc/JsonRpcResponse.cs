@@ -18,7 +18,7 @@ public record JsonRpcResponse
     /// </summary>
     /// <value>Зазвичай "2.0" для JSON-RPC 2.0.</value>
     [JsonPropertyName("jsonrpc")]
-    public string JsonRpc { get; init; }
+    public string? JsonRpc { get; init; }
 
     /// <summary>
     /// Результат виконання методу.
@@ -38,7 +38,7 @@ public record JsonRpcResponse
     /// Має значення null при успішному виконанні методу.
     /// </remarks>
     [JsonPropertyName("error")]
-    public JsonRpcError Error { get; init; }
+    public JsonRpcError? Error { get; init; }
 
     /// <summary>
     /// Ідентифікатор запиту, на який надається відповідь.
@@ -47,7 +47,7 @@ public record JsonRpcResponse
     /// Співпадає з ідентифікатором у відповідному запиті.
     /// </remarks>
     [JsonPropertyName("id")]
-    public string Id { get; init; }
+    public string? Id { get; init; }
 }
 
 /// <summary>
@@ -65,7 +65,7 @@ public record JsonRpcResponse<T>
     /// Версія протоколу JSON-RPC.
     /// </summary>
     [JsonPropertyName("jsonrpc")]
-    public string JsonRpc { get; init; }
+    public string? JsonRpc { get; init; }
 
     /// <summary>
     /// Результат виконання методу вказаного типу.
@@ -77,11 +77,11 @@ public record JsonRpcResponse<T>
     /// Інформація про помилку, якщо вона сталася.
     /// </summary>
     [JsonPropertyName("error")]
-    public JsonRpcError Error { get; init; }
+    public JsonRpcError? Error { get; init; }
 
     /// <summary>
     /// Ідентифікатор запиту, на який надається відповідь.
     /// </summary>
     [JsonPropertyName("id")]
-    public string Id { get; init; }
+    public string? Id { get; init; }
 }

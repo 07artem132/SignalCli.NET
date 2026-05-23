@@ -368,3 +368,6 @@ FodyWeavers.xsd
 /CaptainDocker.Entities.DockerRegistry.json
 /CaptainDocker.Entities.Project.json
 /src/SignalCli/signal-cli/*
+
+# Локальні налаштування Claude Code — не комітимо
+.claude/settings.local.json

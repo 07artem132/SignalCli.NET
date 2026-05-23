@@ -9,7 +9,7 @@ using SignalCli.Services.SignalCli;
 namespace SignalCli.Tests.SignalCliHostedService;
 
 /// <summary>
-/// Базовый класс для тестов SignalCliHostedService, содержащий общую инфраструктуру
+/// Базовий клас для тестів SignalCliHostedService — спільна тестова інфраструктура.
 /// </summary>
 public abstract class SignalCliHostedServiceTestsBase : IDisposable
 {
@@ -32,7 +32,7 @@ public abstract class SignalCliHostedServiceTestsBase : IDisposable
         var loggerSm = new Mock<ILogger<ProcessStateManager>>();
         StateManager = new ProcessStateManager(loggerSm.Object);
 
-        // Создание временной директории для тестов
+        // Створення тимчасової директорії для тестів
         TempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(TempDir);
         
@@ -139,7 +139,7 @@ public abstract class SignalCliHostedServiceTestsBase : IDisposable
         }
         catch (Exception)
         {
-            // Игнорируем ошибки при очистке в тестах
+            // Ігноруємо помилки під час очищення у тестах
         }
     }
 }
