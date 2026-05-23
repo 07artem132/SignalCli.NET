@@ -47,6 +47,8 @@ Grouped by capability (each is a separate spec under `specs/`):
 - **`aot-readiness`** — `<IsAotCompatible>true</IsAotCompatible>`; drop `Nito.AsyncEx` for `SemaphoreSlim`; drop reflection fallback in `SignalJson.Options`; `JsonSourceGenerationMode.Default` (fast-path).
 - **`test-virtualization`** — every wall-clock `Task.Delay` → `FakeTimeProvider`; reflection test helpers → `internal TestSeam`; race tests for the three new safety capabilities; `MockBehavior.Strict` by default; xUnit v2 → v3 + Microsoft.Testing.Platform.
 - **`code-hygiene`** — `SignalEventService` sealed; unused `_rpcClient` field removed; `AtomicCounter` wrap-around behavior documented or eliminated; `ValidateRecipients` single-pass; bare log-and-rethrow patterns either removed or enriched with context; `Config.BuildClasspath` caches its directory scan.
+- **`code-hygiene`** — `SignalEventService` sealed; unused `_rpcClient` field removed; `AtomicCounter` wrap-around behavior documented or eliminated; `ValidateRecipients` single-pass; bare log-and-rethrow patterns either removed or enriched with context; `Config.BuildClasspath` caches its directory scan; **input validation in `SignalDevices`/`SignalGroups`**; **empty `Dispose()` boilerplate removed from facade services**; **internal services + `StreamPair` sealed**; **README dependency table updated**; **CLAUDE.md rules 6 and 7 brought in sync with the new source-gen / SHA-pinning realities**; tasks.md test-count drift corrected.
+- **`supply-chain-hardening`** *(new)* — forward-slash MSBuild paths in `SignalCli.Native.targets` and `SignalCli.runtime.csproj` (Linux/macOS builds currently silently broken); file-marker-based `Exists()` incremental gate; single-source-of-truth SHA/version in csproj (passed as args to the download scripts); GitHub Actions pinned to commit SHAs; post-extraction integrity check for the bundled JRE; case-invariant PowerShell SHA compare; `LICENSE.txt` inline in runtime packages; Adoptium URL fallback with clear failure message.
 - **`cloud-development`** — `.claude/hooks/session-start.sh` + `.claude/settings.json` + `docs/cloud-development.md`. **Already drafted in this change.**
 
 ## Capabilities
@@ -62,7 +64,8 @@ Grouped by capability (each is a separate spec under `specs/`):
 - `high-performance-logging`: source-generated `LoggerMessage` for every services-layer log call.
 - `aot-readiness`: trim-/AOT-clean library; no reflection fallback in serialization; no `Nito.AsyncEx`.
 - `test-virtualization`: virtual-clock unit tests + xUnit v3/MTP + race-condition coverage + `Strict` mock default.
-- `code-hygiene`: sealed `SignalEventService`; unused field removed; classpath cache; single-pass enumeration; non-bare exception handling; documented or eliminated `AtomicCounter` wrap.
+- `code-hygiene`: sealed `SignalEventService`; unused field removed; classpath cache; single-pass enumeration; non-bare exception handling; documented or eliminated `AtomicCounter` wrap; input validation in `SignalDevices`/`SignalGroups`; remove no-op `Dispose` from facade services; seal internal classes + `StreamPair`; README dependency table; CLAUDE.md rule-6/rule-7 sync.
+- `supply-chain-hardening`: forward-slash MSBuild paths; marker-file `Exists()`; csproj-anchored `<…Sha256>`/`<…Version>` passed to download scripts; SHA-pinned GitHub Actions; post-extract integrity check; case-invariant SHA compare; LICENSE.txt in runtime packages; Adoptium URL fallback.
 - `cloud-development`: SessionStart hook + cloud-development.md for Claude Code on the Web.
 
 ### Modified Capabilities

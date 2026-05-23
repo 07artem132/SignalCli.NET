@@ -86,3 +86,59 @@ Every `*EventArgs` record raised by `ISignalEventService` SHALL derive from a si
 - **WHEN** the example is compiled with the same analyzer profile as the library
 - **THEN** there are zero `CA2007`, `CA2012`, `VSTHRD110`-class warnings
 - **AND** no awaitable returns are discarded
+
+### Requirement: Protocol record nullability matches the wire contract
+Public records in `Models/Signal/Envelope.cs` SHALL declare a `string` property as **non-nullable** only when signal-cli is documented (or verified) to always emit a value. Where the wire field is sometimes absent, the property SHALL be `string?`. The current mismatch in `Hangup.Type`/`Hangup.Opaque`, `Offer.Type`/`Offer.Opaque`, `Answer.Opaque`, `IceUpdate.Opaque`, and `JsonRemoteDelete.RemoteDeleteId` (non-nullable, but consumed without checking) SHALL be resolved per field.
+
+#### Scenario: signal-cli omits an "always-present" field
+- **GIVEN** a non-nullable property declared as part of the contract
+- **WHEN** signal-cli emits a payload missing that field
+- **THEN** `[JsonRequired]` causes deserialization to fail with a clear error nameing the field (so the bug is visible, not silent)
+- **AND** the broken event does NOT propagate `null` into a non-nullable consumer-visible property
+
+#### Scenario: A field documented as optional is null
+- **GIVEN** a property declared as `string?` (matching wire optionality)
+- **WHEN** signal-cli omits the field
+- **THEN** deserialization succeeds with `null`
+- **AND** consumers receive the event with the property set to `null`
+
+### Requirement: Argument validation distinguishes null from empty
+Public constructors and methods that accept a required `string` SHALL distinguish "null" from "empty" in the thrown exception type. `ArgumentNullException` SHALL be thrown only for `null`; `ArgumentException` (or `ArgumentException.ThrowIfNullOrEmpty` on .NET 8+) SHALL be thrown for empty/whitespace.
+
+#### Scenario: Empty phone number to UserRecipient
+- **WHEN** `new UserRecipient("")` is constructed
+- **THEN** the call throws `ArgumentException` (not `ArgumentNullException`)
+- **AND** the XML-doc matches the actual exception type
+
+### Requirement: BaseSignalEventArgs.Account is non-nullable
+`BaseSignalEventArgs.Account` SHALL be `string` (non-nullable). At dispatch time the account is always resolved from the subscription id before the event is constructed; consumers should not be forced to null-check it.
+
+#### Scenario: Subscriber reads Account
+- **WHEN** a subscriber processes any `*EventArgs`
+- **THEN** `evt.Account` is non-null
+- **AND** no analyzer warns about a possible null dereference
+
+### Requirement: Response collections are wrappers, not List<T>-derived
+`ListAccountsResponse` and `ListGroupsResponse` SHALL be wrapper records exposing an `IReadOnlyList<T>` property, not classes that inherit from `List<T>` (Microsoft `CA1010` — *do not inherit from List<T>* in the public surface). The on-the-wire JSON SHALL still be a JSON array; achieved via `[JsonConverter]` on the wrapper or via a positional record param typed as `IReadOnlyList<T>`.
+
+#### Scenario: Wire format unchanged
+- **GIVEN** the same signal-cli response JSON array
+- **WHEN** deserialized in v3
+- **THEN** the result is a wrapper whose `.Accounts`/`.Groups` property is a non-null list
+- **AND** the wire array length matches the property's `Count`
+
+### Requirement: JsonRpcException follows CA1032
+`JsonRpcException` SHALL provide the three standard exception constructors (`()`, `(string)`, `(string, Exception)`) in addition to the existing `(JsonRpcError)` constructor (Microsoft `CA1032` — *Implement standard exception constructors*).
+
+#### Scenario: Default-constructed exception
+- **WHEN** `throw new JsonRpcException()` runs
+- **THEN** the exception's `Message` is the default localized message
+- **AND** `Error` is null or a default-coded JsonRpcError
+
+### Requirement: Unused JSON-RPC error code path is removed
+The currently-unused `JsonRpcException(string, Exception?)` constructor (which fabricates an error with non-standard code `-32000`) SHALL be removed. If a future call site needs to throw with a custom code, it SHALL pass a fully-formed `JsonRpcError` to the existing primary constructor. JSON-RPC 2.0's "Internal error" canonical code is `-32603`; the spec disallows ad-hoc `-32000` for the internal-error semantic.
+
+#### Scenario: Static analysis catches removed ctor's callers
+- **WHEN** the build runs after the constructor's removal
+- **THEN** every call site that referenced `new JsonRpcException(string, Exception)` produces CS1739/CS1503 errors
+- **AND** the contributor migrates to the primary constructor

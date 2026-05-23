@@ -59,3 +59,73 @@ The per-request id allocation SHALL be the single int-to-string conversion (alre
 - **GIVEN** a tr-TR culture is active
 - **WHEN** an integer id is converted to a string
 - **THEN** the result is the same ASCII digits as in en-US (so omitting `InvariantCulture` is safe here)
+
+### Requirement: Public surface inputs are validated at the boundary
+`SignalDevices.FinishLinkAsync(deviceLinkUri, deviceName, ct)` and `SignalGroups.ListGroupsAsync(account, ct)` SHALL validate their string inputs via `ArgumentException.ThrowIfNullOrEmpty(...)` (.NET 8+) before the RPC fires. Passing `null` or `""` SHALL produce an `ArgumentException` with the correct `paramName`, not a 400-class error from signal-cli.
+
+#### Scenario: Empty account is rejected before any RPC
+- **WHEN** `signalGroups.ListGroupsAsync("")` is called
+- **THEN** the method throws `ArgumentException` with `paramName = "account"`
+- **AND** no `listGroups` RPC is sent
+
+### Requirement: Facade services do not implement IDisposable for empty bodies
+`SignalAccounts`, `SignalDevices`, `SignalGroups`, and `SignalMessage` SHALL NOT implement `IDisposable` while their `Dispose` body is empty/no-op. These classes do not own disposable resources — declaring `IDisposable` only causes the DI container to invoke a useless `Dispose` and misleads readers about what the class owns.
+
+#### Scenario: DI shuts down
+- **WHEN** the DI container disposes the root scope
+- **THEN** none of the facade services is invoked through `IDisposable.Dispose`
+- **AND** no behavioral regression occurs (current Dispose body is empty)
+
+### Requirement: SignalDevices logs entry-level operations for consistency
+`SignalDevices.StartLinkAsync` and `SignalDevices.FinishLinkAsync` SHALL log a `Debug`-level entry message (e.g. "Запуск процесу зв'язування пристрою") symmetric to `SignalAccounts.ListAccounts` / `SignalGroups.ListGroups`. Behavioral logging coverage SHALL be consistent across all facade services.
+
+#### Scenario: Trace correlates calls across facades
+- **WHEN** a contributor traces an operation through the log
+- **THEN** every facade call has a `Debug` entry record naming the method
+- **AND** `SignalDevices` produces those records on the same conditions as the other facades
+
+### Requirement: Internal classes that are not extension points are sealed
+`ProcessWrapper`, `ProcessFactory`, `JsonRpcClientFactory`, `SignalAccounts`, `SignalDevices`, `SignalGroups`, and the now-internal `SignalEventService` SHALL be declared `sealed`. Inheritance is not a supported extension scenario for any of them.
+
+#### Scenario: Build catches accidental inheritance
+- **WHEN** a contributor attempts to subclass any of these types
+- **THEN** the compiler reports CS0509
+
+### Requirement: StreamPair is sealed and Dispose is idempotent
+`StreamPair` (public type) SHALL be `sealed` and its `Dispose()` SHALL be guarded against repeated invocation. Repeated `Dispose` SHALL be a no-op; this is defense in depth on top of `StreamWriter`/`StreamReader`'s own idempotency, against accidental ownership confusion between `StreamPair` and the `Process` that owns the underlying streams.
+
+#### Scenario: Dispose called twice
+- **GIVEN** a `StreamPair` whose `Dispose()` has already run
+- **WHEN** `Dispose()` is called again
+- **THEN** the second call is a no-op (no exception, no `Stream.Dispose` invocation)
+
+### Requirement: README dependency table is accurate
+The dependency table in `README.md` SHALL list every `PackageReference` from `src/SignalCli/SignalCli.csproj`. Adding/removing a public dependency SHALL be paired with a README update. `JetBrains.Annotations` (currently missing) SHALL be added on this pass.
+
+#### Scenario: New dependency added to csproj
+- **WHEN** a contributor adds a `PackageReference` to `src/SignalCli/SignalCli.csproj`
+- **THEN** the same PR updates the README dependency table
+- **AND** code review confirms the table is in sync
+
+### Requirement: CLAUDE.md rule 6 is updated to reflect source-gen-only serialization
+After `aot-readiness` removes the reflection fallback from `SignalJson.Options`, the corresponding sentence in `CLAUDE.md` rule 6 SHALL be updated to remove the phrase "(which combines the source-gen resolver with a reflection fallback)". The rule SHALL instead state that every serializable type MUST be in `SignalJsonContext` and that there is no runtime fallback.
+
+#### Scenario: New contributor reads CLAUDE.md after the change
+- **WHEN** they look up serialization conventions
+- **THEN** the doc accurately states "source-generated context only — no reflection fallback at runtime"
+- **AND** they understand they must register new types in the context
+
+### Requirement: CLAUDE.md rule 7 is updated for csproj-anchored SHA pinning
+After `supply-chain-hardening` moves SHA pinning into csproj `<…Sha256>` properties (passed to the download scripts as arguments), the corresponding sentence in `CLAUDE.md` rule 7 SHALL be updated. The rule SHALL state that the canonical version/hash live in the csproj and that the scripts validate against the passed parameter (so a single-place edit suffices).
+
+#### Scenario: Contributor bumps signal-cli version
+- **WHEN** they edit `<SignalCliVersion>` and `<SignalCliSha256>` in the csproj
+- **THEN** CLAUDE.md tells them this is the only edit required (scripts read the values as arguments)
+- **AND** the previous "update both .ps1 and .sh" guidance is removed
+
+### Requirement: tasks.md counter reflects current test count
+The task that reads "152 tests pass" SHALL be updated to the actual current count (173 at the time of this audit) so future contributors do not chase a phantom regression.
+
+#### Scenario: Contributor runs the test suite
+- **WHEN** they consult `tasks.md` for the expected count
+- **THEN** the number matches what `dotnet test` actually reports today (modulo any new tests added by the change itself)

@@ -223,6 +223,26 @@ Plus `[Range]`/`[Required]` annotations on every `Config` field; full `init`-onl
 - Audit `catch (Exception ex) { _logger.LogError(...); throw; }` sites — delete (caller logs) or enrich (method/account context).
 - `Config.BuildClasspath` caches `Directory.GetFiles` result.
 
+### 12. `supply-chain-hardening`
+
+**Problem (Audit N1-N2, N6-N7, N11-N12, N19-N20):** the `runtime*` MSBuild surface has correctness bugs on non-Windows; supply-chain pinning is spread across .ps1/.sh hard-coded constants with no MSBuild-property anchor; CI pins community actions to moving tags; downloaded JREs are not integrity-checked post-extraction.
+
+**Approach (consistent with CLAUDE.md rule 7, expanded):**
+
+- **Forward slashes everywhere in MSBuild.** `SignalCli.Native.targets` Include glob, Copy destination template, and the `Exists()` gate in `SignalCli.runtime.csproj` switch to `/`. On Linux MSBuild interprets `\` as a literal — meaning `Exists('…\bin')` is always false (re-downloads every build) and `Include='…\**\*'` matches nothing (native binary never delivered). Forward slashes work uniformly on every OS.
+- **Marker-file `Exists()`.** Key the incremental gate on the actual extracted binary (`bin/signal-cli` / `bin/java`), not a directory that a partial download leaves behind.
+- **csproj is the single source of truth for pinning.** Add `<SignalCliVersion>`, `<SignalCliSha256>`, `<JreVersion>`, `<JreSha256>` to the relevant csproj-и; pass via `-Sha256 $(…)` to the download scripts; scripts validate but no longer hard-code. CLAUDE.md rule 7 ("update the hash in **both** the .ps1 and .sh") is rewritten in this change to reflect the new flow (single edit in csproj). This does **not** weaken integrity — the SHA validation in scripts remains; only the source-of-truth location moves.
+- **GitHub Actions to commit SHAs.** Per *Security hardening for GitHub Actions — Using third-party actions*: tag movement (whether innocent re-tag or compromise) cannot change CI behavior. First-party `actions/*` SHOULD also pin where reproducibility matters.
+- **Post-extract integrity check.** After `<Unzip>`, fail loudly if `bin/java[.exe]` is missing. This is defense in depth on top of the download-time SHA pin.
+- **Case-invariant PowerShell SHA compare.** Both sides `.ToLowerInvariant()` so an uppercase SHA in csproj doesn't false-negative against lowercase `Get-FileHash` output.
+- **LICENSE.txt inline.** Pack `LICENSE.txt` into the .nupkg root (NuGet 5.10+ recommendation).
+- **Adoptium URL fallback.** Document the assumed URL pattern in a script comment; on 404, fail with a message that names the URL tried and the env-var to override.
+
+**Non-regression notes:**
+
+- N6 changes the location of SHA truth from script to csproj, **not** the SHA-verification policy. The scripts still verify and fail before extraction. CLAUDE.md rule 7's intent ("don't ship unverified payloads") is preserved; only the "update in two places" mechanics changes.
+- N1/N2 fix bugs that prevent the native-runtime package from working on Linux. There is no working baseline to regress against.
+
 ## Severity rubric
 
 Inherited from `comprehensive-code-audit`:

@@ -47,6 +47,12 @@
 - [ ] 4.14 (D12) `JetBrains.Annotations` → `PrivateAssets="all"` in `SignalCli.csproj`
 - [ ] 4.15 (D9) Builders' `Build()` adds final guard (defensive, post-mutation)
 - [ ] 4.16 `Version` 2.0.0 → 3.0.0 in `SignalCli.csproj` (semver-major for the breaks); CHANGELOG entry under "## [3.0.0]"
+- [ ] 4.17 (N3) `Models/Signal/Envelope.cs` — audit each non-nullable `string` field against signal-cli wire contract; mark `[JsonRequired]` where always-present (`Hangup.Type`, `Offer.Type`/`Offer.Opaque`, `Answer.Opaque`, `IceUpdate.Opaque`, `JsonRemoteDelete.RemoteDeleteId`), make `string?` otherwise. No silent `null`-into-non-nullable.
+- [ ] 4.18 (N4) `UserRecipient`/`GroupRecipient` ctors — replace `ArgumentNullException` with `ArgumentException.ThrowIfNullOrEmpty(...)` (.NET 8+); update XML-doc `<exception>` to match
+- [ ] 4.19 (N9) `BaseSignalEventArgs.Account` → non-nullable `string`; same for the derived `*EventArgs` records' inherited `Account` slot; propagate non-null through `SignalEventService.OnNotificationReceived`
+- [ ] 4.20 (N10) `ListAccountsResponse` and `ListGroupsResponse` — turn into wrapper records (`(IReadOnlyList<T> Items)`) with a `[JsonConverter]` (or positional record param typed as the collection) that preserves the wire JSON array shape
+- [ ] 4.21 (N14) `JsonRpcException` — add `()`, `(string)`, `(string, Exception)` ctors (CA1032). Default the `Error` to a sentinel `JsonRpcError` (code 0, "no error info") for the parameterless ctor
+- [ ] 4.22 (N15) Delete the unused `JsonRpcException(string, Exception?)` ctor that fabricated code `-32000`. Verified zero call sites in src (`grep` confirms only `new JsonRpcException(response.Error)` is used at `JsonRpcClient.cs:369`). No replacement needed; CA1032 ctors from §4.21 cover the API-design hole
 
 ## 5. High-performance logging (capability `high-performance-logging`)
 
@@ -72,6 +78,8 @@
 - [ ] 6.7 (P6) `<IsAotCompatible>true</IsAotCompatible>` in `SignalCli.csproj`
 - [ ] 6.8 (P6) Resolve any IL2026/IL2104 warnings surfaced by the AOT analyzer (annotate with `RequiresUnreferencedCode` only as last resort)
 - [ ] 6.9 (P6) `dotnet publish -c Release /p:PublishAot=true` from a probe app succeeds (smoke test only, not added to CI yet)
+- [ ] 6.10 Migrate anonymous-type test usages off the (now-removed) reflection fallback: `JsonRpcClientTests.cs:106,128,150,174` and `JsonSerializationTests.cs:20` — pick Option A (concrete DTO registered in `SignalJsonContext`) or Option B (`SignalJson.OptionsForTests` exposed via `[InternalsVisibleTo]` with `DefaultJsonTypeInfoResolver`). Production options stay source-gen-only.
+- [ ] 6.11 Update `CLAUDE.md` rule 6 — remove "(which combines the source-gen resolver with a reflection fallback)" and state "source-generated context only; every serializable type MUST be registered in `SignalJsonContext`"
 
 ## 7. Test virtualization (capability `test-virtualization`)
 
@@ -131,6 +139,31 @@
 - [ ] 8c.8 (C10) `Config.BuildClasspath` caches the joined classpath after the first call; cache invalidates only on `Config` mutation (which is no-op after `init`-only migration)
 - [ ] 8c.9 Test: stateful enumerator passed to `Send*Async` → enumerated exactly once
 - [ ] 8c.10 Test: classpath build called twice → `Directory.GetFiles` invoked once
+- [ ] 8c.11 (N5) `SignalDevices.FinishLinkAsync(deviceLinkUri, deviceName, ct)` and `SignalGroups.ListGroupsAsync(account, ct)` — `ArgumentException.ThrowIfNullOrEmpty(...)` on each string input at the start of the method
+- [ ] 8c.12 (N8) Remove `IDisposable` from `SignalAccounts`, `SignalDevices`, `SignalGroups`, `SignalMessage` (Dispose bodies are empty no-ops — declaring the interface only confuses DI and readers)
+- [ ] 8c.13 (N16) `SignalDevices.StartLinkAsync`/`FinishLinkAsync` — add `_logger.LogDebug(...)` entry record symmetric with `SignalAccounts.ListAccounts`/`SignalGroups.ListGroups`
+- [ ] 8c.14 (N17) Mark these classes `sealed`: `ProcessWrapper`, `ProcessFactory`, `JsonRpcClientFactory`, `SignalAccounts`, `SignalDevices`, `SignalGroups` (also `SignalEventService` per §8c.1)
+- [ ] 8c.15 (N18) `StreamPair` becomes `public sealed class`; `Dispose()` gets `if (_disposed) return; _disposed = true;` guard
+- [ ] 8c.16 (N13) `README.md` dependency table — add `JetBrains.Annotations` row (currently missing)
+- [ ] 8c.17 (N21) `tasks.md` §9.2 — replace "152" with the current actual count from `dotnet test` before this change starts (drift from earlier audit)
+- [ ] 8c.18 Update `CLAUDE.md` rule 7 — replace "If you change a pinned version, update the hash in **both** the `.ps1` and `.sh`" with "Update `<SignalCliSha256>`/`<JreSha256>` in the relevant csproj; the scripts read the value as an argument" (paired with `supply-chain-hardening` §8d.4)
+
+## 8d. Supply-chain hardening (capability `supply-chain-hardening`)
+
+- [ ] 8d.1 (N1) `src/SignalCli.runtime.native/SignalCli.Native.targets` — replace every `\` in `Include`, `DestinationFiles`, and `Exists()` with `/`
+- [ ] 8d.2 (N2) `src/SignalCli.runtime/SignalCli.runtime.csproj:25` — change `Exists('…signal-cli\bin')` to `Exists('$(BaseIntermediateOutputPath)signal-cli/bin/signal-cli')` (forward slash + marker file)
+- [ ] 8d.3 (N2) Apply the same forward-slash + marker-file pattern to `SignalCli.runtime.native.csproj`, `SignalCli.runtime.jre.win-x64.csproj`, `SignalCli.runtime.jre.osx-arm64.csproj`
+- [ ] 8d.4 (N6) Add `<SignalCliVersion>` + `<SignalCliSha256>` MSBuild properties to `SignalCli.runtime.csproj` and both JRE csproj-и; pass to `download-signal-cli.{ps1,sh}` as `-Version`/`-Sha256` arguments
+- [ ] 8d.5 (N6) Add `<JreVersion>` + `<JreSha256>` properties to both JRE csproj-и (already exist in some form per CLAUDE.md; consolidate naming)
+- [ ] 8d.6 (N6) Update `download-signal-cli.ps1` / `.sh` and `download-jre.ps1` / `.sh` to accept `-Sha256` (or `--sha256`) parameter and remove hard-coded constants
+- [ ] 8d.7 (N12) `download-jre.ps1:42-43` — both sides of comparison `.ToLowerInvariant()` (or use `-ieq`)
+- [ ] 8d.8 (N7) Pin every non-`actions/*` `uses:` in `.github/workflows/**` to a 40-char commit SHA; keep the `@v…` tag in a trailing comment for human readability
+- [ ] 8d.9 (N7) Pin first-party `actions/checkout`, `actions/setup-dotnet`, etc. to SHAs as well
+- [ ] 8d.10 (N11) `SignalCli.Jre.targets` (both platforms) — after `<Unzip>`, add `<Error Condition="!Exists('$(TargetDir)jre/bin/java...')">…</Error>` with actionable message
+- [ ] 8d.11 (N19) Add `LICENSE.txt` at the root of each runtime project; `<None Include="LICENSE.txt" Pack="true" PackagePath="" />` in csproj
+- [ ] 8d.12 (N20) `src/build/download-jre.{ps1,sh}` — comment documenting the Adoptium URL pattern; clear error message on 404 naming the URL and env-var override
+- [ ] 8d.13 Test/CI smoke: `dotnet build SignalCli.sln` on Linux delivers `signal-cli-native/signal-cli` into the consumer `TargetDir` (regression catch for N1)
+- [ ] 8d.14 Test: corrupted `obj/jre` (delete `bin/java`) triggers the post-extract guard with the documented message
 
 ## 9. Synthesis & validation
 
