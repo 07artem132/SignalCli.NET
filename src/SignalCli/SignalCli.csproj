@@ -44,6 +44,14 @@
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
             <_Parameter1>DynamicProxyGenAssembly2</_Parameter1>
         </AssemblyAttribute>
+
+        <!-- post-modernize-tuning §11.C.4 (audit N3): окремий пакет HealthChecks
+             читає ProcessStateManager.CurrentState (public) і SignalCliHealthMonitor.LastPingResult
+             (internal — нова властивість у §11.C.2). InternalsVisibleTo тримає health-checks
+             залежність опціональною: core lib не тягне Microsoft.Extensions.Diagnostics.HealthChecks. -->
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+            <_Parameter1>SignalCli.HealthChecks</_Parameter1>
+        </AssemblyAttribute>
     </ItemGroup>
 
     <ItemGroup>

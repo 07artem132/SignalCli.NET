@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>$(NoWarn)</NoWarn>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+
+        <Authors>07artem132</Authors>
+        <PackageId>SignalCli.NET.HealthChecks</PackageId>
+        <Version>3.0.0</Version>
+        <AssemblyVersion>3.0.0</AssemblyVersion>
+        <FileVersion>3.0.0</FileVersion>
+        <PackageProjectUrl>https://github.com/07artem132/SignalCli.NET</PackageProjectUrl>
+        <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
+        <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+        <RepositoryUrl>https://github.com/07artem132/SignalCli.NET</RepositoryUrl>
+        <Description>IHealthCheck adapter for SignalCli.NET — exposes signal-cli process state to ASP.NET Core / generic-host /healthz endpoints via Microsoft.Extensions.Diagnostics.HealthChecks.</Description>
+        <PackageTags>signal;signal-cli;healthcheck;observability;asp-net-core</PackageTags>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- post-modernize-tuning §11.C (audit N3): SignalCli.NET.HealthChecks
+             ходить окремим пакетом, щоб не змушувати core lib тягнути HealthChecks-залежність. -->
+        <!-- IHealthCheck/HealthCheckResult — в Abstractions; IHealthChecksBuilder
+             + AddCheck<T>() extension — в HealthChecks (повний пакет). Беремо обидва. -->
+        <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0"/>
+        <ProjectReference Include="..\SignalCli\SignalCli.csproj"/>
+    </ItemGroup>
+
+</Project>

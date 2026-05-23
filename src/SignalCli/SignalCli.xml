@@ -1769,6 +1769,7 @@
             Інкапсулює стандартні потоки (stdin, stdout, stderr) для взаємодії
             з зовнішнім процесом. Реалізує <see cref="T:System.IDisposable"/> для
             коректного звільнення ресурсів.
+            post-modernize-tuning §8c.15 (audit N18): sealed — інхеріт не є точкою розширення.
             </remarks>
         </member>
         <member name="M:SignalCli.Models.SignalCli.StreamPair.#ctor(System.IO.StreamWriter,System.IO.StreamReader,System.IO.StreamReader)">
@@ -1801,6 +1802,7 @@
             </summary>
             <remarks>
             Закриває всі три потоки: StandardInput, StandardOutput та StandardError.
+            Повторні виклики — no-op (§8c.15 guard через Interlocked.Exchange).
             </remarks>
         </member>
         <member name="T:SignalCli.Models.SignalCli.VersionParameters">
@@ -5002,6 +5004,15 @@
             .NET-патерн для періодичних воркерів. <c>FakeTimeProvider</c> у тестах крутить
             тики без реального wall-clock.
             </remarks>
+        </member>
+        <member name="P:SignalCli.Services.SignalCli.SignalCliHealthMonitor.LastPingResult">
+            <summary>
+            post-modernize-tuning §11.C.2 (audit N3): останній результат пінга — споживається
+            з пакета <c>SignalCli.NET.HealthChecks</c> через <c>InternalsVisibleTo</c>.
+            <c>null</c> якщо пінг ще не виконувався (наприклад, одразу після старту хоста).
+            Тег <c>Ok</c> = true, якщо CLI відповів вчасно з не-порожньою версією; <c>At</c> — час
+            у UTC, отриманий через <see cref="M:System.TimeProvider.GetUtcNow"/> (підтримує FakeTimeProvider у тестах).
+            </summary>
         </member>
         <member name="M:SignalCli.Services.SignalCli.SignalCliHealthMonitor.#ctor(Microsoft.Extensions.Logging.ILogger{SignalCli.Services.SignalCli.SignalCliHealthMonitor},SignalCli.Interfaces.Rpc.IJsonRpcClientProvider,SignalCli.Services.SignalCli.SignalCliHostedService,Microsoft.Extensions.Options.IOptions{SignalCli.Models.SignalCliOptions},System.TimeProvider)">
             <summary>

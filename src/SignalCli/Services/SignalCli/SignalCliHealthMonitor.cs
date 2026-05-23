@@ -32,6 +32,15 @@ public sealed class SignalCliHealthMonitor : BackgroundService
     private readonly TimeProvider _timeProvider;
 
     /// <summary>
+    /// post-modernize-tuning §11.C.2 (audit N3): останній результат пінга — споживається
+    /// з пакета <c>SignalCli.NET.HealthChecks</c> через <c>InternalsVisibleTo</c>.
+    /// <c>null</c> якщо пінг ще не виконувався (наприклад, одразу після старту хоста).
+    /// Тег <c>Ok</c> = true, якщо CLI відповів вчасно з не-порожньою версією; <c>At</c> — час
+    /// у UTC, отриманий через <see cref="TimeProvider.GetUtcNow"/> (підтримує FakeTimeProvider у тестах).
+    /// </summary>
+    internal (bool Ok, DateTimeOffset At)? LastPingResult { get; private set; }
+
+    /// <summary>
     /// Створює новий екземпляр монітора здоров'я Signal CLI.
     /// </summary>
     /// <param name="logger">Логер для запису діагностичної інформації.</param>
@@ -161,6 +170,7 @@ public sealed class SignalCliHealthMonitor : BackgroundService
             {
                 SignalCliHealthMonitorLog.PingNoStreamPair(_logger);
                 activity?.SetTag("signal.healthcheck.outcome", "no_stream_pair");
+                LastPingResult = (false, _timeProvider.GetUtcNow());
                 return false;
             }
 
@@ -182,11 +192,13 @@ public sealed class SignalCliHealthMonitor : BackgroundService
             if (string.IsNullOrEmpty(response.Version))
             {
                 activity?.SetTag("signal.healthcheck.outcome", "failed");
+                LastPingResult = (false, _timeProvider.GetUtcNow());
                 return false;
             }
             SignalCliHealthMonitorLog.PingOk(_logger, response.Version);
             activity?.SetTag("signal.healthcheck.outcome", "ok");
             activity?.SetStatus(ActivityStatusCode.Ok);
+            LastPingResult = (true, _timeProvider.GetUtcNow());
             return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -194,6 +206,7 @@ public sealed class SignalCliHealthMonitor : BackgroundService
             SignalCliHealthMonitorLog.PingFailed(_logger, ex);
             activity?.SetTag("signal.healthcheck.outcome", "failed");
             activity?.SetStatus(ActivityStatusCode.Error, ex.GetType().Name);
+            LastPingResult = (false, _timeProvider.GetUtcNow());
             return false;
         }
         catch (OperationCanceledException ex)
@@ -201,6 +214,7 @@ public sealed class SignalCliHealthMonitor : BackgroundService
             SignalCliHealthMonitorLog.PingTimedOut(_logger, ex);
             activity?.SetTag("signal.healthcheck.outcome", "timeout");
             activity?.SetStatus(ActivityStatusCode.Error, nameof(TimeoutException));
+            LastPingResult = (false, _timeProvider.GetUtcNow());
             return false;
         }
     }

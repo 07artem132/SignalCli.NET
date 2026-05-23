@@ -24,6 +24,8 @@
 
     <ItemGroup>
       <ProjectReference Include="..\..\src\SignalCli\SignalCli.csproj" />
+      <!-- post-modernize-tuning §11.C.6: тестуємо HealthChecks-адаптер як справжній consumer -->
+      <ProjectReference Include="..\..\src\SignalCli.HealthChecks\SignalCli.HealthChecks.csproj" />
     </ItemGroup>
 
 </Project>

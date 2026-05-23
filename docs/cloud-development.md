@@ -81,6 +81,25 @@ services.AddOpenTelemetry()
 
 **Privacy invariant.** Значення тегів — лише method-names, status-енами, integer-id, durations, exception-type-names. Тіло повідомлення, номер телефону, шлях до файлу вкладення в тегах **відсутні** — це CLAUDE.md rule #1, поширений на observability-поверхні (див. також `specs/observability/spec.md` у відповідній OpenSpec-зміні).
 
+### Health check (опціональний пакет)
+
+Окремий пакет `SignalCli.NET.HealthChecks` дає `IHealthCheck`-адаптер для signal-cli process state. Залежність — лише `Microsoft.Extensions.Diagnostics.HealthChecks` (це generic-host пакет, **не ASP.NET**). Адаптер працює у будь-якому застосунку з `IHost` — console worker, daemon, ASP.NET Core:
+
+```csharp
+builder.Services.AddSignalCli(opts => { /* ... */ });
+builder.Services.AddHealthChecks().AddSignalCliHealthCheck();
+
+// Якщо у вас ASP.NET — додайте Microsoft.AspNetCore.Diagnostics.HealthChecks
+// і виставте endpoint:
+app.MapHealthChecks("/healthz");
+
+// Якщо у вас generic-host (worker) — викликайте напряму:
+var hc = host.Services.GetRequiredService<HealthCheckService>();
+var report = await hc.CheckHealthAsync();
+```
+
+Адаптер мапить `ProcessState` на `HealthStatus`: `Running` + успішний останній ping → `Healthy`; `Running` без ping → `Degraded`; `Starting`/`Stopping`/`NotStarted` → `Degraded`; `Failed`/`Stopped` → `Unhealthy` (або те, що consumer задав через `failureStatus`). Data-bag містить лише `state`, `last_ping_ok`, `last_ping_at` — без PII.
+
 ## Локальна розробка
 
 Hook не активується локально (умова `CLAUDE_CODE_REMOTE=true`). Ставте dotnet звичним для вас способом ([офіційні інструкції](https://learn.microsoft.com/dotnet/core/install/)) і виконуйте ті самі команди вручну.

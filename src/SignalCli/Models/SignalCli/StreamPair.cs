@@ -7,9 +7,15 @@
 /// Інкапсулює стандартні потоки (stdin, stdout, stderr) для взаємодії
 /// з зовнішнім процесом. Реалізує <see cref="IDisposable"/> для
 /// коректного звільнення ресурсів.
+/// post-modernize-tuning §8c.15 (audit N18): sealed — інхеріт не є точкою розширення.
 /// </remarks>
-public class StreamPair : IDisposable
+public sealed class StreamPair : IDisposable
 {
+    // post-modernize-tuning §8c.15: idempotent Dispose guard — захист від подвійного
+    // виклику. StreamWriter/StreamReader самі по собі ідемпотентні, але плутанина
+    // власності між StreamPair і Process (який теж тримає stream-and) може призвести
+    // до double-dispose-шляхів. Прапор робить другий Dispose() no-op-ом.
+    private int _disposedFlag;
     /// <summary>
     /// Створює новий екземпляр класу StreamPair.
     /// </summary>
@@ -44,9 +50,11 @@ public class StreamPair : IDisposable
     /// </summary>
     /// <remarks>
     /// Закриває всі три потоки: StandardInput, StandardOutput та StandardError.
+    /// Повторні виклики — no-op (§8c.15 guard через Interlocked.Exchange).
     /// </remarks>
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref _disposedFlag, 1) != 0) return;
         StandardInput.Dispose();
         StandardOutput.Dispose();
         StandardError.Dispose();

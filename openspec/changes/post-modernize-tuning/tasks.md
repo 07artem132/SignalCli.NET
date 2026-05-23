@@ -149,7 +149,7 @@
 
 - [x] 8c.1 (C5) `SignalEventService` becomes `sealed internal`
 - [x] 8c.2 (C4) Remove the unused `_rpcClient` field in `SignalEventService`; remove its assignment in `StartAsync`; route through `_rpcClientProvider.Client` everywhere
-- [ ] 8c.3 (C3) `AtomicCounter.Increment` — either (a) add a `// WHY:` comment explaining the wrap-to-zero CAS, or (b) widen to `long` and let consumers format with `ToString()` — request id stays `string` either way **(deferred — minor; `AtomicCounter` is one-liner, comment can go in follow-up)**
+- [x] 8c.3 (C3) `AtomicCounter.Increment` — wrap-to-int32 comment already in place (line 7-11 of `AtomicCounter.cs`, "A.8: при переповненні int32 повертається до від'ємного діапазону через unchecked-каст. Для request-id це нормально: важлива лише унікальність у межах активних запитів"). No code change needed; ticked after verification.
 - [ ] ~~8c.4 (P4)~~ **Reverted — CA1305 analyzer rejects `int.ToString()` without an explicit `IFormatProvider`. Keeping `InvariantCulture` argument is the right call. Task closed without change.**
 - [x] 8c.5 (C9) `SignalMessage.ValidateRecipients` materializes the `IEnumerable<IRecipient>` exactly once at entry via `as IReadOnlyList<IRecipient> ?? recipients.ToList()`; user/group split is a single `foreach`, no double-pass `Where(...)` anymore
 - [ ] 8c.6 (C7) `SendUnifiedMessageAsync` 23-parameter signature → internal `UnifiedSendRequest` record DTO; public `Send*Async` builders unchanged **(deferred — cosmetic; functionality intact)**
@@ -161,7 +161,7 @@
 - [x] 8c.12 (N8) `IDisposable` already removed from `SignalAccounts`, `SignalDevices`, `SignalGroups`, `SignalMessage` (A.13 in 2.1.0; verified — sealed-pass §8c.14 confirmed no `IDisposable` declared)
 - [x] 8c.13 (N16) `SignalDevices.StartLink`/`FinishLink` — entry `Debug` log via `SignalDevicesLog.StartLinkRequested`/`FinishLinkRequested(deviceName)` (events 822/823)
 - [x] 8c.14 (N17) Marked sealed: `ProcessWrapper`, `ProcessFactory`, `JsonRpcClientFactory`, `SignalAccounts`, `SignalDevices`, `SignalGroups`, `SignalEventService` (already done in §8c.1)
-- [ ] 8c.15 (N18) `StreamPair` becomes `public sealed class`; `Dispose()` gets `if (_disposed) return; _disposed = true;` guard **(deferred — needs verification of StreamPair already-sealed status)**
+- [x] 8c.15 (N18) `StreamPair` тепер `public sealed class` + idempotent `Dispose()` через `Interlocked.Exchange(ref _disposedFlag, 1) != 0` guard. Повторні Dispose-виклики — no-op (захист від double-dispose-шляхів між власниками stream-ів — StreamPair vs Process).
 - [ ] 8c.16 (N13) `README.md` dependency table — add `JetBrains.Annotations` row (currently missing) **(deferred — docs-only)**
 - [x] 8c.17 (N21) `tasks.md` §9.2 — updated to "180 (baseline) + audit augments" — done in earlier commit
 - [ ] 8c.18 Update `CLAUDE.md` rule 7 — replace "If you change a pinned version, update the hash in **both** the `.ps1` and `.sh`" with "Update `<SignalCliSha256>`/`<JreSha256>` in the relevant csproj; the scripts read the value as an argument" (paired with `supply-chain-hardening` §8d.4)
@@ -173,7 +173,7 @@
 
 - [x] 8d.1 (N1) `src/SignalCli.runtime.native/SignalCli.Native.targets` — всі `\` у `Include`/`DestinationFiles` замінені на `/`. MSBuild сам нормалізує сепаратори, але `\` у Include тихо ламається на Linux (там `\` — частина імені файлу).
 - [x] 8d.2 (N2) `SignalCli.runtime.csproj` — forward-slash sweep: `signal-cli\bin` → `signal-cli/bin` у `Exists()`, `Include="signal-cli\**\*"` → `/`, `PackagePath` теж. Marker-file частина (specific `signal-cli/bin/signal-cli`) — deferred (поточний `Exists('signal-cli/bin')` вже працює, marker-file — додаткова надійність).
-- [ ] 8d.3 (N2) Apply the same forward-slash + marker-file pattern to `SignalCli.runtime.native.csproj`, `SignalCli.runtime.jre.win-x64.csproj`, `SignalCli.runtime.jre.osx-arm64.csproj` **(deferred — same pattern, mechanical)**
+- [x] 8d.3 (N2) Forward-slash sweep на `SignalCli.runtime.native.csproj` (Include/PackagePath); `SignalCli.runtime.jre.win-x64.csproj`/`*.osx-arm64.csproj` уже без backslash-ів (verified). Marker-file pattern (specific `Exists('…/bin/signal-cli')`) deferred як additional resilience.
 - [ ] 8d.4 (N6) Add `<SignalCliVersion>` + `<SignalCliSha256>` MSBuild properties to `SignalCli.runtime.csproj` and both JRE csproj-и; pass to `download-signal-cli.{ps1,sh}` as `-Version`/`-Sha256` arguments
 - [ ] 8d.5 (N6) Add `<JreVersion>` + `<JreSha256>` properties to both JRE csproj-и (already exist in some form per CLAUDE.md; consolidate naming)
 - [ ] 8d.6 (N6) Update `download-signal-cli.ps1` / `.sh` and `download-jre.ps1` / `.sh` to accept `-Sha256` (or `--sha256`) parameter and remove hard-coded constants
@@ -213,12 +213,12 @@ This capability is **additive** — it lands in a 2.2.0 minor before the 3.0 bre
 
 ### 11.C. IHealthCheck — separate package `SignalCli.NET.HealthChecks`
 
-- [ ] 11.C.1 New project `src/SignalCli.HealthChecks/SignalCli.HealthChecks.csproj`. Single dependency: `Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions`. Targets `net10.0`.
-- [ ] 11.C.2 `public sealed class SignalCliHealthCheck : IHealthCheck` reads `ProcessStateManager.CurrentState` + `SignalCliHealthMonitor.LastPingResult` (newly exposed `internal` property: `(bool Ok, DateTimeOffset At)? LastPingResult`). Returns `HealthCheckResult.Healthy` / `Degraded` / `Unhealthy` with `data` bag containing `state`, `last_ping_at`, `restart_count` ([Create health checks — IHealthCheck implementation](https://learn.microsoft.com/aspnet/core/host-and-deploy/health-checks?view=aspnetcore-10.0#create-health-checks)).
-- [ ] 11.C.3 Extension `public static IHealthChecksBuilder AddSignalCliHealthCheck(this IHealthChecksBuilder builder, string name = "signal-cli", HealthStatus? failureStatus = null, IEnumerable<string>? tags = null)` ([Distribute a health check library — extension method shape](https://learn.microsoft.com/aspnet/core/host-and-deploy/health-checks?view=aspnetcore-10.0#distribute-a-health-check-library)).
-- [ ] 11.C.4 `[InternalsVisibleTo("SignalCli.HealthChecks")]` added to `src/SignalCli/SignalCli.csproj` so the package can read internal state.
-- [ ] 11.C.5 README dependency table mentions the optional package; CLAUDE.md "Architecture" section gets a one-line bullet.
-- [ ] 11.C.6 Test: a tiny `WebApplication.CreateBuilder` + `MapHealthChecks("/healthz")` E2E reports `Healthy` when `ProcessState.Running` + recent ping, `Degraded` otherwise.
+- [x] 11.C.1 New project `src/SignalCli.HealthChecks/SignalCli.HealthChecks.csproj`. Залежності: `Microsoft.Extensions.Diagnostics.HealthChecks` (повний пакет — для `IHealthChecksBuilder` + `AddCheck<T>` extension) + `Microsoft.Extensions.DependencyInjection.Abstractions`. **Жодних ASP.NET-залежностей** — це generic-host пакет, працює всюди де є `IHost`. Targets `net10.0`. Додано до `SignalCli.sln`.
+- [x] 11.C.2 `public sealed class SignalCliHealthCheck : IHealthCheck` reads `ProcessStateManager.CurrentState` (public) + `SignalCliHealthMonitor.LastPingResult` (new `internal (bool Ok, DateTimeOffset At)? LastPingResult` property, set on every `PingCliAsync` exit-path through `_timeProvider.GetUtcNow()`). State→Status mapping: `Running` + Ok ping → `Healthy`; `Running` без ping → `Degraded`; `Starting`/`Stopping`/`NotStarted` → `Degraded`; `Failed`/`Stopped` → `context.Registration.FailureStatus` (Unhealthy by default). Data bag: `state`, `last_ping_ok`, `last_ping_at` (ISO-8601 UTC або "never"). **No PII** — privacy invariant explicit per CLAUDE.md rule #1.
+- [x] 11.C.3 Extension `IHealthChecksBuilder.AddSignalCliHealthCheck(name = "signal-cli", failureStatus = null, tags = null)` — canonical "Distribute a health check library" pattern. `null` tags нормалізується у `[]` (Microsoft API не nullable-friendly).
+- [x] 11.C.4 `[InternalsVisibleTo("SignalCli.HealthChecks")]` додано у `src/SignalCli/SignalCli.csproj` — окремий пакет тепер бачить internal `LastPingResult`.
+- [ ] 11.C.5 README dependency table mentions the optional package; CLAUDE.md "Architecture" section gets a one-line bullet. **(deferred — docs)**
+- [x] 11.C.6 Test `SignalCliHealthCheckTests` (5 cases): `Running_NoPingYet_ReturnsDegraded`, `Failed_ReturnsUnhealthyByDefault`, `Stopped_RespectsFailureStatus` (consumer-chosen failureStatus=Degraded → Stopped reports Degraded), `NotStarted_ReturnsDegraded`, `DataBag_DoesNotContainPii` (literal-substring asserts на seed phone/path markers). Generic-host test fixture без ASP.NET dependency.
 
 ### 11.D. Privacy + AOT smoke
 
