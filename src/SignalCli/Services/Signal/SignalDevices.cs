@@ -18,28 +18,21 @@ internal sealed class SignalDevices(
 
     public async Task<StartLinkResponse> StartLinkAsync(CancellationToken cancellationToken = default)
     {
-        // post-modernize-tuning §8c.13 (audit N16): entry-level log symmetric з ListAccounts.
+        // post-modernize-tuning §8c.7/§8c.13 (audit C8/N16): bare-catch прибрано — ActivitySource
+        // у JsonRpcClient (§11.A.2) уже фіксує тип винятку. Entry-level log залишено.
         SignalDevicesLog.StartLinkRequested(_logger);
-        try
-        {
-            var response = await _signalCliClient
-                .InvokeMethodAsync<StartLinkResponse, StartLinkParameters>(
-                    "startLink",
-                    new StartLinkParameters(),
-                    cancellationToken).ConfigureAwait(false);
+        var response = await _signalCliClient
+            .InvokeMethodAsync<StartLinkResponse, StartLinkParameters>(
+                "startLink",
+                new StartLinkParameters(),
+                cancellationToken).ConfigureAwait(false);
 
-            if (response == null)
-            {
-                throw new InvalidOperationException("Отримано нульову відповідь від сервера");
-            }
-
-            return response;
-        }
-        catch (Exception ex)
+        if (response == null)
         {
-            SignalDevicesLog.StartLinkFailed(_logger, ex);
-            throw;
+            throw new InvalidOperationException("Отримано нульову відповідь від сервера");
         }
+
+        return response;
     }
 
     public async Task<FinishLinkResponse> FinishLinkAsync(string deviceLinkUri, string deviceName, CancellationToken cancellationToken = default)
@@ -49,27 +42,20 @@ internal sealed class SignalDevices(
         ArgumentException.ThrowIfNullOrEmpty(deviceLinkUri);
         ArgumentException.ThrowIfNullOrEmpty(deviceName);
 
+        // §8c.7: bare-catch прибрано.
         SignalDevicesLog.FinishLinkRequested(_logger, deviceName);
-        try
-        {
-            var response = await _signalCliClient
-                .InvokeMethodAsync<FinishLinkResponse, FinishLinkParameters>(
-                    "finishLink",
-                    new FinishLinkParameters(deviceLinkUri, deviceName),
-                    cancellationToken).ConfigureAwait(false);
+        var response = await _signalCliClient
+            .InvokeMethodAsync<FinishLinkResponse, FinishLinkParameters>(
+                "finishLink",
+                new FinishLinkParameters(deviceLinkUri, deviceName),
+                cancellationToken).ConfigureAwait(false);
 
-            if (response == null)
-            {
-                throw new InvalidOperationException("Отримано нульову відповідь від сервера");
-            }
-
-            return response;
-        }
-        catch (Exception ex)
+        if (response == null)
         {
-            SignalDevicesLog.FinishLinkFailed(_logger, ex);
-            throw;
+            throw new InvalidOperationException("Отримано нульову відповідь від сервера");
         }
+
+        return response;
     }
 
 }

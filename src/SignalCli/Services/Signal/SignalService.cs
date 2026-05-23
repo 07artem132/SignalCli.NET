@@ -51,27 +51,22 @@ internal class SignalService : ISignalCliClient
 
     public async Task<VersionResponse> VersionAsync(CancellationToken cancellationToken = default)
     {
+        // post-modernize-tuning §8c.7 (audit C8): bare-catch прибрано — InvokeMethodAsync вище
+        // уже логує помилку з method-context'ом, а ActivitySource у JsonRpcClient фіксує
+        // span-error. Дублювати "version failed" без додавання context'у — шум.
         SignalServiceLog.VersionRequested(_logger);
 
-        try
+        var response = await InvokeMethodAsync<VersionResponse, VersionParameters>("version", new(), cancellationToken).ConfigureAwait(false);
+
+        if (response == null)
         {
-            var response = await InvokeMethodAsync<VersionResponse, VersionParameters>("version", new(), cancellationToken).ConfigureAwait(false);
-
-            if (response == null)
-            {
-                SignalServiceLog.VersionNullResponse(_logger);
-                throw new InvalidOperationException("Отримано нульову відповідь від сервера");
-            }
-
-            SignalServiceLog.VersionOk(_logger, response.Version);
-
-            return response;
+            SignalServiceLog.VersionNullResponse(_logger);
+            throw new InvalidOperationException("Отримано нульову відповідь від сервера");
         }
-        catch (Exception ex)
-        {
-            SignalServiceLog.VersionFailed(_logger, ex);
-            throw;
-        }
+
+        SignalServiceLog.VersionOk(_logger, response.Version);
+
+        return response;
     }
 
 }

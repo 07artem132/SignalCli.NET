@@ -20,34 +20,27 @@ internal sealed class SignalGroups(
     {
         // post-modernize-tuning §8c.11 (audit N5): validate at the boundary.
         ArgumentException.ThrowIfNullOrEmpty(account);
+        // §8c.7: bare-catch прибрано — ActivitySource у JsonRpcClient уже фіксує тип винятку.
         SignalGroupsLog.ListGroupsRequested(_logger);
 
-        try
+        var response = await _signalCliClient
+            .InvokeMethodAsync<ListGroupsResponse, ListGroupsParameters>(
+                "listGroups",
+                new ListGroupsParameters(account),
+                cancellationToken).ConfigureAwait(false);
+
+        if (response == null)
         {
-            var response = await _signalCliClient
-                .InvokeMethodAsync<ListGroupsResponse, ListGroupsParameters>(
-                    "listGroups",
-                    new ListGroupsParameters(account),
-                    cancellationToken).ConfigureAwait(false);
-
-            if (response == null)
-            {
-                SignalGroupsLog.ListGroupsNullResponse(_logger);
-                throw new InvalidOperationException("Отримано нульову відповідь від сервера");
-            }
-
-            // ПРИВАТНІСТЬ (F5): Group/Member записи в response містять PII (members, назви, IDs);
-            // на Information — лише кількість, повні деталі — Trace.
-            SignalGroupsLog.ListGroupsOk(_logger, response.Count);
-            SignalGroupsLog.ListGroupsTrace(_logger, string.Join(", ", response));
-
-            return response;
+            SignalGroupsLog.ListGroupsNullResponse(_logger);
+            throw new InvalidOperationException("Отримано нульову відповідь від сервера");
         }
-        catch (Exception ex)
-        {
-            SignalGroupsLog.ListGroupsFailed(_logger, ex);
-            throw;
-        }
+
+        // ПРИВАТНІСТЬ (F5): Group/Member записи в response містять PII (members, назви, IDs);
+        // на Information — лише кількість, повні деталі — Trace.
+        SignalGroupsLog.ListGroupsOk(_logger, response.Count);
+        SignalGroupsLog.ListGroupsTrace(_logger, string.Join(", ", response));
+
+        return response;
     }
 
 }

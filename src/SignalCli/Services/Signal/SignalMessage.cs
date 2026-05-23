@@ -182,11 +182,10 @@ namespace SignalCli.Services.Signal
                 SignalMessageLog.SendOk(_logger, response.TimeStamp);
                 return response;
             }
-            catch (Exception ex)
-            {
-                SignalMessageLog.SendFailed(_logger, ex);
-                throw;
-            }
+            // post-modernize-tuning §8c.7 (audit C8): bare catch-and-rethrow прибрано.
+            // ActivitySource у JsonRpcClient (§11.A.2) уже фіксує exception-type-name.
+            // finally-блок зберігаємо — він диспозить temp-файли вкладень, які
+            // ОБОВ'ЯЗКОВО мають бути прибрані незалежно від результату send'у.
             finally
             {
                 foreach (var attach in attachmentEntries)

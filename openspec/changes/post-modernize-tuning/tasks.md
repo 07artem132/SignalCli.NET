@@ -153,7 +153,14 @@
 - [ ] ~~8c.4 (P4)~~ **Reverted — CA1305 analyzer rejects `int.ToString()` without an explicit `IFormatProvider`. Keeping `InvariantCulture` argument is the right call. Task closed without change.**
 - [x] 8c.5 (C9) `SignalMessage.ValidateRecipients` materializes the `IEnumerable<IRecipient>` exactly once at entry via `as IReadOnlyList<IRecipient> ?? recipients.ToList()`; user/group split is a single `foreach`, no double-pass `Where(...)` anymore
 - [x] 8c.6 (C7) `SendUnifiedMessageAsync` тепер приймає `internal sealed record UnifiedSendRequest` (новий файл `Services/Signal/UnifiedSendRequest.cs`) — один параметр замість 23. Усі 3 public `Send*Async`-обгортки будують record з типобезпечного `*MessageOptions`. `ArgumentException.ParamName` зберіг consumer-visible імена (`recipients`, `quoteTimestamp`) — CA2208 suppressed з документованим обґрунтуванням (analyzer перевіряє локальний scope, тут intentional re-throw у caller context).
-- [ ] 8c.7 (C8) Audit and remove the `catch (Exception ex) { _logger.LogError(ex, "..."); throw; }` bare patterns from `SignalService`, `SignalMessage`, `SignalAccounts`, `SignalDevices`, `SignalGroups`, `JsonRpcClientHostedService`; either delete the catch or enrich with method/account context **(deferred — broad sweep; behavior intact)**
+- [x] 8c.7 (C8) Bare `catch (Exception ex) { LogX(ex); throw; }` swept:
+  - `SignalAccounts.ListAccountsAsync` / `SyncAccountAsync` — catches removed (ActivitySource у JsonRpcClient §11.A.2 уже фіксує type-name);
+  - `SignalDevices.StartLinkAsync` / `FinishLinkAsync` — catches removed;
+  - `SignalGroups.ListGroupsAsync` — catch removed;
+  - `SignalService.VersionAsync` — catch removed (inner `InvokeMethodAsync` уже логує з method-context'ом);
+  - `SignalMessage.SendUnifiedMessageAsync` — catch removed, `finally` для temp-file cleanup ЗАЛИШЕНО (обов'язково — disposes attachment temps незалежно від результату);
+  - `SignalService.InvokeMethodAsync` — НЕ чіпали (catch вже enriched: передає method-name через `SignalServiceLog.InvokeMethodFailed(_logger, ex, method)`);
+  - `SignalEventService.OnNotificationReceived` — НЕ чіпали (broad-boundary catch на dispatcher loop, дозволено CLAUDE.md "long-running boundaries").
 - [x] 8c.8 (C10) `Config.BuildClasspath` caches the joined classpath after the first call (`_cachedClasspath` field; lazy-init); `Directory.GetFiles` invoked once per `Config` instance regardless of restart count
 - [ ] 8c.9 Test: stateful enumerator passed to `Send*Async` → enumerated exactly once
 - [ ] 8c.10 Test: classpath build called twice → `Directory.GetFiles` invoked once
