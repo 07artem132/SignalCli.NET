@@ -1,4 +1,5 @@
-﻿using System.Reactive.Subjects;
+﻿using System.Reactive.Linq;
+using System.Reactive.Subjects;
 using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -25,6 +26,13 @@ internal class SignalEventService(
     // Зберігаємо "account -> subscriptionId"
     private readonly Dictionary<string, int> _accountSubscriptions = new();
 
+    // C# 13 / .NET 9+: окремий System.Threading.Lock замість блокування на самому словнику
+    // (не блокуємося на структурі даних, яку захищаємо — див. IDE0330).
+    private readonly System.Threading.Lock _subscriptionsLock = new();
+
+    // Підписка на потік нотифікацій JSON-RPC; звільняється у Dispose.
+    private IDisposable? _notificationSubscription;
+
     // Потоки подій для різних типів сповіщень
     private readonly Subject<TextMessageEventArgs> _textMessages = new();
     private readonly Subject<ReactionEventArgs> _reaction = new();
@@ -36,25 +44,27 @@ internal class SignalEventService(
 
     private bool _disposed;
 
-    public IObservable<TextMessageEventArgs> TextMessages => _textMessages;
-    
-    public IObservable<ReactionEventArgs> Reaction => _reaction;
-    
-    public IObservable<AttachmentEventArgs> Attachments => _attachments;
-    
-    public IObservable<StickerEventArgs> Sticker => _sticker;
-    
-    public IObservable<TypingEventArgs> TypingNotifications => _typing;
-    
-    public IObservable<ReceiptEventArgs> Receipts => _receipts;
-    
-    public IObservable<SyncEventArgs> Syncs => _syncs;
+    // AsObservable() приховує Subject: споживач не може зробити downcast і самостійно
+    // викликати OnNext/OnError/OnCompleted на наших потоках подій.
+    public IObservable<TextMessageEventArgs> TextMessages => _textMessages.AsObservable();
+
+    public IObservable<ReactionEventArgs> Reaction => _reaction.AsObservable();
+
+    public IObservable<AttachmentEventArgs> Attachments => _attachments.AsObservable();
+
+    public IObservable<StickerEventArgs> Sticker => _sticker.AsObservable();
+
+    public IObservable<TypingEventArgs> TypingNotifications => _typing.AsObservable();
+
+    public IObservable<ReceiptEventArgs> Receipts => _receipts.AsObservable();
+
+    public IObservable<SyncEventArgs> Syncs => _syncs.AsObservable();
 
     public async Task<SubscribeReceiveResponse> SubscribeAsync(string account,
         CancellationToken cancellationToken = default)
     {
         // Перевіряємо наявність існуючої підписки
-        lock (_accountSubscriptions)
+        lock (_subscriptionsLock)
         {
             if (_accountSubscriptions.ContainsKey(account))
             {
@@ -71,7 +81,7 @@ internal class SignalEventService(
 
         int subscriptionId = responseToken.GetInt32();
 
-        lock (_accountSubscriptions)
+        lock (_subscriptionsLock)
         {
             if (_accountSubscriptions.ContainsKey(account))
             {
@@ -92,7 +102,7 @@ internal class SignalEventService(
         CancellationToken cancellationToken = default)
     {
         string? account;
-        lock (_accountSubscriptions)
+        lock (_subscriptionsLock)
         {
             account = _accountSubscriptions.FirstOrDefault(x => x.Value == subscriptionId).Key;
         }
@@ -109,7 +119,7 @@ internal class SignalEventService(
                 new UnsubscribeReceiveParameters(subscriptionId),
                 cancellationToken).ConfigureAwait(false);
 
-        lock (_accountSubscriptions)
+        lock (_subscriptionsLock)
         {
             _accountSubscriptions.Remove(account);
         }
@@ -309,7 +319,7 @@ internal class SignalEventService(
     /// <returns>true, якщо підписка знайдена; інакше - false.</returns>
     private bool TryGetAccountBySubscriptionId(int subscriptionId, out string? account)
     {
-        lock (_accountSubscriptions)
+        lock (_subscriptionsLock)
         {
             foreach (var kv in _accountSubscriptions)
             {
@@ -330,6 +340,9 @@ internal class SignalEventService(
         if (_disposed) return;
         _disposed = true;
 
+        // Спершу припиняємо приймати нові нотифікації, потім завершуємо потоки подій.
+        _notificationSubscription?.Dispose();
+
         _textMessages.OnCompleted();
         _reaction.OnCompleted();
         _attachments.OnCompleted();
@@ -342,8 +355,9 @@ internal class SignalEventService(
     public Task StartAsync(CancellationToken cancellationToken)
     {
         // Підписуємося на потік сповіщень від JSON-RPC клієнта
-        _rpcClient = _rpcClientProvider.Client; 
-        _rpcClient.Notifications.Subscribe(OnNotificationReceived);
+        _rpcClient = _rpcClientProvider.Client;
+        // Зберігаємо підписку, щоб коректно звільнити її у Dispose (раніше IDisposable губився).
+        _notificationSubscription = _rpcClient.Notifications.Subscribe(OnNotificationReceived);
         return Task.CompletedTask;
     }
 
