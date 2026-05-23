@@ -4,33 +4,46 @@ Guidance for AI coding agents (Claude Code, Copilot, etc.) working in this repos
 
 ## Project
 
-**SignalCli.NET** — a .NET wrapper around [`signal-cli`](https://github.com/AsamK/signal-cli) (a Java app) that exposes a typed, reactive API for the Signal messenger. The library launches and supervises `signal-cli` in JSON-RPC mode over stdin/stdout, correlates requests/responses, and surfaces incoming events through `System.Reactive` observables.
+**SignalCli.NET** — a .NET wrapper around [`signal-cli`](https://github.com/AsamK/signal-cli) (a Java app) that exposes a typed API for the Signal messenger. The library launches and supervises `signal-cli` in JSON-RPC mode over stdin/stdout, correlates requests/responses, and surfaces incoming events through **two parallel surfaces**: `IObservable<T>` (Rx, for fan-out/broadcast) and `IAsyncEnumerable<T>` (Channels, default for `await foreach`).
 
-- Target framework: **net10.0 (LTS)**, language **C# 14**. (The net9.0→net10.0 migration is done.)
+- Target framework: **net10.0 (LTS)**, language **C# 14**. Package version **2.1.0**.
 - Requires **JDK 25+** (signal-cli 0.14.3's `Main` is class-file version 69.0 = Java 25) and **signal-cli 0.14.3** (downloaded by the `SignalCli.Runtime` package at build time). Java is **not** required with the native package (`SignalCli.Runtime.Native`, Linux x64) or the bundled-JRE packages (`SignalCli.Runtime.Jre.win-x64`, `SignalCli.Runtime.Jre.osx-arm64`).
 
 ## Build & test
 
 ```bash
 dotnet build SignalCli.sln                                  # build all
-dotnet test Tests/SignalCli.Tests/SignalCli.Tests.csproj    # run tests (152 tests)
+dotnet test Tests/SignalCli.Tests/SignalCli.Tests.csproj    # run tests (180 tests)
 dotnet test Tests/SignalCli.Tests/SignalCli.Tests.csproj --collect:"XPlat Code Coverage"  # coverage
 ```
 
 - The `SignalCli.runtime` project downloads signal-cli on first build (network required); subsequent builds are skipped via an MSBuild `Exists` gate. The `SignalCli.runtime.native` and `SignalCli.runtime.jre.*` projects similarly download their payloads (native binary / Temurin JRE), so a clean `dotnet build SignalCli.sln` pulls several hundred MB once. To iterate quickly on the library, build/test `src/SignalCli` + `Tests/SignalCli.Tests` directly.
 - Prefer running tests after every meaningful change; the hosted-service/health-monitor suites are the safety net for process-lifecycle changes.
+- Test suite is **wall-clock-independent**: `SignalCliHealthMonitor/` and `SignalCliHostedService/Restart*/` tests use `FakeTimeProvider` exclusively (never `Task.Delay(>10ms)`). If you add a test that depends on real time, you have introduced flake — use `FakeTimeProvider.Advance(...)` instead.
+
+### Restoring packages in a sandboxed env (Claude Code on the web)
+
+The repo's `NuGet.Config` has a `<packageSourceMapping>` that points `SignalCli.*` packages at a GitHub-hosted feed which requires auth. In a fresh remote-execution container, that feed is unreachable. Use this restore flag instead of plain `dotnet restore`:
+
+```bash
+dotnet restore <project> --source https://api.nuget.org/v3/index.json -p:NuGetAudit=false
+```
+
+`--source` overrides the GitHub feed; `-p:NuGetAudit=false` skips the (also unreachable) vulnerability scanner. Once restored, `dotnet build/test --no-restore` works normally. The `dotnet` SDK itself is `apt`-installable from `packages.microsoft.com` (which is allowlisted in our container policy).
 
 ## Architecture (key types)
 
-- `SignalCliHostedService` — launches/stops/restarts signal-cli; implements `IStreamPairProvider`.
-- `ProcessStateManager` — process state machine (`ProcessState` enum + `ProcessStateInfo`).
-- `SignalCliHealthMonitor` — pings `version`; force-restarts on failure.
-- `JsonRpcClient` / `JsonRpcClientHostedService` — JSON-RPC transport; request/response correlation via `id` + `TaskCompletionSource`; notifications via `IObservable`.
-- `SignalEventService` — fans `receive` notifications out to `TextMessages`/`Attachments`/`Reaction`/… observables.
-- `SignalMessage` / `SignalService` / `SignalAccounts` / `SignalDevices` / `SignalGroups` — the Signal API surface.
-- DI composition root: `Extensions/ServiceCollectionExtensions.cs` (`AddSignalCli`, `AddSignalEvents`).
+- `SignalCliHostedService` — launches/stops/restarts signal-cli; implements `IStreamPairProvider`. Takes `IOptions<SignalCliOptions>` + optional `TimeProvider`.
+- `ProcessStateManager` — process state machine (`ProcessState` enum + `ProcessStateInfo`); single source of truth.
+- `SignalCliHealthMonitor` — `BackgroundService` using `PeriodicTimer(interval, TimeProvider)`; pings `version`; force-restarts on failure.
+- `JsonRpcClient` / `JsonRpcClientHostedService` — JSON-RPC transport; request/response correlation via `id` + `TaskCompletionSource`; notifications via `IObservable`. `JsonRpcClient` is **`IAsyncDisposable`-only**.
+- `SignalEventService` — fans `receive` notifications to both `IObservable<T>` (`TextMessages`/`Attachments`/…) and `IAsyncEnumerable<T>` (`TextMessagesAsync(ct)`/`AttachmentsAsync(ct)`/…) for each of 10 event kinds.
+- `SignalMessage` / `SignalService` / `SignalAccounts` / `SignalDevices` / `SignalGroups` — the Signal API surface. **None implement `IDisposable`** (stateless facades).
+- `SignalCliOptions` + `SignalCliOptionsValidator` (source-gen `[OptionsValidator]`) — typed configuration with `[Required]`/`[Range]` DataAnnotations validated on host start. Legacy `Config` exists as `[Obsolete]` shim.
+- `Logging/*Log.cs` — one `internal static partial class` per service with `[LoggerMessage]`-generated methods (~109 of them). EventId blocks are reserved per service; see "Logging" rule below.
+- DI composition root: `Extensions/ServiceCollectionExtensions.cs` (`AddSignalCli(Action<SignalCliOptions>?)` is the modern overload; `AddSignalCli(Action<Config>?)` is the legacy shim; `AddSignalEvents()` is separate).
 
-Patterns in use: Dependency Injection, Hosted Services, Factory, Adapter/Wrapper (`IProcess`), Builder (`*Options.Builder`), Provider, Observer/Rx, Facade, State Machine, Watchdog.
+Patterns in use: Dependency Injection, Options pattern (`IOptions<TOptions>` + source-gen validation), Hosted Services / BackgroundService, Factory, Adapter/Wrapper (`IProcess`), Builder (`*Options.Builder`), Provider, Observer/Rx + async streams via `Channel<T>`, Facade, State Machine, Watchdog, Source-generated logging.
 
 ## Conventions (match the existing code)
 
@@ -43,31 +56,87 @@ Patterns in use: Dependency Injection, Hosted Services, Factory, Adapter/Wrapper
 - **Comments and log messages are written in Ukrainian** in this codebase — match that when editing existing files.
 - Keep XML doc comments on public members.
 
-### For new code (forward-looking, tracked by `agent-friendly-modernization`)
+### Established patterns (these are the law — do not regress)
 
-These patterns apply to *new* code and to non-trivial edits in touched files. They make the library more discoverable for both humans and LLM agents (typed DI, real `Async` signatures, structured logs). The full migration of existing code is staged across the `agent-friendly-modernization` OpenSpec change — but do **not** add new code that re-introduces the old shape.
+The patterns below are not aspirational. They were rolled out across the codebase in the `agent-friendly-modernization` change (2.1.0) and the test suite enforces them. New code MUST follow these; edits to existing code that touches an affected area MUST keep them. Re-introducing the old shape is a regression.
 
-- **Async naming:** every new `Task`/`ValueTask`-returning method gets the `Async` suffix. The single historical exception, `ISignalCliClient.Version()`, is being renamed to `VersionAsync()` with an `[Obsolete]` shim — do not copy that anti-pattern.
-- **CancellationToken:** new public methods expose `CancellationToken cancellationToken = default` as the **last explicit parameter**, even when an `*Options` record also carries one (link both via `CreateLinkedTokenSource` if needed). Agents look at signatures, not at options fields.
-- **Logging:** new `ILogger` callsites go through `[LoggerMessage]` `partial` methods in a sibling `XxxLog.cs` file (closes CA1848/CA1873). Direct `_logger.LogInformation("template", args)` is being phased out; do not add new such calls. Privacy rules (#1 in Critical rules) still apply — never reference PII in templates at `Information+`. EventId blocks are reserved per service in `openspec/changes/agent-friendly-modernization/design.md`.
-- **Background loops:** any new periodic worker is a `BackgroundService` whose `ExecuteAsync` uses `PeriodicTimer(interval, TimeProvider)` — not `Task.Run` + `while (!ct.IsCancellationRequested) { await Task.Delay(...) }`. Inject `TimeProvider` (default `TimeProvider.System`) so `FakeTimeProvider` drives tests; tests under `SignalCliHealthMonitor/` and `SignalCliHostedService/Restart*/` must not do `Task.Delay(>10ms)`.
-- **Configurable knobs:** new settings go into `SignalCliOptions` (typed `IOptions<>`) with `[Required]` / `[Range]` data annotations and `.ValidateOnStart()`. The public `Config` is being replaced; do not extend it with new fields. Internal services read `_options.Value` once in the constructor (options are immutable).
-- **Event streams:** new event channels should be exposed as `IAsyncEnumerable<T>` on top of a bounded `Channel<T>` (`FullMode = DropOldest`, capacity 1024) — `await foreach` is the default ergonomic for both humans and LLM agents. Pair with the existing `IObservable<T>` only when broadcast/fan-out is a documented requirement; in XMLDoc, state single-consumer semantics explicitly.
-- **Disposal:** classes with asynchronous cleanup implement **only** `IAsyncDisposable` — no synchronous `Dispose()` that blocks via `GetAwaiter().GetResult()`. Stateless façades (`SignalAccounts`, `SignalGroups`, `SignalDevices`, `SignalService`, `SignalMessage`) should not implement `IDisposable` at all.
-- **TaskCompletionSource cancellation:** pass the originating token to `TrySetCanceled(token)` so callers see the actual cancellation source via `OperationCanceledException.CancellationToken`.
-- **`TimeProvider` consistency:** if a class already takes `TimeProvider`, every wait it performs goes through it (`Task.Delay(_, _, TimeProvider, ct)`, `new CancellationTokenSource(timeout, TimeProvider)`, `TimeProvider.CreateTimer(...)`). Do not mix real and virtual clocks in the same class.
-- **Strong typing over magic strings:** prefer `enum` (e.g. `TextStyleMode`) over `string? mode = "styled"`-flags in new code; case-insensitive string compares for protocol values use `StringComparison.OrdinalIgnoreCase` (and `ToUpperInvariant()` only when the value leaves the process boundary — see #5).
+#### Async, cancellation, naming
 
-## Critical rules (do not regress — these are audit findings)
+- **Async suffix:** every `Task`/`ValueTask`-returning method has `Async` in its name. The one historical exception, `ISignalCliClient.Version()`, exists only as `[Obsolete]` shim delegating to `VersionAsync()`.
+- **`CancellationToken cancellationToken = default` as the last explicit parameter.** Even when a paired `*Options` record carries a `CancellationToken` field (deprecated), the parameter on the method is the discoverable surface. Link both inside via `CreateLinkedTokenSource` — see `SignalMessage.LinkTokens` for the canonical helper.
+- **`TaskCompletionSource<T>.TrySetCanceled(token)` always carries a token.** `JsonRpcClient` keeps `_disposeCts` for `DisposeAsync`-time cancellation and a transient cancelled CTS for stream-pair-change. Never `TrySetCanceled()` without an argument.
 
-1. **Privacy:** never log message bodies, phone numbers, or attachment payloads above `Trace`. RPC params/results and raw stdin/stdout lines are `Trace`-only. `SignalService` logs the method name only.
+#### Configuration: `IOptions<SignalCliOptions>` only
+
+- **Configurable knobs go in `SignalCliOptions`**, not in `Config`. `Config` is `[Obsolete]`-shimmed to `Action<Config>?` `AddSignalCli` overload — do not extend it.
+- **Properties are `get; set;`** (not `init`-only). Microsoft.Extensions.Options is a stateful pattern: the framework creates the instance via `Activator.CreateInstance` and mutates it through your `Action<TOptions>.Configure`-delegate and `Bind(IConfiguration)`. `init` makes both reflection-based `Bind` and the `Configure`-delegate ergonomically painful — we learned this the hard way and reverted. Immutability is enforced socially (no setter calls after registration), not by the type system.
+- **Validation is layered:** `[Required]`/`[Range]` DataAnnotations on properties → `ValidateDataAnnotations()` on the builder → custom `.Validate(o => …, "msg")` for cross-field rules (e.g. `JavaExecutable` XOR `SignalCliExecutable`) → `SignalCliOptionsValidator` (`[OptionsValidator]` source-gen — closes the reflection-free / AOT-safe path). All three are wired up in `ServiceCollectionExtensions.ConfigureOptions`. Don't pick one — add to all of them when relevant.
+- **Internal services read `_options.Value` once in the constructor** and cache the snapshot in a `private readonly SignalCliOptions _options`. The `.Value` access is what triggers validation; doing it in the ctor means `OptionsValidationException` surfaces on host start, not on some random method call.
+- **Both `AddSignalCli` overloads are idempotent** — guarded by an `IOptions<SignalCliOptions>`-presence check in the service collection. Tests rely on this.
+
+#### Logging: `[LoggerMessage]` exclusively
+
+- **No new direct `_logger.LogInformation("template {Arg}", arg)` calls.** Every new log line goes through a `[LoggerMessage]`-decorated `partial` method on a sibling `internal static partial class XxxLog : Logging/XxxLog.cs`. CA1848/CA1873 must stay green.
+- **EventId blocks reserved per service** (do not reuse across classes):
+    - 100–199 `SignalCliHostedServiceLog`
+    - 200–299 `SignalCliHealthMonitorLog`
+    - 300–399 `JsonRpcClientLog`
+    - 400–499 `JsonRpcClientHostedServiceLog`
+    - 500–599 `SignalEventServiceLog`
+    - 600–699 `SignalServiceLog`
+    - 700–799 `SignalMessageLog`
+    - 800–899 `SignalAccountsLog` / `SignalDevicesLog` / `SignalGroupsLog`
+    - 900–999 `ProcessRunnerLog` / `ProcessStateManagerLog`
+- **`BeginScope` for subscription-bound work.** `SignalEventService.OnNotificationReceived` wraps the dispatch in `_logger.BeginScope(new Dictionary<string, object> { ["SubscriptionId"] = …, ["Account"] = … })` — downstream logs inherit those structured properties. Follow this for any per-notification / per-account work added later.
+- **Privacy still wins.** Critical rule #1 is the contract: PII (bodies, phones, attachment payloads) never appears in `[LoggerMessage]` templates at `Information+`. The `PrivacyLoggingTests` suite asserts on `EventId`, not text — so renaming a message won't accidentally break privacy verification.
+
+#### Background loops + time
+
+- **Periodic workers are `BackgroundService` + `PeriodicTimer(interval, TimeProvider)`.** No raw `Task.Run` + `while (!ct.IsCancellationRequested) { await Task.Delay(...); }` patterns. `SignalCliHealthMonitor` is the canonical reference.
+- **`TimeProvider` consistency inside a class:** if a class accepts a `TimeProvider`, then *every* wait it performs goes through it: `Task.Delay(_, _, TimeProvider, ct)`, `new CancellationTokenSource(timeout, TimeProvider)`, `TimeProvider.CreateTimer(...)`, `new PeriodicTimer(interval, TimeProvider)`. No mixing real and virtual clocks in one class. `SignalCliHostedService.ScheduleRestartWindowReset` uses `_timeProvider.CreateTimer(...)`, not `Task.Run(() => Task.Delay(...))`.
+- **Tests under `SignalCliHealthMonitor/` and `SignalCliHostedService/Restart*/` must not call `Task.Delay(>10ms)`.** Use `FakeTimeProvider.Advance(...)`. If you find yourself wanting to wait for real time in those suites, you are reaching for the wrong tool.
+
+#### Event streams: two surfaces
+
+- Each event kind in `SignalEventService` has **both** an `IObservable<T>` (Rx, fan-out / broadcast) and an `IAsyncEnumerable<T>` (Channels, default for `await foreach`, single-consumer with back-pressure). When adding a new event kind, add both — see how `TextMessages` + `TextMessagesAsync` are paired.
+- The async surface uses `Channel.CreateBounded<T>(new BoundedChannelOptions(1024) { FullMode = DropOldest, SingleReader = false, SingleWriter = true })`. Drop-oldest is logged at `Debug` with a counter — don't change to `Wait` without a doc-update justifying the back-pressure mode.
+- **Single-consumer is documented in XMLDoc** on the `*Async` methods. If a caller needs fan-out, they take the `IObservable<T>` — say so explicitly.
+
+#### Disposal
+
+- **`IAsyncDisposable`-only for classes with async cleanup.** `IJsonRpcClient` derives from `IAsyncDisposable` only — never both `IDisposable` and `IAsyncDisposable`. No `Dispose()` that wraps `DisposeAsync().AsTask().GetAwaiter().GetResult()` — that's a deadlock vector. DI containers correctly call `DisposeAsync`; external callers use `await using`.
+- **Stateless façades have no `IDisposable` at all.** `SignalAccounts`, `SignalDevices`, `SignalGroups`, `SignalService`, `SignalMessage` — none implement `IDisposable`. If you find yourself adding an empty `Dispose()` to a service, stop: either you have real resources (add real cleanup) or you don't (don't implement the interface).
+
+#### Other established patterns
+
+- **`System.Threading.Lock` over `lock (someObject)`.** C# 13 / .NET 9+. We use it in `ProcessStateManager`, `SignalEventService`, `JsonRpcClient` (`_readerLock`). Don't lock on `this` or on the collection you're guarding.
+- **`[CallerArgumentExpression]` for `Validate*` helpers** — `paramName` is derived from the caller's expression, not hardcoded. `SignalMessage.ValidateRecipients` is the canonical example.
+- **Strong typing over magic strings:** `TextStyleMode` enum, not `string? mode = "styled"`. For protocol values that must compare case-insensitively, use `StringComparison.OrdinalIgnoreCase`; reserve `ToUpperInvariant()` for values crossing the process boundary (critical rule #5).
+- **`unchecked Interlocked.Increment` for monotonic ID counters.** `AtomicCounter` is one line: `unchecked((int)Interlocked.Increment(ref _seed))`. Don't try to "reset" — int32 wraparound is fine for request IDs (uniqueness in active set is what matters).
+
+### Backward compatibility convention
+
+When we deprecate API, the rule is **one major version of `[Obsolete]` shim** before removal. Currently in flight (will be removed in **3.0**):
+
+- `ISignalCliClient.Version()` → use `VersionAsync()`.
+- `AddSignalCli(Action<Config>?)` → use `AddSignalCli(Action<SignalCliOptions>?)`. `Config` itself is `[Obsolete]`-shimmed.
+- `*Options.CancellationToken` properties and `WithCancellationToken` builder methods on `TextMessageOptions`/`AttachmentMessageOptions`/`StickerMessageOptions` → pass `CancellationToken` directly to `Send*Async(options, ct)`.
+
+When adding a new deprecation, mirror this shape: real new API + `[Obsolete("Use Y; will be removed in 3.0")]` shim that delegates, plus a `CHANGELOG.md` entry under "Інше". Internal call sites are migrated immediately; external call sites get one major release of grace.
+
+## Critical rules (do not regress — these are audit findings + post-2.1.0 invariants)
+
+1. **Privacy:** never log message bodies, phone numbers, or attachment payloads above `Trace`. RPC params/results and raw stdin/stdout lines are `Trace`-only. `SignalService` logs the method name only. `[LoggerMessage]` templates at `Information+` MUST NOT reference PII fields.
 2. **Process arguments:** build the signal-cli command via `ProcessConfig.ArgumentList` (each arg separate). Never go back to a single interpolated `Arguments` string with quoted paths.
 3. **Attachments:** sanitize `FileName` with `Path.GetFileName` (see `AttachmentEntry.SafeFileName`) before writing temp files or building data URIs — guard against path traversal.
-4. **Event dispatch:** in `SignalEventService`, a `DataMessage` is a *presence-based union*; emit every applicable observable (text + attachment can both fire). Do not reintroduce early `return` between payload checks.
+4. **Event dispatch:** in `SignalEventService`, a `DataMessage` is a *presence-based union*; emit every applicable observable AND its paired async-channel (text + attachment can both fire). Do not reintroduce early `return` between payload checks.
 5. **Text styles:** use `ToUpperInvariant()` for style names (locale-independent).
 6. **Serialization:** `System.Text.Json` **only** — `Newtonsoft.Json` is removed. Annotate model members with `[JsonPropertyName]` (never `[JsonProperty]`). Register every new serializable root type in the source-generated context `Serialization/SignalJsonContext.cs`, and serialize/deserialize via the shared options in `Serialization/SignalJson.cs` (which combines the source-gen resolver with a reflection fallback). `JsonRpcRequest.Params` / `JsonRpcResponse.Result` are `JsonElement`.
 7. **Download scripts:** `src/SignalCli.runtime/download-signal-cli.*` and `src/build/download-jre.*` verify the archive SHA-256 before extraction. If you change a pinned version, update the hash in **both** the `.ps1` and `.sh`. These PowerShell scripts are deliberately **ASCII-only** (no Cyrillic/emoji) so they parse under Windows PowerShell 5.1 **without** needing a UTF-8 BOM — keep them ASCII. They also invoke the Windows system `tar` (`%SystemRoot%\System32\tar.exe`) explicitly and stage extraction through an ASCII temp dir, because Git's GNU `tar` mis-reads `C:\…` paths and bsdtar fails on non-ASCII target paths.
 8. **Bundled-JRE packages** (`SignalCli.Runtime.Jre.win-x64`, `SignalCli.Runtime.Jre.osx-arm64`): bundle a SHA-256-pinned Eclipse Temurin **25** JRE + signal-cli. The JRE and jars are packed as **single `.zip` files** and extracted by the consumer `.targets` via MSBuild's built-in `<Unzip>` — **do not** pack the JRE as individual files: NuGet treats an extension-less `PackagePath` (e.g. the JRE's `lib/modules`) as a *directory* and corrupts the layout, which crashes the JVM at bootstrap. `Config.ResolveBundledJava` auto-discovers `<output>/jre/bin/java[.exe]`, so consumers need no system Java and should **not** set `Config.JavaExecutable`.
+9. **No sync-over-async in disposal.** `IJsonRpcClient` is `IAsyncDisposable`-only; never re-introduce a `Dispose()` that does `DisposeAsync().AsTask().GetAwaiter().GetResult()`. DI containers and `await using` are the supported paths.
+10. **Fail-fast configuration.** `SignalCliOptions` validation (DataAnnotations + custom rule + `[OptionsValidator]` source-gen) is wired into `AddSignalCli`. Internal services read `_options.Value` in the constructor — that's deliberately where validation fires. Don't bypass it (e.g. don't capture `IOptions<>` and read `.Value` lazily in some method later).
+11. **No wall-clock in tests.** Tests in the lifecycle/health-monitor suites must drive time via `FakeTimeProvider`. Re-introducing `await Task.Delay(>10ms)` to a test there is a regression.
 
 ## Planning (OpenSpec)
 
@@ -79,10 +148,28 @@ This repo uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for change pla
 - `agent-ready-conventions` — `.editorconfig`, analyzers (`AnalysisLevel=latest-recommended`, `EnforceCodeStyleInBuild`), narrowed broad `catch`-es, this `CLAUDE.md`.
 - `address-audit-findings-2` — audit round 2: bounded RPC timeout (`Config.RequestTimeoutSeconds`), windowed restart budget, idempotent `AddSignalCli`, `IAsyncDisposable` on `JsonRpcClient`, integration tests + bundled-JRE E2E.
 - `comprehensive-code-audit` — the audit document itself (`AUDIT-FINDINGS.md`); fixes live in the two `address-audit-findings*` changes.
+- `agent-friendly-modernization` (**2.1.0**) — five capabilities shipped together:
+  - `agent-friendly-api`: `VersionAsync`; explicit `CancellationToken` on `Send*Async`; `IJsonRpcClient` → `IAsyncDisposable`-only; sync `IJsonRpcClientFactory.Create()`; `TextStyleMode` enum; `TrySetCanceled(token)`; `[CallerArgumentExpression]`; `IDisposable` dropped from stateless façades; `AtomicCounter` simplified.
+  - `background-monitor`: `SignalCliHealthMonitor` is now a `BackgroundService` with `PeriodicTimer(interval, TimeProvider)`; `SignalCliHostedService.ScheduleRestartWindowReset` uses `TimeProvider.CreateTimer`.
+  - `source-generated-logging`: all ~109 `ILogger` callsites moved to `[LoggerMessage]` `partial` methods in `Logging/*Log.cs`; EventId blocks reserved per service; `BeginScope` for subscription-bound work.
+  - `options-pattern`: `SignalCliOptions` + `IOptions<>` with `ValidateDataAnnotations` + custom `.Validate(...)` + `[OptionsValidator]` source-gen; legacy `Config` is `[Obsolete]` shim. **All internal services take `IOptions<SignalCliOptions>` now.**
+  - `async-stream-events`: each event kind on `ISignalEventService` has a paired `IAsyncEnumerable<T>` method (`TextMessagesAsync(ct)`, …) on top of bounded `Channel<T>` (1024, DropOldest, single-reader).
 
-**Pending** (proposal stage, not yet implemented):
-- `agent-friendly-modernization` — `IOptions<SignalCliOptions>` + `ValidateOnStart`, `SignalCliHealthMonitor` as `BackgroundService` + `PeriodicTimer`, source-generated logging (`[LoggerMessage]`), `IAsyncEnumerable<T>` event streams via `Channel<T>`, and API-discoverability fixes (`Async` suffix, explicit `CancellationToken`, drop sync-over-async `Dispose`, drop empty `IDisposable` on façades, simplify `AtomicCounter`, `[CallerArgumentExpression]`). Five capabilities, five independently shippable PRs (`agent-friendly-api` → `background-monitor` → `source-generated-logging` → `options-pattern` → `async-stream-events`). See `openspec/changes/agent-friendly-modernization/{proposal,design,tasks}.md`. **Follow the forward-looking conventions in §"For new code" above when adding code, even before the migration lands.**
+**No pending changes at this time.** When you start the next material piece of work, create a new `openspec/changes/<change-name>/` directory with `proposal.md` / `design.md` / `tasks.md` / `specs/<capability>/spec.md`, mirror the structure of an existing change (e.g. `agent-friendly-modernization`), and run `openspec validate <change> --strict` before implementing.
+
+## Working style (how Claude and the user collaborate on this repo)
+
+These are conventions we landed during the 2.1.0 work. They aren't strict — but they're what worked and what we expect from each other going forward.
+
+- **Plan first, then implement.** Non-trivial work goes through OpenSpec (proposal → design → tasks → spec.md per capability). The plan should be small enough to validate (`openspec validate --strict`) and explicit enough that any subset is independently shippable.
+- **One commit per capability/cluster.** When implementing a multi-cluster OpenSpec change, each capability lands as its own commit with a clear message. Cluster A → cluster B → … is easier to review and bisect than a single mega-commit. Final batch (docs, version bump, leftover items) goes in one trailing commit.
+- **`dotnet build` + `dotnet test --no-build` after every cluster.** If the test count drops or a new flake appears, stop and diagnose before moving on. The suite is 180/180 stable — drift is the early-warning sign.
+- **Don't claim a flaky test is "pre-existing" without a baseline check.** If a test fails under your changes, `git stash`, rebuild + retest at HEAD, compare. We diagnosed real flake (the `ForceRestart*Delay*` family) this way and migrated it to `FakeTimeProvider` rather than living with it.
+- **Subagents (`Explore`, etc.) for parallel research, not for write tasks.** Most of the implementation work in 2.1.0 was direct edits in the main agent; subagents are useful for "find me all callsites of X" or "check whether Y exists in the test suite" but not for "implement cluster D for me."
+- **Comments and log messages stay in Ukrainian.** Match the codebase's voice when you edit. The CHANGELOG, README, and PR/commit titles can be Ukrainian or English — mirror the surrounding style.
+- **Don't create `*.md` documentation files unless asked.** This `CLAUDE.md`, `README.md`, and `CHANGELOG.md` are the only durable docs we maintain. Working notes belong in OpenSpec change documents.
+- **Don't add `[Obsolete]` shims for code that has no real external consumer** — just delete and document in `CHANGELOG.md`. Reserve the shim convention for things that we know are in user code (e.g. `Version()`, the `Config`-based registration, the deprecated `*Options.CancellationToken`).
 
 ## Git
 
-Work on a feature branch; do not push or commit unless asked.
+Work on a feature branch; do not push or commit unless asked. When commits are requested, prefer one commit per OpenSpec capability (see "Working style" above). Never amend already-pushed commits without explicit approval.
