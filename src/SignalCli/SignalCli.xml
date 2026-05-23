@@ -40,22 +40,26 @@
         </member>
         <member name="T:SignalCli.Extensions.ServiceCollectionExtensions">
             <summary>
-            Розширення для IServiceCollection, що дозволяють зареєструвати всі необхідні сервіси для роботи з Signal CLI.
+            Розширення для <see cref="T:Microsoft.Extensions.DependencyInjection.IServiceCollection"/>, що дозволяють зареєструвати всі необхідні сервіси для роботи з Signal CLI.
             </summary>
         </member>
         <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.AddSignalCli(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{SignalCli.Models.Config})">
+            <inheritdoc cref="M:SignalCli.Extensions.ServiceCollectionExtensions.&lt;G&gt;$7B30185E57B8298C6754F16C0BCF4773.AddSignalCli(System.Action{SignalCli.Models.Config})"/>
+        </member>
+        <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.AddSignalEvents(Microsoft.Extensions.DependencyInjection.IServiceCollection)">
+            <inheritdoc cref="M:SignalCli.Extensions.ServiceCollectionExtensions.&lt;G&gt;$7B30185E57B8298C6754F16C0BCF4773.AddSignalEvents"/>
+        </member>
+        <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.&lt;G&gt;$7B30185E57B8298C6754F16C0BCF4773.AddSignalCli(System.Action{SignalCli.Models.Config})">
             <summary>
             Додає всі необхідні сервіси для роботи з Signal CLI до контейнера DI.
             </summary>
-            <param name="services">Колекція сервісів DI.</param>
             <param name="configure">Делегат для налаштування конфігурації Signal CLI.</param>
             <returns>Колекція сервісів з доданими сервісами Signal CLI.</returns>
         </member>
-        <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.AddSignalEvents(Microsoft.Extensions.DependencyInjection.IServiceCollection)">
+        <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.&lt;G&gt;$7B30185E57B8298C6754F16C0BCF4773.AddSignalEvents">
             <summary>
             Додає сервіс обробки подій Signal до контейнера DI.
             </summary>
-            <param name="services">Колекція сервісів DI.</param>
             <returns>Колекція сервісів з доданим сервісом обробки подій.</returns>
         </member>
         <member name="T:SignalCli.Interfaces.FileSystem.IAttachmentEntry">

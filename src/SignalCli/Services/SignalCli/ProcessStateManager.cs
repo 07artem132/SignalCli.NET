@@ -16,7 +16,8 @@ public sealed class ProcessStateManager : IProcessStateNotifier, IDisposable
 {
     private readonly BehaviorSubject<ProcessStateInfo> _stateSubject;
     private ProcessStateInfo _currentStateInfo;
-    private readonly object _lock = new object();
+    // C# 13 / .NET 9+: System.Threading.Lock — швидший за Monitor на object (див. IDE0330).
+    private readonly System.Threading.Lock _lock = new();
     private bool _disposed;
 
     private readonly ILogger<ProcessStateManager> _logger;
