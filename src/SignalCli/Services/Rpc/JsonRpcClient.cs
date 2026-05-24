@@ -25,7 +25,7 @@ namespace SignalCli.Services.Rpc;
 /// Реалізація IJsonRpcClient — відправка запитів, отримання повідомлень.
 /// </summary>
 /// <remarks>
-/// Гарантує обмежений час життя запитів (<see cref="Config.RequestTimeoutSeconds"/>)
+/// Гарантує обмежений час життя запитів (<see cref="SignalCliOptions.RequestTimeoutSeconds"/>)
 /// та коректний lifecycle читачів stdout/stderr: цикли скасовуються та чекаються до
 /// завершення на зміні <see cref="StreamPair"/> й при <see cref="DisposeAsync"/>.
 /// </remarks>
@@ -421,7 +421,7 @@ internal sealed class JsonRpcClient : IJsonRpcClient
     /// <returns>Об'єкт відповіді від сервера JSON-RPC.</returns>
     /// <exception cref="ObjectDisposedException">Виникає, якщо об'єкт був утилізований.</exception>
     /// <exception cref="ArgumentNullException">Виникає, якщо параметри дорівнюють null.</exception>
-    /// <exception cref="TimeoutException">Виникає, якщо відповідь не отримано за <see cref="Config.RequestTimeoutSeconds"/>.</exception>
+    /// <exception cref="TimeoutException">Виникає, якщо відповідь не отримано за <see cref="SignalCliOptions.RequestTimeoutSeconds"/>.</exception>
     /// <exception cref="OperationCanceledException">Виникає, якщо викликач скасував запит через <paramref name="cancellationToken"/>.</exception>
     /// <exception cref="InvalidOperationException">Виникає, якщо отримано нульову відповідь або не вдалося перетворити результат.</exception>
     /// <exception cref="JsonRpcException">Виникає, якщо сервер повернув помилку.</exception>
@@ -492,7 +492,17 @@ internal sealed class JsonRpcClient : IJsonRpcClient
                                    throw new InvalidOperationException("Отримано нульову відповідь");
 
                     if (response.Error != null)
-                        throw new JsonRpcException(response.Error);
+                    {
+                        // signal-cli-protocol-alignment (typed-rpc-errors): high-leverage error
+                        // codes (RateLimit -5, UntrustedIdentity -4) surface як derived exceptions,
+                        // щоб consumer'и могли catch-by-type замість inspect-message-text.
+                        throw response.Error.Code switch
+                        {
+                            (int)JsonRpcErrorCode.RateLimit => new RateLimitException(response.Error),
+                            (int)JsonRpcErrorCode.UntrustedIdentity => new UntrustedIdentityException(response.Error),
+                            _ => new JsonRpcException(response.Error),
+                        };
+                    }
 
                     // §6.7: AOT-safe extension overload `JsonElement.Deserialize<T>(JsonTypeInfo<T>)`.
                     var typedResult = response.Result.Deserialize(responseTypeInfo);

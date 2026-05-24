@@ -24,6 +24,23 @@ public class JsonRpcException : Exception
     public JsonRpcError Error { get; init; }
 
     /// <summary>
+    /// signal-cli-protocol-alignment (typed-rpc-errors): типізований доступ до коду помилки.
+    /// Повертає <see cref="JsonRpcErrorCode"/>-значення, якщо <see cref="Error"/>.Code входить
+    /// до відомого набору (standard JSON-RPC 2.0 <c>-32700..-32603</c> + signal-cli custom
+    /// <c>-1..-6</c>); інакше <c>null</c> (forward-compat для нових кодів у майбутніх signal-cli).
+    /// </summary>
+    /// <remarks>
+    /// Використовуй замість порівняння <see cref="Error"/>.Code з magic-числами:
+    /// <code>
+    /// catch (JsonRpcException ex) when (ex.KnownCode == JsonRpcErrorCode.UserError) { ... }
+    /// </code>
+    /// Для двох high-leverage кодів (<c>-5</c> RateLimit, <c>-4</c> UntrustedIdentity) є окремі
+    /// derived-типи — <see cref="RateLimitException"/>, <see cref="UntrustedIdentityException"/>.
+    /// </remarks>
+    public JsonRpcErrorCode? KnownCode =>
+        Enum.IsDefined(typeof(JsonRpcErrorCode), Error.Code) ? (JsonRpcErrorCode)Error.Code : null;
+
+    /// <summary>
     /// post-modernize-tuning §4.21 (CA1032): стандартний parameterless ctor.
     /// <see cref="Error"/> заповнюється sentinel-значенням (`code -32603, "JSON-RPC error"`).
     /// </summary>
