@@ -25,9 +25,11 @@
 
     <ItemGroup>
         <!-- Нативний бінарник у buildTransitive; на боці споживача його копіює .targets -->
-        <None Include="$(BaseIntermediateOutputPath)signal-cli-native\**\*"
+        <!-- post-modernize-tuning §8d.3 (audit N1): forward-slash paths — MSBuild auto-
+             normalizes, але `\` на Linux може бути частиною імені файлу й тихо ламати copy. -->
+        <None Include="$(BaseIntermediateOutputPath)signal-cli-native/**/*"
               Pack="true"
-              PackagePath="buildTransitive\signal-cli-native\%(RecursiveDir)%(Filename)%(Extension)" />
+              PackagePath="buildTransitive/signal-cli-native/%(RecursiveDir)%(Filename)%(Extension)" />
 
         <None Include="SignalCli.Native.targets"
               Pack="true"

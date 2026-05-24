@@ -6,7 +6,8 @@ namespace SignalCli.Services.SignalCli;
 /// <summary>
 /// Обгортка для системного процесу, що реалізує інтерфейс IProcess.
 /// </summary>
-internal class ProcessWrapper : IProcess
+// post-modernize-tuning §8c.14 (audit N17): sealed — інхеріт не підтримується.
+internal sealed class ProcessWrapper : IProcess
 {
     private readonly Process _process;
 

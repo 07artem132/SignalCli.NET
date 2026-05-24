@@ -1,16 +1,53 @@
-using JetBrains.Annotations;
+using System.Text.Json;
 using System.Text.Json.Serialization;
+using JetBrains.Annotations;
+using SignalCli.Serialization;
 
 namespace SignalCli.Models.Signal.Groups;
 
 /// <summary>
-/// Відповідь на запит списку груп.
+/// Відповідь на запит списку груп Signal.
 /// </summary>
 /// <remarks>
-/// Наслідує List&lt;Group&gt; і містить колекцію груп з детальною інформацією.
+/// post-modernize-tuning §4.20 (audit N10): wrapper-record над <see cref="IReadOnlyList{T}"/>.
+/// Раніше тип успадковував <c>List&lt;Group&gt;</c>, що давало консумеру деструктивні
+/// мутатори на даних, що прийшли від сервера. Wire-shape JSON-масиву зберігається
+/// через <see cref="ListGroupsResponseConverter"/>.
 /// </remarks>
 [PublicAPI]
-public class ListGroupsResponse() : List<Group>;
+[JsonConverter(typeof(ListGroupsResponseConverter))]
+public sealed record ListGroupsResponse(IReadOnlyList<Group> Items) : IReadOnlyList<Group>
+{
+    /// <summary>Кількість груп у відповіді.</summary>
+    public int Count => Items.Count;
+
+    /// <summary>Доступ до групи за індексом.</summary>
+    public Group this[int index] => Items[index];
+
+    /// <inheritdoc/>
+    public IEnumerator<Group> GetEnumerator() => Items.GetEnumerator();
+
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+}
+
+/// <summary>
+/// Конвертер, що читає/пише <see cref="ListGroupsResponse"/> як плоский JSON-масив.
+/// </summary>
+internal sealed class ListGroupsResponseConverter : JsonConverter<ListGroupsResponse>
+{
+    public override ListGroupsResponse Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray)
+            throw new JsonException("Очікувався JSON-масив для ListGroupsResponse.");
+        // §6.7: AOT-safe — `JsonSerializer.Deserialize<T>(ref reader, JsonTypeInfo<T>)`.
+        var list = JsonSerializer.Deserialize(ref reader, SignalJsonContext.Default.ListGroup)
+                   ?? [];
+        return new ListGroupsResponse(list);
+    }
+
+    public override void Write(Utf8JsonWriter writer, ListGroupsResponse value, JsonSerializerOptions options)
+        => JsonSerializer.Serialize(writer, (List<Group>)value.Items, SignalJsonContext.Default.ListGroup);
+}
 
 /// <summary>
 /// Інформація про групу Signal.

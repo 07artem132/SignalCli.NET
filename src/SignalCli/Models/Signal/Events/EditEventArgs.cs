@@ -20,7 +20,7 @@ namespace SignalCli.Models.Signal.Events;
 [PublicAPI]
 public record EditEventArgs(
     int SubscriptionId,
-    string? Account,
+    string Account,
     JsonEditMessage EditMessage,
     string? Source,
     string? SourceNumber,

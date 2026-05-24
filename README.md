@@ -294,6 +294,28 @@ await signalMessage.SendTextMessageAsync(options);
 | Version | ✅ | Отримання версії |
 | submitRateLimitChallenge | ❌ | Розв'язання CAPTCHA |
 
+### 📊 Observability (OpenTelemetry)
+
+Бібліотека експонує **дві OTel-сумісні поверхні** — `ActivitySource` і `Meter`, обидві з іменем `"SignalCli.NET"`. Без активного listener'а — нульова накладна.
+
+```csharp
+services.AddOpenTelemetry()
+    .WithTracing(t => t.AddSource("SignalCli.NET"))
+    .WithMetrics(m => m.AddMeter("SignalCli.NET"));
+```
+
+**Спани:** `rpc.<method>`, `signalcli.process.start`, `signalcli.healthcheck.ping`, `signalcli.subscribe`. **Метрики:** `signalcli.rpc.requests` (counter), `signalcli.rpc.duration` (histogram, ms), `signalcli.process.restarts` (counter), `signalcli.events.dropped` (counter), `signalcli.subscriptions.active` (observable gauge).
+
+**Privacy invariant** (CLAUDE.md rule #1): значення тегів — лише method-names, status-enums, integer-id, durations, exception-type-names. Тіло повідомлення, номер телефону, шлях до файлу — НЕ потрапляють у теги. Enforced unit-тестами `ObservabilityPrivacyTests` через `ActivityListener` + `MeterListener` із seed-PII substring assertions.
+
+**Окремий пакет `SignalCli.NET.HealthChecks`** дає `IHealthCheck`-адаптер для signal-cli process state. Залежить лише від `Microsoft.Extensions.Diagnostics.HealthChecks` (це generic-host пакет, **не ASP.NET**). Працює у будь-якому застосунку з `IHost`:
+
+```csharp
+services.AddHealthChecks().AddSignalCliHealthCheck();
+```
+
+Detailed examples — у [`docs/cloud-development.md`](docs/cloud-development.md#observability).
+
 ### 👤 Профіль
 
 | Функція | Статус | Опис |
@@ -712,9 +734,16 @@ Signal підтримує вкладення розміром до 100 МБ. З�
 |------------|------------------------------------------------------|
 | Microsoft.Extensions.Hosting.Abstractions | Абстракції для інтеграції з хостингом .NET           |
 | Microsoft.Extensions.Logging.Abstractions | Абстракції для логування                             |
+| Microsoft.Extensions.Options.DataAnnotations | `[Required]`/`[Range]`-атрибути для `[OptionsValidator]` source-gen |
 | System.Text.Json | Робота з JSON (вбудована в .NET) |
-| Nito.AsyncEx | Утиліта для асинхронного програмування               |
 | System.Reactive | Бібліотека для реактивного програмування             |
+| JetBrains.Annotations | `PublicAPI`/`NotNull`-hint'и; `PrivateAssets=all` — НЕ потрапляє у consumer dependency graph |
+
+Опціонально:
+
+| Пакет | Опис |
+|-------|------|
+| SignalCli.NET.HealthChecks | `IHealthCheck`-адаптер для signal-cli state. Залежить лише від `Microsoft.Extensions.Diagnostics.HealthChecks` — generic-host, **не ASP.NET**. Працює всюди де є `IHost`. |
 
 ## 🤝 Участь у розробці
 

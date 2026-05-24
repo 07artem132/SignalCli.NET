@@ -1,0 +1,130 @@
+name: Runtime packages smoke (Linux)
+
+# post-modernize-tuning §8d.13 / §8d.14: lightweight Linux smoke-jobs.
+#   §8d.13: `dotnet build SignalCli.sln` на ubuntu-latest має покласти
+#           `signal-cli-native/signal-cli` у consumer TargetDir (Integration tests).
+#           Захист від forward-/back-slash-розбіжностей у MSBuild Include/PackagePath.
+#   §8d.14: post-extract guard у `SignalCli.Jre.targets` має існувати з actionable
+#           messagе про відсутній `jre/bin/java[.exe]`. Static-check через grep —
+#           consumer-build-based test потребував би Windows/macOS consumer, що
+#           ускладнює CI. Static-check ловить ту ж регресію (видалення guard'у).
+#
+# Окремий job (не злито в існуючий dotnet-desktop) — runtime-пакети тягнуть signal-cli
+# (~30 МБ) і Eclipse Temurin JRE (~80 МБ); запускаємо рідше, тільки на main/PR із
+# runtime-changes (path-filtered).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/SignalCli.runtime/**'
+      - 'src/SignalCli.runtime.native/**'
+      - 'src/SignalCli.runtime.jre.*/**'
+      - 'src/build/**'
+      - '.github/workflows/runtime-smoke.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/SignalCli.runtime/**'
+      - 'src/SignalCli.runtime.native/**'
+      - 'src/SignalCli.runtime.jre.*/**'
+      - 'src/build/**'
+      - '.github/workflows/runtime-smoke.yml'
+  workflow_dispatch: # manual run from Actions UI
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  native-runtime-delivery:
+    # §8d.13: повна `dotnet build SignalCli.sln` на Linux має покласти бінарник
+    # `signal-cli-native/signal-cli` у consumer TargetDir.
+    # Consumer тут — Tests/SignalCli.Tests.Integration, оскільки лише цей проект
+    # references SignalCli.runtime.native (Example references лише non-native runtime).
+    name: native runtime delivery (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore (nuget.org only — github feed needs auth)
+        run: dotnet restore SignalCli.sln --source https://api.nuget.org/v3/index.json -p:NuGetAudit=false
+
+      - name: Build SignalCli.sln (Release) — pulls signal-cli + JRE archives
+        run: dotnet build SignalCli.sln --configuration Release --no-restore
+
+      - name: Find delivered signal-cli-native binary (Integration TargetDir)
+        id: find_binary
+        run: |
+          set -e
+          # Integration tests reference SignalCli.runtime.native via project-ref;
+          # native binary should land at <TargetDir>/signal-cli-native/signal-cli
+          # (per §8d.1 forward-slash fix).
+          candidates=$(find Tests/SignalCli.Tests.Integration -path '*/signal-cli-native/signal-cli' -type f 2>/dev/null || true)
+          if [ -z "$candidates" ]; then
+            echo "::error::signal-cli-native binary NOT delivered to consumer TargetDir."
+            echo "::error::This is the regression §8d.1 (audit N1) was fixed for —"
+            echo "::error::forward-slash separators in .targets/.csproj Include/PackagePath."
+            echo "Diagnostic: any signal-cli* in TargetDir tree:"
+            find Tests/SignalCli.Tests.Integration -name 'signal-cli*' -type f 2>/dev/null | head -20 || true
+            exit 1
+          fi
+          echo "Found delivered binary(ies):"
+          echo "$candidates"
+          echo "first_path=$(echo "$candidates" | head -1)" >> "$GITHUB_OUTPUT"
+
+      - name: Confirm binary is executable
+        run: |
+          set -e
+          test -x "${{ steps.find_binary.outputs.first_path }}" \
+            && echo "OK: executable bit set" \
+            || (echo "::error::binary present but not executable" && exit 1)
+
+  jre-guard-static-check:
+    # §8d.14: post-extract guard у `SignalCli.Jre.targets` має існувати для обох
+    # JRE-варіантів (win-x64, osx-arm64). Consumer-runtime test потребував би
+    # Windows/macOS runner із actually referencing JRE-package consumer — це
+    # дублює e2e.yml. Static grep ловить регресію "guard was removed" дешево.
+    name: JRE post-extract guard exists (static)
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Assert <Error Condition> guard present in both JRE .targets
+        run: |
+          set -e
+          for variant in win-x64 osx-arm64; do
+            targets="src/SignalCli.runtime.jre.$variant/SignalCli.Jre.targets"
+            if [ ! -f "$targets" ]; then
+              echo "::error::Missing $targets"
+              exit 1
+            fi
+            # Перевіряємо що: (а) є <Error Condition> з Exists()-check на bin/java*
+            # і (б) Text містить actionable діагностику (видаліть obj, repackage).
+            if ! grep -q '<Error Condition' "$targets"; then
+              echo "::error::$targets: <Error Condition>-guard missing — §8d.10 regression."
+              exit 1
+            fi
+            if ! grep -q "bin/java" "$targets"; then
+              echo "::error::$targets: guard exists but doesn't check 'bin/java*' — §8d.10 regression."
+              exit 1
+            fi
+            if ! grep -qi 'obj/' "$targets"; then
+              echo "::error::$targets: guard message lost actionable 'видаліть obj/' hint."
+              exit 1
+            fi
+            echo "OK: $targets — guard present with actionable message."
+          done

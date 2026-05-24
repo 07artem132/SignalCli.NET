@@ -18,10 +18,6 @@ public record AttachmentMessageOptions
     public bool UseStyle { get; private set; }
     /// <summary>Згадки користувачів у тексті.</summary>
     public IEnumerable<string>? Mentions { get; private set; }
-    /// <summary>Токен скасування відправки.</summary>
-    /// <remarks>A.5: deprecated — передавайте <c>CancellationToken</c> явно як параметр методу <c>SendAttachmentAsync(options, ct)</c>.</remarks>
-    [Obsolete("Pass CancellationToken to SendAttachmentAsync directly; will be removed in 3.0")]
-    public CancellationToken CancellationToken { get; private set; } = CancellationToken.None;
 
 
     /// <summary>Будівельник <see cref="AttachmentMessageOptions"/>.</summary>
@@ -71,20 +67,18 @@ public record AttachmentMessageOptions
             return this;
         }
 
-        /// <summary>Задати токен скасування.</summary>
-        /// <remarks>A.5: deprecated — передавайте <c>CancellationToken</c> прямо в <c>SendAttachmentAsync(options, ct)</c>.</remarks>
-        [Obsolete("Pass CancellationToken to SendAttachmentAsync directly; will be removed in 3.0")]
-        public Builder WithCancellationToken(CancellationToken cancellationToken)
-        {
-#pragma warning disable CS0618
-            _options.CancellationToken = cancellationToken;
-#pragma warning restore CS0618
-            return this;
-        }
-
         /// <summary>Будує <see cref="AttachmentMessageOptions"/>.</summary>
+        /// <exception cref="InvalidOperationException">
+        /// post-modernize-tuning §4.15 (D9): post-mutation guard.
+        /// </exception>
         public AttachmentMessageOptions Build()
         {
+            if (string.IsNullOrEmpty(_options.Account))
+                throw new InvalidOperationException("Account був скинутий після конструювання Builder.");
+            if (!_options.Recipients.Any())
+                throw new InvalidOperationException("Recipients було очищено після конструювання Builder.");
+            if (!_options.Attachments.Any())
+                throw new InvalidOperationException("Attachments було очищено після конструювання Builder.");
             return _options;
         }
     }

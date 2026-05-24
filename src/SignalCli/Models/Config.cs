@@ -9,7 +9,12 @@ namespace SignalCli.Models;
 /// <remarks>
 /// Містить налаштування для запуску та контролю процесу Signal CLI,
 /// включаючи шляхи до файлів, параметри логування та автоперезапуску.
+/// <para>
+/// audit N7: legacy-тип, що зберігається для backward compat одного мажорного релізу.
+/// Новий код має використовувати <see cref="SignalCliOptions"/> + <c>IOptions{T}</c>-pipeline.
+/// </para>
 /// </remarks>
+[Obsolete("Use SignalCliOptions + AddSignalCli(Action<SignalCliOptions>?); will be removed in 3.0.", error: false)]
 public class Config
 {
     private const string DefaultJavaPath = "java";
@@ -137,7 +142,27 @@ public class Config
     /// <summary>
     /// Змінні середовища для процесу Signal CLI.
     /// </summary>
-    public IDictionary<string, string> EnvironmentVariables { get; set; } = new Dictionary<string, string>();
+    /// <remarks>
+    /// post-modernize-tuning §4.10 (audit D7): тип на читання — <see cref="IReadOnlyDictionary{TKey,TValue}"/>,
+    /// мутація — через <see cref="WithEnvironment"/> (повертає снапшот). Це усуває можливість
+    /// мутувати dictionary після того, як Config зареєстровано в DI як singleton — раніше
+    /// будь-хто з <c>IOptions&lt;&gt;</c>-resolve міг змінити вміст і вплинути на інші компоненти.
+    /// </remarks>
+    public IReadOnlyDictionary<string, string> EnvironmentVariables { get; set; } =
+        new Dictionary<string, string>();
+
+    /// <summary>
+    /// post-modernize-tuning §4.10 (audit D7): defensive copy. Замість того, щоб віддавати
+    /// викликачу мутабельне посилання, копіюємо передану мапу і запечатуємо її read-only-вʼю.
+    /// </summary>
+    /// <param name="environment">Початкова мапа змінних середовища.</param>
+    /// <returns>Те саме <see cref="Config"/>-посилання (fluent-стиль).</returns>
+    public Config WithEnvironment(IDictionary<string, string> environment)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+        EnvironmentVariables = new Dictionary<string, string>(environment);
+        return this;
+    }
 
     /// <summary>
     /// Створює конфігурацію процесу для запуску Signal CLI.
@@ -210,6 +235,10 @@ public class Config
         };
     }
 
+    // post-modernize-tuning §8c.10 (audit C10): кеш classpath після першого Directory.GetFiles —
+    // signal-cli може перезапускатися багато разів за сесію, а каталог JAR'ів не змінюється.
+    private string? _cachedClasspath;
+
     /// <summary>
     /// Будує рядок classpath для JVM на основі JAR-файлів.
     /// </summary>
@@ -217,6 +246,8 @@ public class Config
     /// <exception cref="FileNotFoundException">Виникає, якщо JAR-файли не знайдено.</exception>
     private string BuildClasspath()
     {
+        if (_cachedClasspath != null) return _cachedClasspath;
+
         var libPath = Path.Combine(AppHome, LibDirectory);
         var jarFiles = Directory.GetFiles(libPath, "*.jar");
         if (jarFiles.Length == 0)
@@ -225,7 +256,8 @@ public class Config
         }
 
         var separator = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ";" : ":";
-        return string.Join(separator, jarFiles);
+        _cachedClasspath = string.Join(separator, jarFiles);
+        return _cachedClasspath;
     }
 
     /// <summary>

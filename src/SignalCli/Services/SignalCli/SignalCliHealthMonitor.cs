@@ -1,10 +1,13 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SignalCli.Diagnostics;
 using SignalCli.Interfaces.Rpc;
 using SignalCli.Logging;
 using SignalCli.Models;
 using SignalCli.Models.SignalCli;
+using SignalCli.Serialization;
 
 namespace SignalCli.Services.SignalCli;
 
@@ -28,6 +31,15 @@ public sealed class SignalCliHealthMonitor : BackgroundService
     // G.14 (F14): абстракція часу — у проді System (wall-clock), у тестах
     // FakeTimeProvider, тож інтервал між пінгами стає віртуальним і flake-вільним.
     private readonly TimeProvider _timeProvider;
+
+    /// <summary>
+    /// post-modernize-tuning §11.C.2 (audit N3): останній результат пінга — споживається
+    /// з пакета <c>SignalCli.NET.HealthChecks</c> через <c>InternalsVisibleTo</c>.
+    /// <c>null</c> якщо пінг ще не виконувався (наприклад, одразу після старту хоста).
+    /// Тег <c>Ok</c> = true, якщо CLI відповів вчасно з не-порожньою версією; <c>At</c> — час
+    /// у UTC, отриманий через <see cref="TimeProvider.GetUtcNow"/> (підтримує FakeTimeProvider у тестах).
+    /// </summary>
+    internal (bool Ok, DateTimeOffset At)? LastPingResult { get; private set; }
 
     /// <summary>
     /// Створює новий екземпляр монітора здоров'я Signal CLI.
@@ -114,6 +126,8 @@ public sealed class SignalCliHealthMonitor : BackgroundService
 
                     if (isHealthy) continue;
                     SignalCliHealthMonitorLog.RestartTriggered(_logger);
+                    // post-modernize-tuning §11.B.5: process-restart counter (health-triggered).
+                    SignalCliDiagnostics.ProcessRestarts.Add(1, new KeyValuePair<string, object?>("trigger", "health"));
                     await _signalCliHostedService.ForceRestartAsync(stoppingToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
@@ -146,6 +160,9 @@ public sealed class SignalCliHealthMonitor : BackgroundService
     /// <returns>true, якщо CLI відповів вчасно; інакше - false.</returns>
     private async Task<bool> PingCliAsync(TimeSpan timeout, CancellationToken ct)
     {
+        // post-modernize-tuning §11.A.4 (audit N1): healthcheck.ping span.
+        using var activity = SignalCliDiagnostics.ActivitySource.StartActivity(
+            SignalCliDiagnostics.HealthCheckPingActivityName, ActivityKind.Internal);
         try
         {
             // Якщо у нас немає доступного StreamPair (сервіс ще не "готовий"),
@@ -153,6 +170,8 @@ public sealed class SignalCliHealthMonitor : BackgroundService
             if (_signalCliHostedService.CurrentStreamPair == null)
             {
                 SignalCliHealthMonitorLog.PingNoStreamPair(_logger);
+                activity?.SetTag("signal.healthcheck.outcome", "no_stream_pair");
+                LastPingResult = (false, _timeProvider.GetUtcNow());
                 return false;
             }
 
@@ -165,24 +184,40 @@ public sealed class SignalCliHealthMonitor : BackgroundService
             // Отримуємо готовий клієнт
             var client = _clientProvider.Client;
             // Викликаємо "version"
-            var response = await client.InvokeMethodAsync<VersionResponse, VersionParameters>(
+            var response = await client.InvokeMethodAsync(
                 "version",
                 new VersionParameters(),
+                SignalJsonContext.Default.VersionParameters,
+                SignalJsonContext.Default.VersionResponse,
                 localCts.Token
             ).ConfigureAwait(false);
             // Якщо відповіли без помилки і є поле Version, значить все ок
-            if (string.IsNullOrEmpty(response.Version)) return false;
+            if (string.IsNullOrEmpty(response.Version))
+            {
+                activity?.SetTag("signal.healthcheck.outcome", "failed");
+                LastPingResult = (false, _timeProvider.GetUtcNow());
+                return false;
+            }
             SignalCliHealthMonitorLog.PingOk(_logger, response.Version);
+            activity?.SetTag("signal.healthcheck.outcome", "ok");
+            activity?.SetStatus(ActivityStatusCode.Ok);
+            LastPingResult = (true, _timeProvider.GetUtcNow());
             return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             SignalCliHealthMonitorLog.PingFailed(_logger, ex);
+            activity?.SetTag("signal.healthcheck.outcome", "failed");
+            activity?.SetStatus(ActivityStatusCode.Error, ex.GetType().Name);
+            LastPingResult = (false, _timeProvider.GetUtcNow());
             return false;
         }
         catch (OperationCanceledException ex)
         {
             SignalCliHealthMonitorLog.PingTimedOut(_logger, ex);
+            activity?.SetTag("signal.healthcheck.outcome", "timeout");
+            activity?.SetStatus(ActivityStatusCode.Error, nameof(TimeoutException));
+            LastPingResult = (false, _timeProvider.GetUtcNow());
             return false;
         }
     }

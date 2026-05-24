@@ -20,9 +20,16 @@ public interface ISignalDevices
     /// <exception cref="InvalidOperationException">Виникає при помилці початку процесу зв'язування.</exception>
     /// <exception cref="JsonRpcException">Виникає при помилці JSON-RPC запиту.</exception>
     /// <exception cref="OperationCanceledException">Виникає, якщо операцію скасовано.</exception>
-    Task<StartLinkResponse> StartLink(
+    Task<StartLinkResponse> StartLinkAsync(
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>Застаріле: використовуйте <see cref="StartLinkAsync"/>.</summary>
+    /// <param name="cancellationToken">Токен скасування операції.</param>
+    /// <returns>Інформація для зв'язування, включаючи URI для QR-коду.</returns>
+    [Obsolete("Use StartLinkAsync; will be removed in 4.0")]
+    Task<StartLinkResponse> StartLink(CancellationToken cancellationToken = default)
+        => StartLinkAsync(cancellationToken);
     
     /// <summary>
     /// Завершує процес зв'язування нового пристрою з обліковим записом.
@@ -50,9 +57,18 @@ public interface ISignalDevices
     ///     cancellationToken);
     /// </code>
     /// </example>
-    Task<FinishLinkResponse> FinishLink(
+    Task<FinishLinkResponse> FinishLinkAsync(
         string deviceLinkUri,
         string deviceName,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>Застаріле: використовуйте <see cref="FinishLinkAsync"/>.</summary>
+    /// <param name="deviceLinkUri">URI для зв'язування, отриманий під час сканування QR-коду.</param>
+    /// <param name="deviceName">Назва нового пристрою.</param>
+    /// <param name="cancellationToken">Токен скасування операції.</param>
+    /// <returns>Результат зв'язування з номером пристрою.</returns>
+    [Obsolete("Use FinishLinkAsync; will be removed in 4.0")]
+    Task<FinishLinkResponse> FinishLink(string deviceLinkUri, string deviceName, CancellationToken cancellationToken = default)
+        => FinishLinkAsync(deviceLinkUri, deviceName, cancellationToken);
 }

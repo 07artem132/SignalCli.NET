@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using SignalCli.Interfaces.Signal;
 
 namespace SignalCli.Models.Signal.Message;
@@ -19,17 +20,15 @@ public record TextMessageOptions
     /// <summary>Згадки (UUID/номери, на які слід посилатися у тексті).</summary>
     public IEnumerable<string>? Mentions { get; private set; }
     /// <summary>URL у попередньому перегляді посилання.</summary>
+    [StringSyntax(StringSyntaxAttribute.Uri)]
     public string? PreviewUrl { get; private set; }
     /// <summary>Заголовок попереднього перегляду посилання.</summary>
     public string? PreviewTitle { get; private set; }
     /// <summary>Опис попереднього перегляду посилання.</summary>
     public string? PreviewDescription { get; private set; }
     /// <summary>Зображення попереднього перегляду посилання (шлях або URI).</summary>
+    [StringSyntax(StringSyntaxAttribute.Uri)]
     public string? PreviewImage { get; private set; }
-    /// <summary>Токен скасування відправлення.</summary>
-    /// <remarks>A.5: deprecated — передавайте <c>CancellationToken</c> явно як параметр методу <c>SendTextMessageAsync(options, ct)</c>.</remarks>
-    [Obsolete("Pass CancellationToken to SendTextMessageAsync directly; will be removed in 3.0")]
-    public CancellationToken CancellationToken { get; private set; } = CancellationToken.None;
 
 
     /// <summary>Будівельник <see cref="TextMessageOptions"/>.</summary>
@@ -73,7 +72,11 @@ public record TextMessageOptions
         }
 
         /// <summary>Додати попередній перегляд посилання.</summary>
-        public Builder WithPreview(string previewUrl, string previewTitle, string previewDescription, string previewImage)
+        public Builder WithPreview(
+            [StringSyntax(StringSyntaxAttribute.Uri)] string previewUrl,
+            string previewTitle,
+            string previewDescription,
+            [StringSyntax(StringSyntaxAttribute.Uri)] string previewImage)
         {
             _options.PreviewUrl = previewUrl;
             _options.PreviewTitle = previewTitle;
@@ -82,20 +85,21 @@ public record TextMessageOptions
             return this;
         }
 
-        /// <summary>Задати токен скасування відправки.</summary>
-        /// <remarks>A.5: deprecated — передавайте <c>CancellationToken</c> прямо в <c>SendTextMessageAsync(options, ct)</c>.</remarks>
-        [Obsolete("Pass CancellationToken to SendTextMessageAsync directly; will be removed in 3.0")]
-        public Builder WithCancellationToken(CancellationToken cancellationToken)
-        {
-#pragma warning disable CS0618 // А.5: інстансер може писати в depr-property
-            _options.CancellationToken = cancellationToken;
-#pragma warning restore CS0618
-            return this;
-        }
-
         /// <summary>Будує <see cref="TextMessageOptions"/>.</summary>
+        /// <exception cref="InvalidOperationException">
+        /// post-modernize-tuning §4.15 (D9): post-mutation guard — якщо хтось обнулив
+        /// обов'язкове поле через reflection / set-через-record-with, ловимо тут.
+        /// Ctor-validation у Builder ловить початковий стан; цей guard — захист від
+        /// мутацій між ctor і Build.
+        /// </exception>
         public TextMessageOptions Build()
         {
+            if (string.IsNullOrEmpty(_options.Account))
+                throw new InvalidOperationException("Account був скинутий після конструювання Builder.");
+            if (!_options.Recipients.Any())
+                throw new InvalidOperationException("Recipients було очищено після конструювання Builder.");
+            if (string.IsNullOrEmpty(_options.Message))
+                throw new InvalidOperationException("Message був скинутий після конструювання Builder.");
             return _options;
         }
     }

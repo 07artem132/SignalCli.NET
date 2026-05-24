@@ -46,8 +46,10 @@ public class JsonRpcExceptionTests
     [Fact]
     public void FromMessage_CreatesInternalError()
     {
+        // post-modernize-tuning §4.21/§4.22 (audit N14/N15): код помилки тепер канонічний
+        // JSON-RPC 2.0 "-32603" ("Internal error") замість нестандартного -32000.
         var ex = new JsonRpcException("boom");
-        Assert.Equal(-32000, ex.Error.Code);
+        Assert.Equal(-32603, ex.Error.Code);
         Assert.Equal("boom", ex.Error.Message);
     }
 

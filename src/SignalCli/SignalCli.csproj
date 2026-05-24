@@ -6,6 +6,13 @@
         <Nullable>enable</Nullable>
         <!-- Бібліотека тепер warning-clean: фіксуємо це, щоб регресії не поверталися. -->
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <!-- post-modernize-tuning §6.7 (audit P6): IsAotCompatible УВІМКНЕНО після redesign'у
+             ISignalCliClient.InvokeMethodAsync<TReq,TResp> на JsonTypeInfo<T>-аргументи
+             (§6.7 raund 14). JsonRpcClient.InvokeMethodAsync тепер використовує AOT-safe
+             overload'и `SerializeToElement(value, JsonTypeInfo<T>)` і
+             `JsonElement.Deserialize<T>(JsonTypeInfo<T>)`. Reflection fallback у SignalJson.Options
+             видалено (§6.4); production-options тримає лише SignalJsonContext.Default. -->
+        <IsAotCompatible>true</IsAotCompatible>
         <!-- Налаштування документації -->
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <DocumentationFile>$(OutputPath)$(AssemblyName).xml</DocumentationFile>
@@ -17,7 +24,9 @@
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <Authors>07artem132</Authors>
         <PackageId>SignalCli.NET</PackageId>
-        <Version>2.1.0</Version>
+        <!-- post-modernize-tuning §4.16 (audit D): semver-major для breaking-API хвилі —
+             див. CHANGELOG.md секцію [3.0.0] для повного переліку breaking changes. -->
+        <Version>3.0.0</Version>
         <PackageProjectUrl>https://github.com/07artem132/SignalCli.NET</PackageProjectUrl>
         <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
         <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
@@ -26,29 +35,53 @@
         <Description>SignalCli.NET — .NET-обгортка для signal-cli, яка забезпечує зручний та зрозумілий API для інтеграції месенджера Signal у ваші .NET-застосунки.</Description>
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-        <AssemblyVersion>2.1.0</AssemblyVersion>
-        <FileVersion>2.1.0</FileVersion>
+        <AssemblyVersion>3.0.0</AssemblyVersion>
+        <FileVersion>3.0.0</FileVersion>
     </PropertyGroup>
     <ItemGroup>
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
             <_Parameter1>SignalCli.Tests</_Parameter1>
         </AssemblyAttribute>
 
+        <!-- E2E integration tests потребують прямого доступу до SignalJsonContext.Default.*
+             для AOT-safe викликів InvokeMethodAsync (після §6.7 redesign'у). -->
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+            <_Parameter1>SignalCli.Tests.Integration</_Parameter1>
+        </AssemblyAttribute>
+
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
             <_Parameter1>DynamicProxyGenAssembly2</_Parameter1>
+        </AssemblyAttribute>
+
+        <!-- post-modernize-tuning §11.C.4 (audit N3): окремий пакет HealthChecks
+             читає ProcessStateManager.CurrentState (public) і SignalCliHealthMonitor.LastPingResult
+             (internal — нова властивість у §11.C.2). InternalsVisibleTo тримає health-checks
+             залежність опціональною: core lib не тягне Microsoft.Extensions.Diagnostics.HealthChecks. -->
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+            <_Parameter1>SignalCli.HealthChecks</_Parameter1>
         </AssemblyAttribute>
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="JetBrains.Annotations" Version="2024.3.0"/>
+        <!-- post-modernize-tuning §4.14 (audit D12): PrivateAssets="all" — JetBrains.Annotations
+             використовується лише як build-time hint (PublicAPI, NotNull тощо). Без цього
+             атрибута пакет потрапляє у dependency-list споживача, який ніколи його не
+             використовує напряму. -->
+        <PackageReference Include="JetBrains.Annotations" Version="2024.3.0" PrivateAssets="all"/>
         <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0"/>
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0"/>
         <!-- D.1: DataAnnotations для типізованої валідації SignalCliOptions через
              OptionsBuilder.ValidateDataAnnotations().
              D.9: source-generator для [OptionsValidator] включений у пакет
              Microsoft.Extensions.Options ≥ 9.0 — окремий пакет не потрібен. -->
+        <!-- post-modernize-tuning §8b.8 (audit E1): DataAnnotations залишається,
+             бо source-gen [OptionsValidator] читає [Required]/[Range] атрибути з нього.
+             Але .ValidateDataAnnotations() (reflection) видалено з ServiceCollectionExtensions. -->
         <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.0"/>
-        <PackageReference Include="Nito.AsyncEx" Version="5.1.2"/>
+        <!-- post-modernize-tuning §8b.3 (audit B5): IConfiguration overload для AddSignalCli —
+             тягне OptionsBuilder<T>.Bind(IConfigurationSection) extension. -->
+        <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0"/>
+        <!-- post-modernize-tuning §6.3 (audit B2): Nito.AsyncEx removed — SemaphoreSlim replaces AsyncLock. -->
         <PackageReference Include="System.Reactive" Version="6.0.1"/>
     </ItemGroup>
 </Project>

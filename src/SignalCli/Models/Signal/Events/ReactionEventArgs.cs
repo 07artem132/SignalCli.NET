@@ -24,7 +24,7 @@ namespace SignalCli.Models.Signal.Events;
 [PublicAPI]
 public record ReactionEventArgs(
     int SubscriptionId,
-    string? Account,
+    string Account,
     JsonReaction Reaction,
     string? Source,
     string? SourceNumber,

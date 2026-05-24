@@ -23,7 +23,7 @@ namespace SignalCli.Models.Signal.Events;
 [PublicAPI]
 public record TypingEventArgs(
     int SubscriptionId,
-    string? Account,
+    string Account,
     JsonTypingMessage TypingMessage,
     string? Source,
     string? SourceNumber,

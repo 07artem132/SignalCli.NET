@@ -19,8 +19,9 @@ public class ProcessRunnerTests
         var runner = new ProcessRunner(loggerMock.Object, processFactoryMock.Object);
 
         // Act & Assert
-        await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            runner.StartProcessWithHandle(null!, CancellationToken.None));
+        // post-modernize-tuning §8a.4: StartProcessWithHandle тепер ValueTask — обгортаємо в async-lambda.
+        await Assert.ThrowsAsync<ArgumentNullException>(async () =>
+            await runner.StartProcessWithHandle(null!, CancellationToken.None));
     }
 
     [Fact]
@@ -42,8 +43,8 @@ public class ProcessRunnerTests
         };
 
         // Act & Assert
-        await Assert.ThrowsAsync<OperationCanceledException>(() =>
-            runner.StartProcessWithHandle(config, cts.Token));
+        await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+            await runner.StartProcessWithHandle(config, cts.Token));
     }
 
     [Fact]

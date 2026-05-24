@@ -1,9 +1,11 @@
-﻿using System.Reactive.Linq;
+﻿using System.Diagnostics;
+using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Text.Json;
 using System.Threading.Channels;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using SignalCli.Diagnostics;
 using SignalCli.Interfaces.Rpc;
 using SignalCli.Interfaces.Signal;
 using SignalCli.Interfaces.SignalCli;
@@ -11,22 +13,53 @@ using SignalCli.Logging;
 using SignalCli.Models.Rpc;
 using SignalCli.Models.Signal;
 using SignalCli.Models.Signal.Events;
+using SignalCli.Serialization;
 
 namespace SignalCli.Services.Signal;
 
-internal class SignalEventService(
+/// <summary>
+/// Внутрішня реалізація <see cref="ISignalEventService"/>: розбирає RPC-нотифікації
+/// signal-cli й роздає їх двома паралельними поверхнями — Rx <see cref="IObservable{T}"/>
+/// (broadcast/fan-out) та <see cref="IAsyncEnumerable{T}"/> поверх bounded-каналів
+/// (exclusive consumption, back-pressure через DropOldest).
+/// </summary>
+/// <remarks>
+/// <para>
+/// <b>SingleWriter invariant (audit N14).</b> Усі канали створюються з
+/// <c>BoundedChannelOptions.SingleWriter = true</c>. Це валідно ЛИШЕ доки
+/// <c>OnNotificationReceived</c> викликається ЛИШЕ з одного потоку RPC-нотифікацій
+/// (один <c>_rpcClient.Notifications.Subscribe(…)</c> у <c>StartAsync</c>).
+/// Якщо колись додасться другий писач (наприклад, multi-RPC fan-in або повторний
+/// <c>Subscribe</c> без диспозу попереднього) — <c>ChannelOptions.SingleWriter</c>
+/// має змінитися на <c>false</c>, інакше поведінка — undefined per
+/// <see href="https://learn.microsoft.com/dotnet/api/system.threading.channels.channeloptions.singlewriter">ChannelOptions.SingleWriter</see>.
+/// Підтримуємо інваріант через ідемпотентний <c>StartAsync</c> (Interlocked.Exchange
+/// + Dispose попередньої підписки) — другий-одночасний писач неможливий.
+/// </para>
+/// </remarks>
+// post-modernize-tuning §8c.1 (audit C5/N17): sealed — інхеріт не підтримується.
+internal sealed class SignalEventService(
     ILogger<SignalEventService> logger,
     IJsonRpcClientProvider rpcClientProvider,
     ISignalCliClient signalCliClient)
     : ISignalEventService, IDisposable
 {
     private readonly ILogger<SignalEventService> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    private  IJsonRpcClient? _rpcClient;
+    // post-modernize-tuning §8c.2 (audit C4): _rpcClient field removed — використовуємо
+    // _rpcClientProvider.Client напряму при потребі (поточний RPC-клієнт може
+    // змінитися після рестарту процесу; кешувати посилання — баг-prone).
     private readonly ISignalCliClient _signalCliClient = signalCliClient ?? throw new ArgumentNullException(nameof(signalCliClient));
     private readonly IJsonRpcClientProvider _rpcClientProvider = rpcClientProvider ?? throw new ArgumentNullException(nameof(rpcClientProvider));
 
     // Зберігаємо "account -> subscriptionId"
     private readonly Dictionary<string, int> _accountSubscriptions = new();
+    // post-modernize-tuning §3.1-3.5 (audit A4): reservation placeholder pattern.
+    // Перший виклик SubscribeAsync(account) кладе TCS у _pendingSubscribes; кокурентні
+    // виклики бачать той самий TCS і await'ять його замість того, щоб робити власний
+    // subscribeReceive-RPC. Це усуває orphan-subscriptions на signal-cli (N RPC при
+    // одночасних 10 викликах → завжди 1 RPC), і паралельні викликачі отримують
+    // ОДИН і той самий subscriptionId. Захищено тим самим _subscriptionsLock.
+    private readonly Dictionary<string, TaskCompletionSource<int>> _pendingSubscribes = new();
 
     // C# 13 / .NET 9+: окремий System.Threading.Lock замість блокування на самому словнику
     // (не блокуємося на структурі даних, яку захищаємо — див. IDE0330).
@@ -68,11 +101,13 @@ internal class SignalEventService(
     private readonly Channel<EditEventArgs> _editChannel = Channel.CreateBounded<EditEventArgs>(ChannelOptionsTemplate());
     private readonly Channel<RemoteDeleteEventArgs> _remoteDeleteChannel = Channel.CreateBounded<RemoteDeleteEventArgs>(ChannelOptionsTemplate());
 
-    // Сумарний лічильник «дропів через переповнення». Періодично логується на Debug
-    // у TryWrite (раз на 100 дропів — щоб не спамити).
-    private long _droppedCount;
+    // post-modernize-tuning §8c.21 + §11.B.4: drop accounting перенесено повністю
+    // на Meter (`signalcli.events.dropped` counter з `event_type` тегом).
+    // Приватний _droppedCount field видалено.
 
-    private bool _disposed;
+    // post-modernize-tuning §2.4: Interlocked.Exchange-based disposal flag.
+    private int _disposedFlag;
+    private bool _disposed => Volatile.Read(ref _disposedFlag) != 0;
 
     // AsObservable() приховує Subject: споживач не може зробити downcast і самостійно
     // викликати OnNext/OnError/OnCompleted на наших потоках подій.
@@ -143,16 +178,14 @@ internal class SignalEventService(
     /// успішне, але якщо канал перед записом був повним — найстаріший елемент вижений.
     /// Інкрементує лічильник і періодично логує на Debug для діагностики backpressure.
     /// </summary>
-    private void TryWriteOrDrop<T>(Channel<T> channel, T item)
+    private static void TryWriteOrDrop<T>(Channel<T> channel, T item, string eventType)
     {
-        // Якщо канал вже повний — DropOldest вижене найстаріший. Лічимо це як drop.
+        // Якщо канал вже повний — DropOldest вижене найстаріший. Інкрементуємо
+        // Meter-counter — drop accounting тепер виходить назовні через OTel.
         if (channel.Reader.Count >= ChannelCapacity)
         {
-            var dropped = Interlocked.Increment(ref _droppedCount);
-            if (dropped % 100 == 1)
-            {
-                SignalEventServiceLog.ChannelOverflowed(_logger, typeof(T).Name, dropped);
-            }
+            SignalCliDiagnostics.EventsDropped.Add(1,
+                new KeyValuePair<string, object?>("event_type", eventType));
         }
         channel.Writer.TryWrite(item);
     }
@@ -160,43 +193,99 @@ internal class SignalEventService(
     public async Task<SubscribeReceiveResponse> SubscribeAsync(string account,
         CancellationToken cancellationToken = default)
     {
-        // Перевіряємо наявність існуючої підписки
+        // audit N5: вхідні рядки валідуємо типізовано — ArgumentException, не NRE.
+        ArgumentException.ThrowIfNullOrEmpty(account);
+
+        // §3.5 (audit C6): rejected-after-dispose throws ObjectDisposedException
+        // (типізовано, не NRE через _disposed-перевірки в downstream).
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        // post-modernize-tuning §11.A.5 (audit N1): subscribe span.
+        // signal.subscription.id (int) — не PII; account — НЕ ставимо як тег (PII — номер).
+        using var activity = SignalCliDiagnostics.ActivitySource.StartActivity(
+            SignalCliDiagnostics.SubscribeActivityName, ActivityKind.Internal);
+
+        // post-modernize-tuning §3.1-3.5 (audit A4) + audit N5: під одним локом
+        // вирішуємо ВСЕ — committed, in-flight (placeholder), або стаємо leader-ом.
+        TaskCompletionSource<int>? myTcs = null;
+        Task<int>? waitOn = null;
         lock (_subscriptionsLock)
         {
-            if (_accountSubscriptions.ContainsKey(account))
+            // 1. Уже зареєстрована → ідемпотентно повертаємо існуючий ID без RPC.
+            if (_accountSubscriptions.TryGetValue(account, out var existingId))
             {
-                throw new InvalidOperationException(
-                    $"Обліковий запис '{account}' вже підписаний на події. Спочатку відпишіться.");
+                SignalEventServiceLog.SubscribeIdempotent(_logger, account, existingId);
+                return new SubscribeReceiveResponse(existingId);
+            }
+
+            // 2. RPC уже летить — чекаємо на існуючий placeholder, замість дублювати RPC.
+            if (_pendingSubscribes.TryGetValue(account, out var existingTcs))
+            {
+                waitOn = existingTcs.Task;
+            }
+            else
+            {
+                // 3. Ми — leader, ставимо placeholder ATOMICALLY.
+                myTcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+                _pendingSubscribes[account] = myTcs;
             }
         }
 
-        var responseToken = await _signalCliClient
-            .InvokeMethodAsync<JsonElement, SubscribeReceiveParameters>(
-                "subscribeReceive",
-                new SubscribeReceiveParameters(account),
-                cancellationToken).ConfigureAwait(false);
-
-        int subscriptionId = responseToken.GetInt32();
-
-        lock (_subscriptionsLock)
+        // Шлях для follower-ів — чекаємо на leader.
+        if (waitOn != null)
         {
-            if (_accountSubscriptions.ContainsKey(account))
-            {
-                throw new InvalidOperationException(
-                    $"Обліковий запис '{account}' вже підписаний (гонка).");
-            }
-
-            _accountSubscriptions[account] = subscriptionId;
+            var id = await waitOn.WaitAsync(cancellationToken).ConfigureAwait(false);
+            SignalEventServiceLog.SubscribeIdempotent(_logger, account, id);
+            return new SubscribeReceiveResponse(id);
         }
 
-        SignalEventServiceLog.Subscribed(_logger, account, subscriptionId);
+        // Шлях для leader — робимо RPC, потім commit-ить placeholder.
+        try
+        {
+            var responseToken = await _signalCliClient
+                .InvokeMethodAsync(
+                    "subscribeReceive",
+                    new SubscribeReceiveParameters(account),
+                    SignalJsonContext.Default.SubscribeReceiveParameters,
+                    SignalJsonContext.Default.JsonElement,
+                    cancellationToken).ConfigureAwait(false);
 
-        return new SubscribeReceiveResponse(subscriptionId);
+            int subscriptionId = responseToken.GetInt32();
+
+            lock (_subscriptionsLock)
+            {
+                _accountSubscriptions[account] = subscriptionId;
+                _pendingSubscribes.Remove(account);
+            }
+
+            // Будимо всіх follower-ів — вони отримають той самий ID.
+            myTcs!.TrySetResult(subscriptionId);
+
+            // §11.A.5: subscriptionId — integer, безпечно як тег; account — НЕ ставимо (PII).
+            activity?.SetTag("signal.subscription.id", subscriptionId);
+            activity?.SetStatus(ActivityStatusCode.Ok);
+            SignalEventServiceLog.Subscribed(_logger, account, subscriptionId);
+            return new SubscribeReceiveResponse(subscriptionId);
+        }
+        catch (Exception ex)
+        {
+            // §3.2: на помилку RPC — rollback placeholder і прокинути виняток follower-ам теж.
+            lock (_subscriptionsLock)
+            {
+                _pendingSubscribes.Remove(account);
+            }
+            myTcs!.TrySetException(ex);
+            activity?.SetStatus(ActivityStatusCode.Error, ex.GetType().Name);
+            throw;
+        }
     }
 
     public async Task<UnsubscribeReceiveResponse> UnsubscribeAsync(int subscriptionId,
         CancellationToken cancellationToken = default)
     {
+        // §3.5 (audit C6): typed dispose guard.
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
         string? account;
         lock (_subscriptionsLock)
         {
@@ -210,9 +299,11 @@ internal class SignalEventService(
         }
 
         var resp = await _signalCliClient
-            .InvokeMethodAsync<UnsubscribeReceiveResponse, UnsubscribeReceiveParameters>(
+            .InvokeMethodAsync(
                 "unsubscribeReceive",
                 new UnsubscribeReceiveParameters(subscriptionId),
+                SignalJsonContext.Default.UnsubscribeReceiveParameters,
+                SignalJsonContext.Default.UnsubscribeReceiveResponse,
                 cancellationToken).ConfigureAwait(false);
 
         lock (_subscriptionsLock)
@@ -255,7 +346,7 @@ internal class SignalEventService(
             using var scope = _logger.BeginScope(new Dictionary<string, object>
             {
                 ["SubscriptionId"] = subscriptionId,
-                ["Account"] = account!,
+                ["Account"] = account,
             });
 
             // Якщо отримано подію набору тексту
@@ -274,7 +365,7 @@ internal class SignalEventService(
                     jsonEnvelope.ServerReceivedTimestamp,
                     jsonEnvelope.ServerDeliveredTimestamp);
                 _typing.OnNext(typingEvent);
-                TryWriteOrDrop(_typingChannel, typingEvent);
+                TryWriteOrDrop(_typingChannel, typingEvent, "typing");
                 return;
             }
 
@@ -294,7 +385,7 @@ internal class SignalEventService(
                     jsonEnvelope.ServerReceivedTimestamp,
                     jsonEnvelope.ServerDeliveredTimestamp);
                 _receipts.OnNext(receiptEvent);
-                TryWriteOrDrop(_receiptChannel, receiptEvent);
+                TryWriteOrDrop(_receiptChannel, receiptEvent, "receipt");
                 return;
             }
 
@@ -314,7 +405,7 @@ internal class SignalEventService(
                     jsonEnvelope.ServerReceivedTimestamp,
                     jsonEnvelope.ServerDeliveredTimestamp);
                 _syncs.OnNext(syncEvent);
-                TryWriteOrDrop(_syncChannel, syncEvent);
+                TryWriteOrDrop(_syncChannel, syncEvent, "sync");
                 return;
             }
 
@@ -334,7 +425,7 @@ internal class SignalEventService(
                     jsonEnvelope.ServerReceivedTimestamp,
                     jsonEnvelope.ServerDeliveredTimestamp);
                 _edits.OnNext(editEvent);
-                TryWriteOrDrop(_editChannel, editEvent);
+                TryWriteOrDrop(_editChannel, editEvent, "edit");
                 return;
             }
 
@@ -362,7 +453,7 @@ internal class SignalEventService(
                         jsonEnvelope.ServerReceivedTimestamp,
                         jsonEnvelope.ServerDeliveredTimestamp);
                     _textMessages.OnNext(textEvent);
-                    TryWriteOrDrop(_textChannel, textEvent);
+                    TryWriteOrDrop(_textChannel, textEvent, "text");
                     emitted = true;
                 }
 
@@ -383,7 +474,7 @@ internal class SignalEventService(
                         jsonEnvelope.ServerDeliveredTimestamp);
 
                     _reaction.OnNext(reactionEvent);
-                    TryWriteOrDrop(_reactionChannel, reactionEvent);
+                    TryWriteOrDrop(_reactionChannel, reactionEvent, "reaction");
                     emitted = true;
                 }
 
@@ -403,7 +494,7 @@ internal class SignalEventService(
                         jsonEnvelope.ServerReceivedTimestamp,
                         jsonEnvelope.ServerDeliveredTimestamp);
                     _sticker.OnNext(stickerEvent);
-                    TryWriteOrDrop(_stickerChannel, stickerEvent);
+                    TryWriteOrDrop(_stickerChannel, stickerEvent, "sticker");
                     emitted = true;
                 }
 
@@ -423,7 +514,7 @@ internal class SignalEventService(
                         jsonEnvelope.ServerReceivedTimestamp,
                         jsonEnvelope.ServerDeliveredTimestamp);
                     _attachments.OnNext(attachmentEvent);
-                    TryWriteOrDrop(_attachmentChannel, attachmentEvent);
+                    TryWriteOrDrop(_attachmentChannel, attachmentEvent, "attachment");
                     emitted = true;
                 }
 
@@ -443,7 +534,7 @@ internal class SignalEventService(
                         jsonEnvelope.ServerReceivedTimestamp,
                         jsonEnvelope.ServerDeliveredTimestamp);
                     _remoteDeletes.OnNext(rd);
-                    TryWriteOrDrop(_remoteDeleteChannel, rd);
+                    TryWriteOrDrop(_remoteDeleteChannel, rd, "remote_delete");
                     emitted = true;
                 }
 
@@ -465,7 +556,7 @@ internal class SignalEventService(
                         jsonEnvelope.ServerReceivedTimestamp,
                         jsonEnvelope.ServerDeliveredTimestamp);
                     _quotes.OnNext(qe);
-                    TryWriteOrDrop(_quoteChannel, qe);
+                    TryWriteOrDrop(_quoteChannel, qe, "quote");
                     emitted = true;
                 }
 
@@ -490,7 +581,14 @@ internal class SignalEventService(
     /// <param name="subscriptionId">Ідентифікатор підписки.</param>
     /// <param name="account">Знайдений обліковий запис або null, якщо підписка не існує.</param>
     /// <returns>true, якщо підписка знайдена; інакше - false.</returns>
-    private bool TryGetAccountBySubscriptionId(int subscriptionId, out string? account)
+    /// <remarks>
+    /// post-modernize-tuning §4.19: <see cref="System.Diagnostics.CodeAnalysis.NotNullWhenAttribute"/>
+    /// сповіщає нульабельність-аналізатор, що при <c>true</c>-поверненні <paramref name="account"/>
+    /// гарантовано non-null — це усуває потребу в <c>account!</c>-cast'ах на сайтах виклику.
+    /// </remarks>
+    private bool TryGetAccountBySubscriptionId(
+        int subscriptionId,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? account)
     {
         lock (_subscriptionsLock)
         {
@@ -510,8 +608,7 @@ internal class SignalEventService(
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        if (Interlocked.Exchange(ref _disposedFlag, 1) != 0) return;
 
         // Спершу припиняємо приймати нові нотифікації, потім завершуємо потоки подій.
         _notificationSubscription?.Dispose();
@@ -552,9 +649,28 @@ internal class SignalEventService(
         var oldSub = Interlocked.Exchange(ref _notificationSubscription, null);
         oldSub?.Dispose();
 
-        _rpcClient = _rpcClientProvider.Client;
-        _notificationSubscription = _rpcClient.Notifications.Subscribe(OnNotificationReceived);
+        // §8c.2: читаємо .Client раз тут (вже після того як rpc-провайдер ініціалізував його
+        // в порядку hosted-service startup), але НЕ зберігаємо у полі — клієнт міг бути
+        // disposнутим до Dispose() через рестарт процесу.
+        _notificationSubscription = _rpcClientProvider.Client.Notifications.Subscribe(OnNotificationReceived);
+        // post-modernize-tuning §11.B.6: реєструємо gauge-провайдер для активних підписок.
+        // Безпечно читати _accountSubscriptions.Count поза локом — Dictionary.Count є потокобезпечним
+        // для read-only-доступу (документація: read-thread-safe доки немає concurrent writes;
+        // у нас всі writes — під _subscriptionsLock, тож worst case — на 1 застаріле значення).
+        SignalCliDiagnostics.SetActiveSubscriptionsProvider(GetActiveSubscriptionCount);
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// post-modernize-tuning §11.B.6: потокобезпечне читання кількості активних підписок
+    /// для <see cref="SignalCliDiagnostics.ActiveSubscriptions"/> ObservableGauge.
+    /// </summary>
+    private int GetActiveSubscriptionCount()
+    {
+        lock (_subscriptionsLock)
+        {
+            return _accountSubscriptions.Count;
+        }
     }
 
     public Task StopAsync(CancellationToken cancellationToken)

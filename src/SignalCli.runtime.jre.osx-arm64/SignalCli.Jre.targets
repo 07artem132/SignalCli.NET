@@ -21,5 +21,12 @@
              Required for the macOS JRE launcher. -->
         <Exec Condition="'$(OS)' != 'Windows_NT' and Exists('$(TargetDir)jre/bin/java')"
               Command="chmod -R +x &quot;$(TargetDir)jre/bin&quot;" />
+
+        <!-- post-modernize-tuning §8d.10 (audit N11): post-extract integrity check. macOS-вариант:
+             перевіряємо саме `bin/java` (не `.exe`). NuGet corruption у Temurin-archive призведе до
+             missing-launcher; chmod-step проходить без помилки навіть для broken archive, тож
+             інтеграцію перевіряємо тут. -->
+        <Error Condition="!Exists('$(TargetDir)jre/bin/java')"
+               Text="SignalCli.NET.Runtime.Jre.osx-arm64: extraction completed, але `$(TargetDir)jre/bin/java` відсутній. Можливо, jre.zip пошкоджений у пакеті (видаліть obj/, restore -force) або NuGet corruption (перепакуйте пакет — див. CLAUDE.md rule #8). Без java SignalCli не може стартувати signal-cli у JVM-режимі." />
     </Target>
 </Project>

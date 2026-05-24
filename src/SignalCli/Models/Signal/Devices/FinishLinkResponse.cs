@@ -1,4 +1,5 @@
-﻿using JetBrains.Annotations;
+﻿using System.Text.Json.Serialization;
+using JetBrains.Annotations;
 
 namespace SignalCli.Models.Signal.Devices;
 
@@ -8,7 +9,9 @@ namespace SignalCli.Models.Signal.Devices;
 /// <remarks>
 /// Містить ідентифікатор облікового запису, з яким був зв'язаний пристрій.
 /// Повертається після успішного завершення процесу зв'язування.
+/// post-modernize-tuning §4.1 (audit D1): PascalCase property (Microsoft *Capitalization conventions*);
+/// wire-level JSON field name `number` зберігається через <c>[JsonPropertyName]</c>.
 /// </remarks>
-/// <param name="number">Номер телефону зв'язаного облікового запису.</param>
+/// <param name="Number">Номер телефону зв'язаного облікового запису.</param>
 [PublicAPI]
-public sealed record FinishLinkResponse(string number);
+public sealed record FinishLinkResponse([property: JsonPropertyName("number")] string Number);

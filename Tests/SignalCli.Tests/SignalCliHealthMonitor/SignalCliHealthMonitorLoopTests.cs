@@ -31,11 +31,7 @@ public class SignalCliHealthMonitorLoopTests : SignalCliHealthMonitorTestBase
             });
 
         JsonRpcClientMock
-            .Setup(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
-                It.IsAny<string>(),
-                It.IsAny<VersionParameters>(),
-                It.IsAny<CancellationToken>()
-            ))
+            .Setup(c => c.InvokeMethodAsync<VersionParameters, VersionResponse>(It.IsAny<string>(), It.IsAny<VersionParameters>(), It.IsAny<JsonTypeInfo<VersionParameters>>(), It.IsAny<JsonTypeInfo<VersionResponse>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new VersionResponse(""));
 
         var monitor = CreateMonitor(service);
@@ -100,11 +96,7 @@ public class SignalCliHealthMonitorLoopTests : SignalCliHealthMonitorTestBase
         var pingObserved = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var pingCount = 0;
         JsonRpcClientMock
-            .Setup(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
-                It.IsAny<string>(),
-                It.IsAny<VersionParameters>(),
-                It.IsAny<CancellationToken>()
-            ))
+            .Setup(c => c.InvokeMethodAsync<VersionParameters, VersionResponse>(It.IsAny<string>(), It.IsAny<VersionParameters>(), It.IsAny<JsonTypeInfo<VersionParameters>>(), It.IsAny<JsonTypeInfo<VersionResponse>>(), It.IsAny<CancellationToken>()))
             .Callback(() =>
             {
                 Interlocked.Increment(ref pingCount);
@@ -180,10 +172,7 @@ public class SignalCliHealthMonitorLoopTests : SignalCliHealthMonitorTestBase
         var fakeTime = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(DateTimeOffset.UtcNow);
 
         JsonRpcClientMock
-            .Setup(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
-                It.IsAny<string>(),
-                It.IsAny<VersionParameters>(),
-                It.IsAny<CancellationToken>()))
+            .Setup(c => c.InvokeMethodAsync<VersionParameters, VersionResponse>(It.IsAny<string>(), It.IsAny<VersionParameters>(), It.IsAny<JsonTypeInfo<VersionParameters>>(), It.IsAny<JsonTypeInfo<VersionResponse>>(), It.IsAny<CancellationToken>()))
             .Callback(() =>
             {
                 lock (pingTimes) { pingTimes.Add(fakeTime.GetUtcNow()); }
@@ -223,7 +212,8 @@ public class SignalCliHealthMonitorLoopTests : SignalCliHealthMonitorTestBase
             {
                 var interval = snapshot[i] - snapshot[i - 1];
                 // У віртуальному часі інтервал точно 1с (без flake-вікон).
-                Assert.Equal(1.0, interval.TotalSeconds);
+                // post-modernize-tuning §7.4: explicit precision на double-assert (CA2243-safe).
+                Assert.Equal(1.0, interval.TotalSeconds, precision: 3);
             }
         }
         finally

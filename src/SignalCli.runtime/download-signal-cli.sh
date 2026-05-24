@@ -1,18 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# post-modernize-tuning §8d.4-§8d.6 (audit N6): Version і Sha256 тепер можна
+# передавати позиційними args (з csproj <SignalCliVersion>/<SignalCliSha256> через
+# Exec Command). Дефолти лишаємо для прямого виклику скрипта без csproj-binding'у.
+#
+# Усі аргументи опціональні:
+#   $1 — OUT_DIR  (default: signal-cli)
+#   $2 — VERSION  (default: 0.14.3)
+#   $3 — SHA256   (default: pinned value below)
 OUT_DIR="${1:-signal-cli}"
+VERSION="${2:-0.14.3}"
+EXPECTED_SHA256="${3:-60a0a51312d07ed0cd6f4d5080b2ffe6ee838ea99f92297f2803e24af1826c6f}"
 
 if [ -f "$OUT_DIR/bin/signal-cli" ]; then
   echo "✅ signal-cli вже існує в $OUT_DIR, завантаження не потрібне."
   exit 0
 fi
 
-VERSION="0.14.3"
 FILENAME="signal-cli-$VERSION.tar.gz"
 URL="https://github.com/AsamK/signal-cli/releases/download/v$VERSION/$FILENAME"
-# SHA-256 офіційного релізного архіву (звірено із завантаженням з GitHub Releases).
-EXPECTED_SHA256="60a0a51312d07ed0cd6f4d5080b2ffe6ee838ea99f92297f2803e24af1826c6f"
 
 TMP_DIR="$(mktemp -d)"
 ARCHIVE="$TMP_DIR/$FILENAME"

@@ -16,7 +16,7 @@ public class SignalCliHostedServiceDisposalTests : SignalCliHostedServiceTestsBa
         // Arrange
         var service = CreateService();
         await service.StartAsync(CancellationToken.None);
-        var process = GetPrivateField<IProcess>(service, "_currentProcess");
+        var process = service.CurrentProcessForTests;
         var processMock = Mock.Get(process!);
         
         var streamPair = service.CurrentStreamPair;
@@ -30,8 +30,8 @@ public class SignalCliHostedServiceDisposalTests : SignalCliHostedServiceTestsBa
         processMock.Verify(p => p.Kill(true), Times.Once);
 
         // Перевіряємо, що процес і потоки занулено
-        Assert.Null(GetPrivateField<IProcess>(service, "_currentProcess"));
-        Assert.Null(GetPrivateField<StreamPair>(service, "_currentStreamPair"));
+        Assert.Null(service.CurrentProcessForTests);
+        Assert.Null(service.CurrentStreamPairForTests);
 
         // Перевіряємо, що потоки закрито
         Assert.Throws<ObjectDisposedException>(() => memStream.Position);
@@ -47,7 +47,7 @@ public class SignalCliHostedServiceDisposalTests : SignalCliHostedServiceTestsBa
         // Arrange
         var service = CreateService();
         await service.StartAsync(CancellationToken.None);
-        var process = GetPrivateField<IProcess>(service, "_currentProcess");
+        var process = service.CurrentProcessForTests;
         var processMock = Mock.Get(process!);
 
         // Act
@@ -143,7 +143,7 @@ public class SignalCliHostedServiceDisposalTests : SignalCliHostedServiceTestsBa
         // Arrange
         var service = CreateService();
         await service.StartAsync(CancellationToken.None);
-        var process = GetPrivateField<IProcess>(service, "_currentProcess");
+        var process = service.CurrentProcessForTests;
         var processMock = Mock.Get(process!);
         
         processMock.Setup(p => p.Kill(It.IsAny<bool>()))
@@ -153,8 +153,8 @@ public class SignalCliHostedServiceDisposalTests : SignalCliHostedServiceTestsBa
         service.Dispose();
 
         // Assert
-        Assert.Null(GetPrivateField<IProcess>(service, "_currentProcess"));
-        Assert.Null(GetPrivateField<StreamPair>(service, "_currentStreamPair"));
+        Assert.Null(service.CurrentProcessForTests);
+        Assert.Null(service.CurrentStreamPairForTests);
         
         VerifyLog(LogLevel.Error, "Помилка при disposing SignalCliHostedService");
     }
@@ -168,7 +168,9 @@ public class SignalCliHostedServiceDisposalTests : SignalCliHostedServiceTestsBa
     
         ProcessRunnerMock
             .Setup(r => r.StartProcessWithHandle(It.IsAny<ProcessConfig>(), It.IsAny<CancellationToken>()))
-            .Returns(startTaskCompletionSource.Task);
+            // post-modernize-tuning §8a.4: IProcessRunner повертає ValueTask;
+            // обгортаємо існуючий TCS-Task через `new ValueTask<T>(task)`.
+            .Returns(new ValueTask<(IProcess, StreamPair)>(startTaskCompletionSource.Task));
 
         var service = CreateService();
         var startTask = service.StartAsync(CancellationToken.None);
@@ -184,7 +186,7 @@ public class SignalCliHostedServiceDisposalTests : SignalCliHostedServiceTestsBa
         // Після уніфікації помилка старту проростає як є (InvalidOperationException),
         // а не маскується ObjectDisposedException від OnNext на утилізованому Subject.
         await Assert.ThrowsAsync<InvalidOperationException>(() => startTask);
-        Assert.Null(GetPrivateField<IProcess>(service, "_currentProcess"));
+        Assert.Null(service.CurrentProcessForTests);
         Assert.Equal(ProcessState.Failed, StateManager.CurrentState);
     }
 

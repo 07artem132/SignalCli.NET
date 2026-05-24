@@ -12,37 +12,18 @@ namespace SignalCli.Models.Rpc;
 /// Підтримує передачу параметрів, ідентифікатора запиту та версії протоколу.
 /// </remarks>
 [PublicAPI]
-public record JsonRpcRequest(string Method, JsonElement Params, string Id)
+public record JsonRpcRequest(
+    [property: JsonPropertyName("method")] string Method,
+    [property: JsonPropertyName("params")] JsonElement Params,
+    [property: JsonPropertyName("id")] string Id)
 {
-    /// <summary>
-    /// Версія протоколу JSON-RPC.
-    /// </summary>
+    // post-modernize-tuning §4.12 (audit D10): body emptied — positional params already
+    // generate {get; init;} properties; manual redeclarations (Method = Method, Params = Params, ...)
+    // були cargo-cult'ом, що тільки дублював compiler-generated body. [JsonPropertyName] перенесено
+    // на ctor-params через `[property: …]` syntax.
+
+    /// <summary>Версія протоколу JSON-RPC.</summary>
     /// <value>Завжди "2.0" для JSON-RPC 2.0.</value>
     [JsonPropertyName("jsonrpc")]
     public string JsonRpc { get; init; } = "2.0";
-
-    /// <summary>
-    /// Назва методу, що викликається на сервері.
-    /// </summary>
-    [JsonPropertyName("method")]
-    public string Method { get; init; } = Method;
-
-    /// <summary>
-    /// Параметри методу.
-    /// </summary>
-    /// <remarks>
-    /// Може бути об'єктом, масивом або примітивним типом даних,
-    /// залежно від вимог методу.
-    /// </remarks>
-    [JsonPropertyName("params")]
-    public JsonElement Params { get; init; } = Params;
-
-    /// <summary>
-    /// Ідентифікатор запиту для співставлення з відповіддю.
-    /// </summary>
-    /// <remarks>
-    /// Використовується клієнтом для ідентифікації відповіді на конкретний запит.
-    /// </remarks>
-    [JsonPropertyName("id")]
-    public string Id { get; init; } = Id;
 }

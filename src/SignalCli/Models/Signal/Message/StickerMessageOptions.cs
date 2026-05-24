@@ -13,10 +13,6 @@ public record StickerMessageOptions
     public string Sticker { get; private set; } = string.Empty;
     /// <summary>Згадки користувачів (рідкісне використання для стікерів).</summary>
     public IEnumerable<string>? Mentions { get; private set; }
-    /// <summary>Токен скасування.</summary>
-    /// <remarks>A.5: deprecated — передавайте <c>CancellationToken</c> явно як параметр методу <c>SendStickerAsync(options, ct)</c>.</remarks>
-    [Obsolete("Pass CancellationToken to SendStickerAsync directly; will be removed in 3.0")]
-    public CancellationToken CancellationToken { get; private set; } = CancellationToken.None;
 
     /// <summary>Будівельник <see cref="StickerMessageOptions"/>.</summary>
     public class Builder
@@ -51,20 +47,18 @@ public record StickerMessageOptions
             return this;
         }
 
-        /// <summary>Задати токен скасування.</summary>
-        /// <remarks>A.5: deprecated — передавайте <c>CancellationToken</c> прямо в <c>SendStickerAsync(options, ct)</c>.</remarks>
-        [Obsolete("Pass CancellationToken to SendStickerAsync directly; will be removed in 3.0")]
-        public Builder WithCancellationToken(CancellationToken cancellationToken)
-        {
-#pragma warning disable CS0618
-            _options.CancellationToken = cancellationToken;
-#pragma warning restore CS0618
-            return this;
-        }
-
         /// <summary>Будує <see cref="StickerMessageOptions"/>.</summary>
+        /// <exception cref="InvalidOperationException">
+        /// post-modernize-tuning §4.15 (D9): post-mutation guard.
+        /// </exception>
         public StickerMessageOptions Build()
         {
+            if (string.IsNullOrEmpty(_options.Account))
+                throw new InvalidOperationException("Account був скинутий після конструювання Builder.");
+            if (!_options.Recipients.Any())
+                throw new InvalidOperationException("Recipients було очищено після конструювання Builder.");
+            if (string.IsNullOrEmpty(_options.Sticker))
+                throw new InvalidOperationException("Sticker був скинутий після конструювання Builder.");
             return _options;
         }
     }

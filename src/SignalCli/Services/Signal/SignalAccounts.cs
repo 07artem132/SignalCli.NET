@@ -3,11 +3,13 @@ using SignalCli.Interfaces.Signal;
 using SignalCli.Interfaces.SignalCli;
 using SignalCli.Logging;
 using SignalCli.Models.Signal.Accounts;
+using SignalCli.Serialization;
 
 namespace SignalCli.Services.Signal;
 
 // A.13: IDisposable прибрано — клас не тримає жодних ресурсів, порожній Dispose() лише плутав.
-internal class SignalAccounts(
+// post-modernize-tuning §8c.14 (audit N17): sealed — інхеріт не підтримується.
+internal sealed class SignalAccounts(
     ISignalCliClient signalCliClient,
     ILogger<SignalAccounts> logger)
     : ISignalAccounts
@@ -15,68 +17,65 @@ internal class SignalAccounts(
     private readonly ISignalCliClient _signalCliClient = signalCliClient ?? throw new ArgumentNullException(nameof(signalCliClient));
     private readonly ILogger<SignalAccounts> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-    public async Task<ListAccountsResponse> ListAccounts(CancellationToken cancellationToken = default)
+    public async Task<ListAccountsResponse> ListAccountsAsync(CancellationToken cancellationToken = default)
     {
+        // post-modernize-tuning §8c.7 (audit C8): bare catch-and-rethrow прибрано.
+        // ActivitySource у JsonRpcClient.InvokeMethodAsync (§11.A.2) уже фіксує
+        // exception-type-name на span'і, а consumer-callback може зробити власний log
+        // у своєму exception-handler'і. Дублювати log без додавання context'у — шум.
         SignalAccountsLog.ListAccountsRequested(_logger);
 
-        try
+        var response = await _signalCliClient
+            .InvokeMethodAsync(
+                "listAccounts",
+                new ListAccountsParameters(),
+                SignalJsonContext.Default.ListAccountsParameters,
+                SignalJsonContext.Default.ListAccountsResponse,
+                cancellationToken).ConfigureAwait(false);
+
+        if (response == null)
         {
-            var response = await _signalCliClient
-                .InvokeMethodAsync<ListAccountsResponse, ListAccountsParameters>(
-                    "listAccounts",
-                    new ListAccountsParameters(),
-                    cancellationToken).ConfigureAwait(false);
+            SignalAccountsLog.ListAccountsNullResponse(_logger);
+            throw new InvalidOperationException("Отримано нульову відповідь від сервера");
+        }
 
-            if (response == null)
-            {
-                SignalAccountsLog.ListAccountsNullResponse(_logger);
-                throw new InvalidOperationException("Отримано нульову відповідь від сервера");
-            }
-
-            // ПРИВАТНІСТЬ (F5): на Information логуємо лише кількість; Account-record містить
-            // номер телефону/UUID, тож деталі — лише на Trace.
-            SignalAccountsLog.ListAccountsOk(_logger, response.Count);
+        // ПРИВАТНІСТЬ (F5): на Information логуємо лише кількість; Account-record містить
+        // номер телефону/UUID, тож деталі — лише на Trace.
+        SignalAccountsLog.ListAccountsOk(_logger, response.Count);
+        // §5.8: `string.Join` оцінюється eagerly — `[LoggerMessage]` IsEnabled-guard всередині
+        // методу не рятує від allocations на gen-call site. Обгортаємо вручну.
+        if (_logger.IsEnabled(LogLevel.Trace))
+        {
             SignalAccountsLog.ListAccountsTrace(_logger, string.Join(", ", response));
+        }
 
-            return response;
-        }
-        catch (Exception ex)
-        {
-            SignalAccountsLog.ListAccountsFailed(_logger, ex);
-            throw;
-        }
+        return response;
     }
 
-    public async Task<SyncAccountsResponse> SyncAccount(CancellationToken cancellationToken = default)
+    public async Task<SyncAccountsResponse> SyncAccountAsync(CancellationToken cancellationToken = default)
     {
-        //todo work
+        // §8c.7: bare-catch прибрано (див. ListAccountsAsync).
         SignalAccountsLog.SyncAccountRequested(_logger);
 
-        try
+        var response = await _signalCliClient
+            .InvokeMethodAsync(
+                "sendSyncRequest",
+                new SyncAccountsParameters(),
+                SignalJsonContext.Default.SyncAccountsParameters,
+                SignalJsonContext.Default.SyncAccountsResponse,
+                cancellationToken).ConfigureAwait(false);
+
+        if (response == null)
         {
-            var response = await _signalCliClient
-                .InvokeMethodAsync<SyncAccountsResponse, SyncAccountsParameters>(
-                    "sendSyncRequest",
-                    new SyncAccountsParameters(),
-                    cancellationToken).ConfigureAwait(false);
-
-            if (response == null)
-            {
-                SignalAccountsLog.SyncAccountNullResponse(_logger);
-                throw new InvalidOperationException("Отримано нульову відповідь від сервера");
-            }
-
-            // ПРИВАТНІСТЬ (F5): SyncAccountsResponse — порожній record (sendSyncRequest повертає лише факт),
-            // тож на Information — лише факт виконання, без даних, які могли б містити PII.
-            SignalAccountsLog.SyncAccountOk(_logger);
-
-            return response;
+            SignalAccountsLog.SyncAccountNullResponse(_logger);
+            throw new InvalidOperationException("Отримано нульову відповідь від сервера");
         }
-        catch (Exception ex)
-        {
-            SignalAccountsLog.SyncAccountFailed(_logger, ex);
-            throw;
-        }
+
+        // ПРИВАТНІСТЬ (F5): SyncAccountsResponse — порожній record (sendSyncRequest повертає лише факт),
+        // тож на Information — лише факт виконання, без даних, які могли б містити PII.
+        SignalAccountsLog.SyncAccountOk(_logger);
+
+        return response;
     }
 
 }

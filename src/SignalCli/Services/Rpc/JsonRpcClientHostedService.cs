@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using SignalCli.Interfaces.Rpc;
 using SignalCli.Logging;
 using SignalCli.Models.SignalCli;
+using SignalCli.Serialization;
 using SignalCli.Services.SignalCli;
 
 namespace SignalCli.Services.Rpc;
@@ -11,13 +12,15 @@ namespace SignalCli.Services.Rpc;
 /// HostedService, який чекає готовності потоків (IStreamPairProvider)
 /// і створює IJsonRpcClient, щоб потім інші сервіси могли ним користуватися.
 /// </summary>
-internal sealed class JsonRpcClientHostedService : IHostedService, IJsonRpcClientProvider, IAsyncDisposable
+internal sealed class JsonRpcClientHostedService : IHostedLifecycleService, IJsonRpcClientProvider, IAsyncDisposable
 {
     private readonly ILogger<JsonRpcClientHostedService> _logger;
     private readonly IJsonRpcClientFactory _factory;
     private readonly SignalCliHostedService _signalCliHostedService;
     private IJsonRpcClient? _client;
-    private bool _disposed;
+    // post-modernize-tuning §2.4: Interlocked.Exchange-based disposal flag.
+    private int _disposedFlag;
+    private bool _disposed => Volatile.Read(ref _disposedFlag) != 0;
 
     /// <summary>
     /// Створює новий екземпляр хостованого сервісу JSON-RPC клієнта.
@@ -42,6 +45,18 @@ internal sealed class JsonRpcClientHostedService : IHostedService, IJsonRpcClien
     public IJsonRpcClient Client => _client
                                     ?? throw new InvalidOperationException("JsonRpcClient ще не ініціалізовано.");
 
+    // post-modernize-tuning §8a.2 (audit B3): opt-in у IHostedLifecycleService для
+    // explicit-ordering startup/shutdown phases. No-op реалізації — поточна поведінка
+    // (StartAsync = WaitForReady + Create client + ping version) лишається без змін.
+    /// <summary>Викликається ПЕРЕД <see cref="StartAsync"/> у всіх хостованих сервісах.</summary>
+    public Task StartingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    /// <summary>Викликається ПІСЛЯ <see cref="StartAsync"/> у всіх хостованих сервісах.</summary>
+    public Task StartedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    /// <summary>Викликається ПЕРЕД <see cref="StopAsync"/> у всіх хостованих сервісах.</summary>
+    public Task StoppingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    /// <summary>Викликається ПІСЛЯ <see cref="StopAsync"/> у всіх хостованих сервісах.</summary>
+    public Task StoppedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
     /// <summary>
     /// Запускає хостований сервіс.
     /// </summary>
@@ -60,7 +75,12 @@ internal sealed class JsonRpcClientHostedService : IHostedService, IJsonRpcClien
             await _signalCliHostedService.WaitForReadyAsync(cancellationToken).ConfigureAwait(false);
             // A.7: фабрика тепер синхронна — створення клієнта не потребує await.
             _client = _factory.Create();
-            var versionResp = await _client.InvokeMethodAsync<VersionResponse, VersionParameters>("version", new(), cancellationToken).ConfigureAwait(false);
+            var versionResp = await _client.InvokeMethodAsync(
+                "version",
+                new VersionParameters(),
+                SignalJsonContext.Default.VersionParameters,
+                SignalJsonContext.Default.VersionResponse,
+                cancellationToken).ConfigureAwait(false);
             JsonRpcClientHostedServiceLog.Version(_logger, versionResp.Version);
 
             JsonRpcClientHostedServiceLog.StartReady(_logger);
@@ -105,8 +125,7 @@ internal sealed class JsonRpcClientHostedService : IHostedService, IJsonRpcClien
     /// </summary>
     public async ValueTask DisposeAsync()
     {
-        if (_disposed) return;
-        _disposed = true;
+        if (Interlocked.Exchange(ref _disposedFlag, 1) != 0) return;
 
         try
         {

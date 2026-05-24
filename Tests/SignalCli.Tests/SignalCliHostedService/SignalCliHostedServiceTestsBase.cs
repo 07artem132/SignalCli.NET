@@ -1,5 +1,4 @@
-﻿using System.Reflection;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Moq;
 using SignalCli.Interfaces.SignalCli;
 using SignalCli.Models;
@@ -110,17 +109,11 @@ public abstract class SignalCliHostedServiceTestsBase : IDisposable
         );
     }
 
-    protected static T? GetPrivateField<T>(object obj, string fieldName) where T : class
-    {
-        var fieldInfo = obj.GetType().GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Instance);
-        return fieldInfo?.GetValue(obj) as T;
-    }
-
-    protected static async Task SetPrivateField(object obj, string fieldName, object value)
-    {
-        var fieldInfo = obj.GetType().GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Instance);
-        fieldInfo?.SetValue(obj, value);
-    }
+    // post-modernize-tuning §7.3 (T3): `GetPrivateField`/`SetPrivateField` reflection-helpers
+    // прибрано — заміщені typed test-seam'ами `SignalCliHostedService.CurrentProcessForTests`
+    // та `.CurrentStreamPairForTests` (internal-properties, видимі через InternalsVisibleTo).
+    // Reflection-доступ був opaque: rename'и приватних полів мовчки повертали null замість
+    // compile-error'у. Тепер контракт типовий.
 
     protected void VerifyLog(LogLevel level, string containsMessage)
     {

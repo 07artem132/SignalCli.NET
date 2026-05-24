@@ -13,4 +13,11 @@ internal static partial class SignalDevicesLog
 
     [LoggerMessage(EventId = 821, Level = LogLevel.Error, Message = "Помилка завершення процесу зв'язування пристрою")]
     public static partial void FinishLinkFailed(ILogger logger, Exception ex);
+
+    // post-modernize-tuning §8c.13 (audit N16): entry-level logs symmetric to ListAccounts/ListGroups.
+    [LoggerMessage(EventId = 822, Level = LogLevel.Debug, Message = "Запуск процесу зв'язування пристрою")]
+    public static partial void StartLinkRequested(ILogger logger);
+
+    [LoggerMessage(EventId = 823, Level = LogLevel.Debug, Message = "Завершення процесу зв'язування пристрою (deviceName={DeviceName})")]
+    public static partial void FinishLinkRequested(ILogger logger, string deviceName);
 }

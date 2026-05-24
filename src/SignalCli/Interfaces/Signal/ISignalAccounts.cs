@@ -29,9 +29,16 @@ public interface ISignalAccounts
     /// }
     /// </code>
     /// </example>
-    Task<ListAccountsResponse> ListAccounts(
+    Task<ListAccountsResponse> ListAccountsAsync(
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>Застаріле: використовуйте <see cref="ListAccountsAsync"/>.</summary>
+    /// <param name="cancellationToken">Токен скасування операції.</param>
+    /// <returns>Список зареєстрованих акаунтів.</returns>
+    [Obsolete("Use ListAccountsAsync; will be removed in 4.0")]
+    Task<ListAccountsResponse> ListAccounts(CancellationToken cancellationToken = default)
+        => ListAccountsAsync(cancellationToken);
     /// <summary>
     /// Надішліть повідомлення із запитом на синхронізацію на основний пристрій (для груп, контактів, ...).
     /// Основний пристрій відповість повідомленням синхронізації з повним списком контактів і груп.
@@ -43,6 +50,12 @@ public interface ISignalAccounts
     /// <exception cref="JsonRpcException">Виникає при помилці JSON-RPC запиту.</exception>
     /// <exception cref="OperationCanceledException">Виникає, якщо операцію скасовано.</exception>
 
-    Task<SyncAccountsResponse> SyncAccount(CancellationToken cancellationToken = default);
+    Task<SyncAccountsResponse> SyncAccountAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>Застаріле: використовуйте <see cref="SyncAccountAsync"/>.</summary>
+    /// <param name="cancellationToken">Токен скасування операції.</param>
+    /// <returns>Пустий об'єкт.</returns>
+    [Obsolete("Use SyncAccountAsync; will be removed in 4.0")]
+    Task<SyncAccountsResponse> SyncAccount(CancellationToken cancellationToken = default)
+        => SyncAccountAsync(cancellationToken);
 }

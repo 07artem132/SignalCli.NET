@@ -23,7 +23,7 @@ namespace SignalCli.Models.Signal.Events;
 [PublicAPI]
 public record StickerEventArgs(
     int SubscriptionId,
-    string? Account,
+    string Account,
     JsonSticker Sticker,
     string? Source,
     string? SourceNumber,

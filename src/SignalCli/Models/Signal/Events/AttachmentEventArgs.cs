@@ -24,7 +24,7 @@ namespace SignalCli.Models.Signal.Events;
 [PublicAPI]
 public record AttachmentEventArgs(
     int SubscriptionId,
-    string? Account,
+    string Account,
     List<JsonAttachment> Attachments,
     string? Source,
     string? SourceNumber,

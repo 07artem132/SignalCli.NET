@@ -84,13 +84,35 @@ public sealed class SignalCliOptions
     [Range(1, 86400)]
     public int RestartWindowSeconds { get; set; } = 60;
 
+    /// <summary>
+    /// audit A3 / §1: ємність bounded-каналу між stdout-читачем і fan-out-споживачем
+    /// JSON-RPC сповіщень у <c>JsonRpcClient</c>.
+    /// </summary>
+    /// <remarks>
+    /// Якщо споживач (через <c>_notificationSubject.OnNext</c>) повільний, канал
+    /// заповнюється — наступний <c>WriteAsync</c> чекає. Це back-pressure до самого
+    /// stdout-reader-а: повільний підписник не дозволить нагромаджувати повідомлення
+    /// у пам'яті. <see cref="System.Threading.Channels.BoundedChannelFullMode.Wait"/>.
+    /// За замовчуванням 1024.
+    /// </remarks>
+    [Range(1, 1_000_000)]
+    public int NotificationChannelCapacity { get; set; } = 1024;
+
     /// <summary>Змінні середовища, що передаються процесу signal-cli.</summary>
-    public IDictionary<string, string> EnvironmentVariables { get; set; } = new Dictionary<string, string>();
+    /// <remarks>
+    /// post-modernize-tuning §4.10 / §4.28 (audit D7/E2): на читання — <see cref="IReadOnlyDictionary{TKey,TValue}"/>.
+    /// Викликач задає мапу через <c>opts.EnvironmentVariables = new Dictionary&lt;,&gt;{ … }</c> у Configure-делегаті,
+    /// а downstream-сервіси читають read-only-вʼю — мутації після StartAsync виключені.
+    /// </remarks>
+    public IReadOnlyDictionary<string, string> EnvironmentVariables { get; set; } =
+        new Dictionary<string, string>();
 
     /// <summary>
     /// Конвертує <see cref="SignalCliOptions"/> у legacy-<see cref="Config"/>
     /// (внутрішні сервіси досі споживають <see cref="Config"/> як singleton).
     /// </summary>
+    /// <remarks>audit N7: internal compat-shim — зникне у 3.0 разом із <see cref="Config"/>.</remarks>
+#pragma warning disable CS0618 // Config is obsolete — internal compat-shim, removed in 3.0
     internal Config ToConfig() => new()
     {
         AppHome = AppHome,
@@ -110,4 +132,5 @@ public sealed class SignalCliOptions
         RestartWindowSeconds = RestartWindowSeconds,
         EnvironmentVariables = EnvironmentVariables,
     };
+#pragma warning restore CS0618
 }

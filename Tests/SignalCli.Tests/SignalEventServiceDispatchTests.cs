@@ -26,8 +26,7 @@ public class SignalEventServiceDispatchTests
         var provider = new Mock<IJsonRpcClientProvider>();
         provider.Setup(p => p.Client).Returns(rpcClient.Object);
         signalCli = new Mock<ISignalCliClient>();
-        signalCli.Setup(c => c.InvokeMethodAsync<JsonElement, SubscribeReceiveParameters>(
-                It.IsAny<string>(), It.IsAny<SubscribeReceiveParameters>(), It.IsAny<CancellationToken>()))
+        signalCli.Setup(c => c.InvokeMethodAsync<SubscribeReceiveParameters, JsonElement>(It.IsAny<string>(), It.IsAny<SubscribeReceiveParameters>(), It.IsAny<JsonTypeInfo<SubscribeReceiveParameters>>(), It.IsAny<JsonTypeInfo<JsonElement>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(JsonSerializer.SerializeToElement(SubId));
         return new SignalEventService(Mock.Of<ILogger<SignalEventService>>(), provider.Object, signalCli.Object);
     }
@@ -82,14 +81,72 @@ public class SignalEventServiceDispatchTests
         Assert.Equal(1, count);
     }
 
+    // audit N5 / post-modernize-tuning §3.8: SubscribeAsync — ідемпотентний.
+    // Повторні виклики для того самого облікового запису повертають той самий ID
+    // БЕЗ повторного subscribeReceive-RPC. Перевіряємо обидва інваріанти:
     [Fact]
-    public async Task Subscribe_Twice_SameAccount_Throws()
+    public async Task SubscribeAsync_Idempotent_SameAccountThrice_ReturnsSameIdAndCallsRpcOnce()
+    {
+        var service = Create(out _, out var rpc);
+        await service.StartAsync(CancellationToken.None);
+
+        var first = await service.SubscribeAsync(Account);
+        var second = await service.SubscribeAsync(Account);
+        var third = await service.SubscribeAsync(Account);
+
+        // Усі три виклики повертають один і той самий ID (з RPC-мока — SubId).
+        Assert.Equal(SubId, first.Id);
+        Assert.Equal(SubId, second.Id);
+        Assert.Equal(SubId, third.Id);
+        // subscribeReceive викликаний РІВНО ОДИН раз — другий і третій ішли коротким шляхом.
+        rpc.Verify(c => c.InvokeMethodAsync<SubscribeReceiveParameters, JsonElement>("subscribeReceive", It.IsAny<SubscribeReceiveParameters>(), It.IsAny<JsonTypeInfo<SubscribeReceiveParameters>>(), It.IsAny<JsonTypeInfo<JsonElement>>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    // post-modernize-tuning §3.6 (audit A4): 10 паралельних SubscribeAsync для одного
+    // облікового запису роблять РІВНО ОДИН subscribeReceive-RPC (reservation placeholder
+    // pattern) — і всі 10 викликачів отримують той самий subscriptionId. Без цієї
+    // інваріанти на signal-cli залишається N-1 orphan subscription'ів.
+    [Fact]
+    public async Task SubscribeAsync_Concurrent_TenCallers_InvokesRpcExactlyOnceAndReturnsSameId()
+    {
+        var service = Create(out _, out var rpc);
+        await service.StartAsync(CancellationToken.None);
+
+        // Невелика затримка у моку — щоб усі 10 викликачів встигли зайти у lock-section.
+        rpc.Setup(c => c.InvokeMethodAsync<SubscribeReceiveParameters, JsonElement>("subscribeReceive", It.IsAny<SubscribeReceiveParameters>(), It.IsAny<JsonTypeInfo<SubscribeReceiveParameters>>(), It.IsAny<JsonTypeInfo<JsonElement>>(), It.IsAny<CancellationToken>()))
+            .Returns(async (string _, SubscribeReceiveParameters _, JsonTypeInfo<SubscribeReceiveParameters> _, JsonTypeInfo<JsonElement> _, CancellationToken _) =>
+            {
+                await Task.Delay(50).ConfigureAwait(false);
+                return JsonSerializer.SerializeToElement(SubId);
+            });
+
+        var tasks = Enumerable.Range(0, 10)
+            .Select(_ => service.SubscribeAsync(Account))
+            .ToArray();
+        var results = await Task.WhenAll(tasks);
+
+        // Усі 10 повернули один і той самий ID.
+        Assert.All(results, r => Assert.Equal(SubId, r.Id));
+        // RPC викликано РІВНО ОДИН раз (reservation placeholder зупинив 9 інших).
+        rpc.Verify(c => c.InvokeMethodAsync<SubscribeReceiveParameters, JsonElement>("subscribeReceive", It.IsAny<SubscribeReceiveParameters>(), It.IsAny<JsonTypeInfo<SubscribeReceiveParameters>>(), It.IsAny<JsonTypeInfo<JsonElement>>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    // audit N5: null/empty account → ArgumentException (або ArgumentNullException для null),
+    // НЕ NullReferenceException і НЕ InvalidOperationException.
+    // ArgumentException.ThrowIfNullOrEmpty кидає ArgumentNullException для null,
+    // ArgumentException для empty — ловимо обидва через спільну базу ArgumentException.
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task SubscribeAsync_NullOrEmptyAccount_ThrowsArgumentException(string? account)
     {
         var service = Create(out _, out _);
         await service.StartAsync(CancellationToken.None);
-        await service.SubscribeAsync(Account);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.SubscribeAsync(Account));
+        var ex = await Assert.ThrowsAnyAsync<ArgumentException>(() => service.SubscribeAsync(account!));
+        Assert.Equal("account", ex.ParamName);
     }
 
     [Fact]

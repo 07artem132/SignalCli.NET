@@ -37,10 +37,7 @@ public class JsonRpcClientHostedServiceTests
 
         // Коли викликаємо InvokeMethodAsync("version", ...)
         _clientMock
-            .Setup(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
-                "version",
-                It.IsAny<VersionParameters>(),
-                It.IsAny<CancellationToken>()))
+            .Setup(c => c.InvokeMethodAsync<VersionParameters, VersionResponse>("version", It.IsAny<VersionParameters>(), It.IsAny<JsonTypeInfo<VersionParameters>>(), It.IsAny<JsonTypeInfo<VersionResponse>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new VersionResponse("1.2.3-test"));
 
         // 2) Для реального SignalCliHostedService
@@ -135,10 +132,7 @@ public class JsonRpcClientHostedServiceTests
         _clientFactoryMock.Verify(f => f.Create(), Times.Once);
 
         // 2) Перевіримо виклик "version"
-        _clientMock.Verify(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
-                "version",
-                It.IsAny<VersionParameters>(),
-                It.IsAny<CancellationToken>()),
+        _clientMock.Verify(c => c.InvokeMethodAsync<VersionParameters, VersionResponse>("version", It.IsAny<VersionParameters>(), It.IsAny<JsonTypeInfo<VersionParameters>>(), It.IsAny<JsonTypeInfo<VersionResponse>>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         // 3) Переконаємось, що властивість Client тепер не null

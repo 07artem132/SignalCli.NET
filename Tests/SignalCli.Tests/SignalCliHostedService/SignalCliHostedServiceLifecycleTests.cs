@@ -27,7 +27,7 @@ public class SignalCliHostedServiceLifecycleTests : SignalCliHostedServiceTestsB
 
         Assert.Equal(ProcessState.Running, StateManager.CurrentState);
         Assert.NotNull(service.CurrentStreamPair);
-        Assert.NotNull(GetPrivateField<IProcess>(service, "_currentProcess"));
+        Assert.NotNull(service.CurrentProcessForTests);
 
         // Перевіряємо логи
         VerifyLog(LogLevel.Information, "SignalCliHostedService запускається...");
@@ -41,7 +41,7 @@ public class SignalCliHostedServiceLifecycleTests : SignalCliHostedServiceTestsB
         // Arrange
         var service = CreateService();
         await service.StartAsync(CancellationToken.None);
-        var initialProcessId = GetPrivateField<IProcess>(service, "_currentProcess")?.Id;
+        var initialProcessId = service.CurrentProcessForTests?.Id;
         ProcessStartCallCount = 0;
 
         // Act
@@ -50,7 +50,7 @@ public class SignalCliHostedServiceLifecycleTests : SignalCliHostedServiceTestsB
         // Assert
         Assert.Equal(0, ProcessStartCallCount);
         Assert.Equal(ProcessState.Running, StateManager.CurrentState);
-        var currentProcessId = GetPrivateField<IProcess>(service, "_currentProcess")?.Id;
+        var currentProcessId = service.CurrentProcessForTests?.Id;
         Assert.Equal(initialProcessId, currentProcessId);
     }
 
@@ -81,7 +81,7 @@ public class SignalCliHostedServiceLifecycleTests : SignalCliHostedServiceTestsB
         // Arrange
         var service = CreateService();
         await service.StartAsync(CancellationToken.None);
-        var process = GetPrivateField<IProcess>(service, "_currentProcess");
+        var process = service.CurrentProcessForTests;
         var processMock = Mock.Get(process!);
         var streamPair = service.CurrentStreamPair;
     
@@ -97,8 +97,8 @@ public class SignalCliHostedServiceLifecycleTests : SignalCliHostedServiceTestsB
 
         // Assert
         Assert.Equal(ProcessState.Stopped, StateManager.CurrentState);
-        Assert.Null(GetPrivateField<IProcess>(service, "_currentProcess"));
-        Assert.Null(GetPrivateField<StreamPair>(service, "_currentStreamPair"));
+        Assert.Null(service.CurrentProcessForTests);
+        Assert.Null(service.CurrentStreamPairForTests);
         Assert.Contains("exit", streamContent);
     
         VerifyLog(LogLevel.Information, "SignalCliHostedService зупинено.");
@@ -111,7 +111,7 @@ public class SignalCliHostedServiceLifecycleTests : SignalCliHostedServiceTestsB
         // Arrange
         var service = CreateService();
         await service.StartAsync(CancellationToken.None);
-        var process = GetPrivateField<IProcess>(service, "_currentProcess");
+        var process = service.CurrentProcessForTests;
         var processMock = Mock.Get(process!);
         processMock.Setup(p => p.HasExited).Returns(false);
 

@@ -50,6 +50,7 @@ Grouped by capability (each is a separate spec under `specs/`):
 - **`code-hygiene`** — `SignalEventService` sealed; unused `_rpcClient` field removed; `AtomicCounter` wrap-around behavior documented or eliminated; `ValidateRecipients` single-pass; bare log-and-rethrow patterns either removed or enriched with context; `Config.BuildClasspath` caches its directory scan; **input validation in `SignalDevices`/`SignalGroups`**; **empty `Dispose()` boilerplate removed from facade services**; **internal services + `StreamPair` sealed**; **README dependency table updated**; **CLAUDE.md rules 6 and 7 brought in sync with the new source-gen / SHA-pinning realities**; tasks.md test-count drift corrected.
 - **`supply-chain-hardening`** *(new)* — forward-slash MSBuild paths in `SignalCli.Native.targets` and `SignalCli.runtime.csproj` (Linux/macOS builds currently silently broken); file-marker-based `Exists()` incremental gate; single-source-of-truth SHA/version in csproj (passed as args to the download scripts); GitHub Actions pinned to commit SHAs; post-extraction integrity check for the bundled JRE; case-invariant PowerShell SHA compare; `LICENSE.txt` inline in runtime packages; Adoptium URL fallback with clear failure message.
 - **`cloud-development`** — `.claude/hooks/session-start.sh` + `.claude/settings.json` + `docs/cloud-development.md`. **Already drafted in this change.**
+- **`observability`** *(new — from agent-friendly audit 2026-05-23)* — а́gent-critical pillar. Library acquires three canonical OTel-compatible surfaces ([.NET observability with OpenTelemetry](https://learn.microsoft.com/dotnet/core/diagnostics/observability-with-otel#net-implementation-of-opentelemetry)): a single `static readonly ActivitySource SignalCliActivitySource = new("SignalCli.NET", AssemblyVersion)` spanning `rpc.<method>` calls, process-lifecycle (`process.start`/`process.exited`/`force_restart`), health-check pings, and `subscribe`/`unsubscribe`; a single `Meter("SignalCli.NET", AssemblyVersion)` with `Counter<long> signalcli.rpc.requests` (tags: `method`, `status` ∈ {`ok`,`timeout`,`error`}), `Histogram<double> signalcli.rpc.duration_ms` (tag: `method`), `Counter<long> signalcli.process.restarts` (tag: `trigger` ∈ {`force`,`crash`,`health`}), `Counter<long> signalcli.events.dropped` (tag: `event_type` — replaces the private `_droppedCount` field in `SignalEventService`), `ObservableGauge<int> signalcli.subscriptions.active`; and an `IHealthCheck`-adapter shipped as a separate **`SignalCli.NET.HealthChecks`** NuGet package so consumers in ASP.NET Core wire `services.AddSignalCliHealthCheck()` + `app.MapHealthChecks("/healthz")` without forcing a dependency on `Microsoft.Extensions.Diagnostics.HealthChecks` into the core library. **Privacy invariant** (CLAUDE.md rule #1) **is preserved verbatim** — RPC method names and result-counts are fine as tags; message bodies, phone numbers, attachment payloads are never tag values. Tag cardinality is bounded to known enum values.
 
 ## Capabilities
 
@@ -67,6 +68,7 @@ Grouped by capability (each is a separate spec under `specs/`):
 - `code-hygiene`: sealed `SignalEventService`; unused field removed; classpath cache; single-pass enumeration; non-bare exception handling; documented or eliminated `AtomicCounter` wrap; input validation in `SignalDevices`/`SignalGroups`; remove no-op `Dispose` from facade services; seal internal classes + `StreamPair`; README dependency table; CLAUDE.md rule-6/rule-7 sync.
 - `supply-chain-hardening`: forward-slash MSBuild paths; marker-file `Exists()`; csproj-anchored `<…Sha256>`/`<…Version>` passed to download scripts; SHA-pinned GitHub Actions; post-extract integrity check; case-invariant SHA compare; LICENSE.txt in runtime packages; Adoptium URL fallback.
 - `cloud-development`: SessionStart hook + cloud-development.md for Claude Code on the Web.
+- `observability`: `ActivitySource` + `Meter` + optional `IHealthCheck` adapter package; privacy-preserving tags; counters/histograms replace today's private `_droppedCount` field.
 
 ### Modified Capabilities
 
@@ -78,6 +80,28 @@ exception-handling, net10-upgrade, json-serialization, process-state-unification
 are not weakened. Where this change touches their files, all original requirements
 remain satisfied — see `tasks.md` for the regression-test mapping.
 -->
+
+## Audit augments — 2026-05-23 (agent-friendly pass)
+
+A second independent audit against Microsoft Learn (.NET 10 / C# 14) — focused on **agent-friendliness** rather than bugs — produced 14 additional findings (`N1`-`N14`). They are folded into the capabilities above rather than spawning a new change:
+
+- **N1, N2, N3** → **new `observability` capability** (`ActivitySource`, `Meter`, `IHealthCheck`-adapter package).
+- **N4** (TimeProvider in `CancellationTokenSource`) → `rpc-back-pressure` + `hosting-modernization` add `new CancellationTokenSource(timeout, _timeProvider)` overload (.NET 8+) at the two remaining sites (`JsonRpcClient.cs:361`, `SignalCliHostedService.cs:335`). `SignalCliHealthMonitor.cs:162` already does this — pattern just needs to spread.
+- **N5** (typed/idempotent `SubscribeAsync`) → `subscription-race-safety` makes the second `SubscribeAsync` call for the same account **idempotent** (returns the existing `subscriptionId`) instead of throwing `InvalidOperationException`; adds `ArgumentException.ThrowIfNullOrEmpty(account)` at entry. Eliminates locale-dependent string-match exception handling for agents.
+- **N6** (`Send*Async` returns `List<T>` always wrapping one item) → `agent-friendly-api` v3.0 wave: signature becomes `Task<SendMessageResponse>`. Single-element wrap removed.
+- **N7** (`[Obsolete]` on `Config` itself, not only the overload) → `code-hygiene` adds `[Obsolete("Use SignalCliOptions; will be removed in 3.0")]` to the class.
+- **N8** (TRequest/TResponse must be in `SignalJsonContext`) → `aot-readiness` §6.5 already plans the audit; add a test that reflectively enumerates `InvokeMethodAsync<,>`-call sites and asserts each type pair is registered.
+- **N9** (`[StringSyntax(StringSyntaxAttribute.Uri)]` on URL-typed parameters) → `agent-friendly-api` decorates `PreviewUrl` / `PreviewImage` on `TextMessageOptions` / `AttachmentMessageOptions`.
+- **N11** (`InvokeMethodAsync<TResponse, TRequest>` reversed generic-param order — blocks type inference) → `agent-friendly-api` v3.0: rename + overload with `<TRequest, TResponse>` order (`[Obsolete]` shim on the old order).
+- **N12** (`<exception cref="TimeoutException">` missing in XMLDoc on all three `Send*Async`) → `agent-friendly-api` §4.13 doc-fix pass.
+- **N13** (`_logger.BeginScope` on `RpcMethod`/`RpcRequestId` in `JsonRpcClient.InvokeMethodAsync`) → `high-performance-logging` extends the existing `BeginScope` pattern (A.11 in `agent-friendly-modernization` 2.1.0).
+- **N14** (`SingleWriter = true` invariant on event Channels) → `code-hygiene` adds an XMLDoc note on `SignalEventService` documenting the single-writer invariant; alternative: relax to `SingleWriter = false`.
+- **E1** (drop `.ValidateDataAnnotations()` — redundant with `[OptionsValidator]` source-gen and pulls in reflection) → `options-validation` § keeps only `[OptionsValidator]` + custom `.Validate(o => …)`; unblocks `IsAotCompatible=true`.
+- **E2** (`IReadOnlyDictionary<string,string>` on **both** `Config.EnvironmentVariables` AND `SignalCliOptions.EnvironmentVariables`; copy snapshots, not shared references) → `agent-friendly-api` §4.10 extended to both types.
+- **E3** (preserve public `JsonRpcException(string, Exception?)` ctor — `[Obsolete]`, don't delete) → `agent-friendly-api` §4.22 reconsidered: CA1032 ctors added beside it, original kept as `[Obsolete]` shim. JSON-RPC 2.0 canonical "Internal error" code becomes `-32603`; the legacy `-32000` path stays for one major-version cycle.
+- **E4** (same as N14).
+
+The detailed task list for each augment is inlined into the relevant numbered section of `tasks.md` (search for `(audit N#)` tags).
 
 ## Impact
 
@@ -111,6 +135,7 @@ remain satisfied — see `tasks.md` for the regression-test mapping.
   1. `cloud-development` (already drafted — merge so future contributors get a working web sandbox).
   2. `state-machine-thread-safety` + `subscription-race-safety` + `rpc-back-pressure` (correctness, internal).
   3. `high-performance-logging` (mechanical, large diff, low risk).
-  4. `test-virtualization` (de-flake CI before the public API break).
-  5. `aot-readiness` (depends on serialization changes).
-  6. `agent-friendly-api` last — it's the only breaking surface; bumps `Version` to `3.0.0`.
+  4. `observability` (additive — `ActivitySource` + `Meter` in the core library; `IHealthCheck` adapter ships as a separate package). Can land in a 2.2.0 minor before the 3.0 wave.
+  5. `test-virtualization` (de-flake CI before the public API break).
+  6. `aot-readiness` (depends on serialization changes).
+  7. `agent-friendly-api` last — it's the only breaking surface; bumps `Version` to `3.0.0`.

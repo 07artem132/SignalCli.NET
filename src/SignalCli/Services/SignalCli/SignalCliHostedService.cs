@@ -1,9 +1,10 @@
+using System.Diagnostics;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Nito.AsyncEx;
+using SignalCli.Diagnostics;
 using SignalCli.Interfaces.SignalCli;
 using SignalCli.Logging;
 using SignalCli.Models;
@@ -18,7 +19,9 @@ namespace SignalCli.Services.SignalCli;
 ///    у межах вікна <see cref="Config.RestartWindowSeconds"/>).
 /// 3) Надає доступ до StreamPair через IStreamPairProvider.
 /// </summary>
-public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisposable
+// post-modernize-tuning §4.8 (audit D5): sealed — inheriting from hosted-services
+// is not a supported extension point; configuration via SignalCliOptions only.
+public sealed class SignalCliHostedService : IHostedLifecycleService, IStreamPairProvider, IAsyncDisposable, IDisposable
 {
     private readonly ILogger<SignalCliHostedService> _logger;
     private readonly IProcessRunner _processRunner;
@@ -29,14 +32,24 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
     // Використовується для таймера вікна стабільності рестартів (раніше — сирий Task.Run+Task.Delay).
     private readonly TimeProvider _timeProvider;
 
-    private readonly AsyncLock _operationLock = new AsyncLock();
+    // post-modernize-tuning §6.2 (audit B2): SemaphoreSlim замість Nito.AsyncEx.AsyncLock —
+    // trim/AOT-safe + стандартний .NET-патерн. Семантика identична: 1-permit async section.
+    private readonly SemaphoreSlim _operationLock = new(1, 1);
 
     // Поля для управління процесом
     private IProcess? _currentProcess;
     // Тримаємо посилання на пару потоків ВИКЛЮЧНО для звільнення ресурсу в CleanupProcess.
     // Єдине джерело істини про стан/потоки — ProcessStateManager.
     private StreamPair? _currentStreamPair;
-    private bool _disposed;
+
+    // post-modernize-tuning §7.2 (T3): typed test-seam замість reflection.GetField("_currentProcess").
+    // Internal-only — InternalsVisibleTo("SignalCli.Tests") у csproj. Прибирає ризик opaque
+    // breakage при rename'і приватних полів (рефлексія мовчки повертає null).
+    internal IProcess? CurrentProcessForTests => _currentProcess;
+    internal StreamPair? CurrentStreamPairForTests => _currentStreamPair;
+    // post-modernize-tuning §2.4: Interlocked.Exchange-based disposal flag.
+    private int _disposedFlag;
+    private bool _disposed => Volatile.Read(ref _disposedFlag) != 0;
     private bool _stopping;
     // _restartCount має читатися/писатися лише під _operationLock — щоб B.5 (windowed
     // budget) узгоджувалося із гонкою між ForceRestartAsync і OnProcessExited.
@@ -79,6 +92,23 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
+    #region IHostedLifecycleService phases
+
+    // post-modernize-tuning §8a.2 (audit B3): opt-in у IHostedLifecycleService для
+    // explicit-ordering startup/shutdown phases. No-op реалізації — поточна поведінка
+    // лишається у StartAsync/StopAsync; phase-методи доступні для майбутніх refinement'ів
+    // (наприклад StartedAsync для warm-up-ping після всіх Start'ів).
+    /// <summary>Викликається ПЕРЕД <see cref="StartAsync"/> у всіх хостованих сервісах.</summary>
+    public Task StartingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    /// <summary>Викликається ПІСЛЯ <see cref="StartAsync"/> у всіх хостованих сервісах.</summary>
+    public Task StartedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    /// <summary>Викликається ПЕРЕД <see cref="StopAsync"/> у всіх хостованих сервісах.</summary>
+    public Task StoppingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    /// <summary>Викликається ПІСЛЯ <see cref="StopAsync"/> у всіх хостованих сервісах.</summary>
+    public Task StoppedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    #endregion
+
     #region IHostedService
 
     /// <summary>
@@ -98,10 +128,13 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         {
             // Запускаємо процес (перший старт) — під операційним локом, щоб
             // конкурентний OnProcessExited не міг перезапустити в той самий момент.
-            using (await _operationLock.LockAsync(cancellationToken))
+            // §6.2: SemaphoreSlim-locking pattern (1-permit), той самий контракт що AsyncLock.
+            await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
             {
                 await StartProcessInternalAsyncNoLock(cancellationToken).ConfigureAwait(false);
             }
+            finally { _operationLock.Release(); }
             SignalCliHostedServiceLog.Started(_logger);
         }
         catch (Exception ex)
@@ -126,7 +159,9 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
 
         try
         {
-            using (await _operationLock.LockAsync(cancellationToken))
+            // §6.2: SemaphoreSlim-locking pattern (1-permit), той самий контракт що AsyncLock.
+            await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
             {
                 var currentState = _stateManager.CurrentState;
                 if (currentState != ProcessState.Running && currentState != ProcessState.Starting)
@@ -137,6 +172,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
                 // Зупиняємо процес
                 await StopProcessInternalAsyncNoLock(cancellationToken).ConfigureAwait(false);
             }
+            finally { _operationLock.Release(); }
             SignalCliHostedServiceLog.Stopped(_logger);
         }
         catch (Exception ex)
@@ -191,7 +227,8 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             return;
         }
 
-        using (await _operationLock.LockAsync(cancellationToken))
+        await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
             if (_disposed || _stopping)
             {
@@ -217,6 +254,8 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             }
 
             SignalCliHostedServiceLog.ForceRestartAttempt(_logger, _restartCount, _options.MaxRestartAttempts);
+            // post-modernize-tuning §11.B.5: process-restart counter for observability.
+            SignalCliDiagnostics.ProcessRestarts.Add(1, new KeyValuePair<string, object?>("trigger", "force"));
 
             // 1) Зупинка
             await StopProcessInternalAsyncNoLock(cancellationToken).ConfigureAwait(false);
@@ -227,6 +266,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             // 3) Перезапуск
             await StartProcessInternalAsyncNoLock(cancellationToken).ConfigureAwait(false);
         }
+        finally { _operationLock.Release(); }
     }
 
     #endregion
@@ -242,6 +282,10 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
     {
         if (_disposed) return;
         cancellationToken.ThrowIfCancellationRequested();
+
+        // post-modernize-tuning §11.A.3 (audit N1): process.start span.
+        using var activity = SignalCliDiagnostics.ActivitySource.StartActivity(
+            SignalCliDiagnostics.ProcessStartActivityName, ActivityKind.Internal);
 
         var currentState = _stateManager.CurrentState;
         if (currentState != ProcessState.NotStarted &&
@@ -274,6 +318,9 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             // ProcessStateManager — єдине джерело істини; з нього похідні
             // CurrentStreamPair / StreamPairChanged / WaitForReadyAsync.
             _stateManager.UpdateState(ProcessState.Running, streams);
+            // §11.A.3: basename only — full path is PII-adjacent (reveals host layout).
+            activity?.SetTag("signal.process.executable", Path.GetFileName(procConfig.Executable));
+            activity?.SetStatus(ActivityStatusCode.Ok);
             SignalCliHostedServiceLog.ProcessStarted(_logger, _currentProcess.Id);
 
             // B.4 (F3): стартуємо вікно стабільності — якщо процес проживе RestartWindowSeconds
@@ -285,6 +332,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         {
             SignalCliHostedServiceLog.ProcessStartFailed(_logger, ex);
             _stateManager.UpdateState(ProcessState.Failed, error: ex);
+            activity?.SetStatus(ActivityStatusCode.Error, ex.GetType().Name);
             throw;
         }
     }
@@ -332,7 +380,9 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
 
                 // B.9: замість фіксованого Task.Delay чекаємо реального виходу процесу
                 // через WaitForExitAsync + linkedCts(timeout) — швидко за нормального exit.
-                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(_options.StopTimeoutSeconds));
+                // audit N4: TimeProvider-aware overload — тести з FakeTimeProvider можуть
+                // провернути StopTimeoutSeconds віртуально, без wall-clock-залежності.
+                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(_options.StopTimeoutSeconds), _timeProvider);
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
                 try
                 {
@@ -443,7 +493,8 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
     {
         try
         {
-            using (await _operationLock.LockAsync().ConfigureAwait(false))
+            await _operationLock.WaitAsync().ConfigureAwait(false);
+            try
             {
                 if (_disposed) return;
                 if (!ReferenceEquals(_restartWindowTimer, firingTimer)) return;
@@ -455,6 +506,7 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
                     _restartCount = 0;
                 }
             }
+            finally { _operationLock.Release(); }
         }
         catch (Exception ex)
         {
@@ -508,7 +560,8 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
         if (_disposed) return;
         if (_stopping) return; // умисна зупинка
 
-        using (await _operationLock.LockAsync().ConfigureAwait(false))
+        await _operationLock.WaitAsync().ConfigureAwait(false);
+        try
         {
             // Повторна перевірка під локом — стан міг змінитися, поки чекали.
             if (_disposed) return;
@@ -541,6 +594,8 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
             }
 
             SignalCliHostedServiceLog.AutoRestartAttempt(_logger, _restartCount, _options.MaxRestartAttempts);
+            // post-modernize-tuning §11.B.5: process-restart counter (crash-triggered).
+            SignalCliDiagnostics.ProcessRestarts.Add(1, new KeyValuePair<string, object?>("trigger", "crash"));
             try
             {
                 // B.5: через _timeProvider для консистентності з ForceRestartAsync.
@@ -552,21 +607,74 @@ public class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisp
                 SignalCliHostedServiceLog.AutoRestartFailed(_logger, ex);
             }
         }
+        finally { _operationLock.Release(); }
     }
 
     #endregion
 
-    #region IDisposable
+    #region Disposal
 
     /// <summary>
     /// Звільняє ресурси, пов'язані з об'єктом.
     /// </summary>
+    /// <remarks>
+    /// Sync-path: best-effort kill без drain'у in-flight operations. DI-контейнер при ASP.NET-/
+    /// generic-host-shutdown'і викличе <see cref="DisposeAsync"/> (preferred), якщо instance
+    /// зареєстрований як <see cref="IAsyncDisposable"/>. Цей метод лишається для explicit
+    /// `using`-блоків і legacy-кода. CLAUDE.md rule #9: НЕ sync-over-async — звідси нема
+    /// `DisposeAsync().AsTask().GetResult()`; обидва шляхи поділяють <see cref="DisposeCore"/>.
+    /// </remarks>
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        if (Interlocked.Exchange(ref _disposedFlag, 1) != 0) return;
+        GC.SuppressFinalize(this);
+        DisposeCore();
+    }
+
+    /// <summary>
+    /// post-modernize-tuning §8a.3 (audit C1): async-disposal — DI-контейнер preferр'ить його
+    /// при scope-tear-down. Перед sync-cleanup'ом дренує <c>_operationLock</c> із коротким
+    /// fallback-timeout'ом — щоб in-flight <c>StartAsync</c>/<c>StopAsync</c>/<c>ForceRestartAsync</c>
+    /// мали шанс завершитися cleanly, перш ніж ми силою вб'ємо процес.
+    /// </summary>
+    /// <remarks>
+    /// CLAUDE.md rule #9: НЕ sync-over-async. Цей метод чисто async, sync-Dispose() — чисто
+    /// sync, спільне ядро — <see cref="DisposeCore"/>. Drain-timeout навмисно короткий (2с) —
+    /// dispose не повинен висіти невизначено довго.
+    /// </remarks>
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposedFlag, 1) != 0) return;
         GC.SuppressFinalize(this);
 
+        // Drain in-flight operations cleanly: чекаємо до 2с щоб поточна Start/Stop/Restart
+        // завершилася. Якщо не встигла — переходимо до sync-kill (best-effort).
+        try
+        {
+            using var drainCts = new CancellationTokenSource(TimeSpan.FromSeconds(2), _timeProvider);
+            await _operationLock.WaitAsync(drainCts.Token).ConfigureAwait(false);
+            try { /* lock acquired — in-flight ops drained */ }
+            finally { _operationLock.Release(); }
+        }
+        catch (OperationCanceledException)
+        {
+            // 2с drain-window закінчилось — продовжуємо sync-cleanup без drain'у.
+            SignalCliHostedServiceLog.DisposeAsyncDrainTimeout(_logger);
+        }
+        catch (ObjectDisposedException)
+        {
+            // SemaphoreSlim уже dispose'нутий — теж OK.
+        }
+
+        DisposeCore();
+    }
+
+    /// <summary>
+    /// Спільне ядро для sync- і async-disposal. Викликається РІВНО ОДИН РАЗ — guard
+    /// через <c>_disposedFlag</c> у callers.
+    /// </summary>
+    private void DisposeCore()
+    {
         SignalCliHostedServiceLog.Disposing(_logger);
 
         try

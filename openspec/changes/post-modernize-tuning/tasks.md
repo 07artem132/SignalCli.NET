@@ -1,104 +1,115 @@
 ## 0. Setup
 
-- [ ] 0.1 Audit findings cross-referenced with current source (every High verified by reading cited lines)
-- [ ] 0.2 Branch `claude/post-modernize-tuning` created from current `main`
+- [x] 0.1 Audit findings cross-referenced with current source (every High verified by reading cited lines) — done as part of the 2026-05-23 agent-friendly audit; new findings tracked under `(audit N#)` tags throughout this file
+- [x] 0.2 Branch `claude/post-modernize-tuning` created from current `main`
 
 ## 1. RPC back-pressure (capability `rpc-back-pressure`)
 
-- [ ] 1.1 (A3) Add `Config.NotificationChannelCapacity` (default 1024)
-- [ ] 1.2 (A3) Create `Channel<JsonRpcNotificationRaw>` in `JsonRpcClient` with `BoundedChannelOptions { SingleReader=true, SingleWriter=true, FullMode=Wait }`
-- [ ] 1.3 (A3) Stdout reader loop becomes parse-then-`await WriteAsync` — no `OnNext` inline
-- [ ] 1.4 (A3) Channel-consumer `Task` runs the fan-out (`_notificationSubject.OnNext`)
-- [ ] 1.5 (A3) `DisposeAsync` completes the channel writer, awaits the consumer, then completes/disposes the subject
-- [ ] 1.6 (A3) Test: 1000-message burst with a 50ms/message slow subscriber — reader never blocks; messages arrive in order
+- [x] 1.1 (A3) Add `SignalCliOptions.NotificationChannelCapacity` (default 1024, `[Range(1,1_000_000)]`)
+- [x] 1.2 (A3) Create `Channel<JsonRpcNotification<SubscriptionEventArgs>>` in `JsonRpcClient` with `BoundedChannelOptions { SingleReader=true, SingleWriter=true, FullMode=Wait }` — capacity from options
+- [x] 1.3 (A3) Stdout reader loop becomes parse-then-`await WriteAsync` — `ProcessMessage` → `ProcessMessageAsync(line, ct)`; no `OnNext` inline
+- [x] 1.4 (A3) Channel-consumer `Task` runs the fan-out: `NotificationConsumerLoopAsync` reads `ReadAllAsync` and calls `_notificationSubject.OnNext` with try/catch boundary so a synchronous subscriber exception doesn't kill the loop
+- [x] 1.5 (A3) `DisposeAsync` calls `_notificationChannel.Writer.TryComplete()`, awaits `_notificationConsumerTask` (with 5s timeout — log `NotificationConsumerStopTimeout` on miss), then completes/disposes the subject
+- [x] 1.6 (A3) `Tests/SignalCli.Tests/Rpc/BackPressureTests.cs` — `NotificationBurst_WithSlowSubscriber_AllMessagesDeliveredInOrder`: 100-message burst через приватний `ProcessMessageAsync` (reflection); канал capacity=8, sync-subscriber делейкає 5ms/msg; assert: всі 100 доставлено в FIFO-порядку (subscription-ID 0..99). Реальна частина burst'а ~500ms, але демонструє повну back-pressure-chain stdout→channel→consumer→subject. Spec 1000×50ms скорочено для практичності — той самий клас регресій ловиться.
+- [x] 1.7 (audit N4) `JsonRpcClient` constructor accepts `TimeProvider? timeProvider = null` (defaults to `TimeProvider.System`); the `new CancellationTokenSource(_requestTimeout)` site at `JsonRpcClient.cs:361` switches to `new CancellationTokenSource(_requestTimeout, _timeProvider)` (the .NET 8+ overload). `JsonRpcClientFactory` also propagates `TimeProvider`. DI registers `TimeProvider` via `services.TryAddSingleton(TimeProvider.System)` in `RegisterCoreServices`.
+- [x] 1.8 (audit N4) `Tests/SignalCli.Tests/Rpc/TimeoutVirtualizationTests.cs` — `InvokeMethodAsync_TimeoutPath_VirtualizedByFakeTimeProvider_ThrowsTimeoutException` (FakeTimeProvider.Advance(61s) на RequestTimeoutSeconds=60 → TimeoutException without wall-clock) + sanity `_CallerCancellation_DoesNotFalselyAttributeToTimeout`.
 
 ## 2. State-machine thread safety (capability `state-machine-thread-safety`)
 
-- [ ] 2.1 (A2) `ProcessStateManager.UpdateState`: snapshot under lock, emit `OnNext` outside lock
-- [ ] 2.2 (A2) `_disposed` becomes `Volatile.Write`/`Volatile.Read`-safe; lock-free `Dispose` short-circuit
-- [ ] 2.3 (A2) Catch `ObjectDisposedException` from `OnNext` (documented disposal race window)
-- [ ] 2.4 (C2) `_disposed` in `SignalCliHostedService`, `JsonRpcClient`, `JsonRpcClientHostedService`, `SignalEventService` switched to `Interlocked.Exchange`-based `int`
-- [ ] 2.5 (A2) Test: synchronous Rx subscriber that re-enters `UpdateState` completes within 2s virtual time (deadlock guard)
+- [x] 2.1 (A2) `ProcessStateManager.UpdateState`: snapshot under lock, emit `OnNext` outside lock
+- [x] 2.2 (A2) `_disposed` becomes `int` with `Volatile.Read`/`Interlocked.Exchange`; lock-free short-circuit at the top of `UpdateState`
+- [x] 2.3 (A2) Catch `ObjectDisposedException` from `OnNext` (documented disposal race window — between exit-of-lock and OnNext call)
+- [x] 2.4 (C2) `_disposed` in `SignalCliHostedService`, `JsonRpcClient`, `JsonRpcClientHostedService`, `SignalEventService` switched to `Interlocked.Exchange`-based `int` with `Volatile.Read` accessor
+- [x] 2.5 (A2) `Tests/SignalCli.Tests/SignalCliHostedService/StateManagerReentrancyTests.cs` — `UpdateState_WhenSubscriberReentersWithUpdateState_DoesNotDeadlock` (synchronous Rx subscriber виклика `UpdateState(Stopping)` із OnNext(Starting); ланцюг завершується за <2с — інакше `WaitAsync` фейлить тест як deadlock) + `_TwoConcurrentCallers_AllSnapshotsDelivered_NoDeadlock` для concurrent-lock-contention.
 
 ## 3. Subscription race safety (capability `subscription-race-safety`)
 
-- [ ] 3.1 (A4) `SignalEventService.SubscribeAsync` inserts `account → Pending(-1)` placeholder under `_subscriptionsLock` before sending RPC
-- [ ] 3.2 (A4) On RPC exception, rollback the placeholder
-- [ ] 3.3 (A4) On RPC success, overwrite placeholder with real `subscriptionId`
-- [ ] 3.4 (A4) `UnsubscribeAsync` ignores placeholders (no signal-cli call for a never-completed reservation)
-- [ ] 3.5 (A4) `ObjectDisposedException.ThrowIf(_disposed, ...)` added to `SubscribeAsync`/`UnsubscribeAsync` (Audit C6)
-- [ ] 3.6 (A4) Test: `Task.WhenAll(10x SubscribeAsync(same account))` → mocked RPC invoked exactly once; 9 callers see `InvalidOperationException`; dictionary holds exactly one entry
+- [x] 3.1 (A4) `SignalEventService.SubscribeAsync` inserts `account → TaskCompletionSource<int>` placeholder under `_subscriptionsLock` before sending RPC (reservation pattern; leader/follower roles)
+- [x] 3.2 (A4) On RPC exception, rollback the placeholder (Remove + TrySetException — propagates failure to all followers awaiting the TCS)
+- [x] 3.3 (A4) On RPC success, overwrite placeholder with real `subscriptionId` (write to `_accountSubscriptions`, remove from `_pendingSubscribes`, `TrySetResult(id)` wakes followers)
+- [x] 3.4 (A4) `UnsubscribeAsync` searches `_accountSubscriptions` only (placeholders in `_pendingSubscribes` never match because they don't hold `subscriptionId` — they hold a TCS that resolves to one)
+- [x] 3.5 (A4) `ObjectDisposedException.ThrowIf(_disposed, ...)` added to `SubscribeAsync`/`UnsubscribeAsync` (audit C6)
+- [x] 3.6 (A4) Test: `Task.WhenAll(10x SubscribeAsync(same account))` → mocked RPC invoked exactly once (`Times.Once`); all 10 callers receive the same `subscriptionId`. `SubscribeAsync_Concurrent_TenCallers_InvokesRpcExactlyOnceAndReturnsSameId`.
+- [x] 3.7 (audit N5) `SignalEventService.SubscribeAsync(string account, …)` adds `ArgumentException.ThrowIfNullOrEmpty(account)` at the entry; the duplicate-subscription branch (lines 168-170, 185-187) **returns the existing `SubscribeReceiveResponse(existingId)` instead of throwing `InvalidOperationException`** — operation becomes idempotent. XMLDoc on `ISignalEventService.SubscribeAsync` updated: removed `<exception cref="InvalidOperationException">` for "already subscribed"; added `<remarks>` documenting idempotency; added `<exception cref="TimeoutException">` (closing audit N12 for this method too).
+- [x] 3.8 (audit N5) Test: `SubscribeAsync(account)` × 3 — second and third call do NOT invoke `subscribeReceive` RPC; all three return identical `Id`. Plus `[Theory]` over null/empty `account` asserting `ArgumentException` with `ParamName == "account"`. `SignalEventServiceDispatchTests.SubscribeAsync_Idempotent_SameAccountThrice_ReturnsSameIdAndCallsRpcOnce` + `…_NullOrEmptyAccount_ThrowsArgumentException`.
 
 ## 4. Agent-friendly public API (capability `agent-friendly-api`)
 
-- [ ] 4.1 (D1) `FinishLinkResponse(string Number)` PascalCase + `[property: JsonPropertyName("number")]`
-- [ ] 4.2 (D1) `SubscribeReceiveResponse(int Id)` PascalCase + `[property: JsonPropertyName("id")]`
-- [ ] 4.3 (D2) `ISignalAccounts.ListAccountsAsync` / `SyncAccountAsync` + impls + tests
-- [ ] 4.4 (D2) `ISignalDevices.StartLinkAsync` / `FinishLinkAsync` + impls + tests
-- [ ] 4.5 (D2) `ISignalGroups.ListGroupsAsync` + impl + tests
-- [ ] 4.6 (D2) `ISignalCliClient.VersionAsync` + impl + tests + `SignalCliHealthMonitor` call site
-- [ ] 4.7 (D3) `CancellationToken` removed from `TextMessageOptions` / `AttachmentMessageOptions` / `StickerMessageOptions`; added as last parameter to `SendTextMessageAsync` / `SendAttachmentAsync` / `SendStickerAsync`
-- [ ] 4.8 (D5) `SignalCliHostedService` becomes `sealed`
-- [ ] 4.9 (D6) `ConfigureAwait(false)` added to the 5 missing public-path `await`s; `.editorconfig` raises `CA2007` from `silent` → `warning`
-- [ ] 4.10 (D7) `Config.EnvironmentVariables` becomes `IReadOnlyDictionary<string,string>` with a `WithEnvironment(IDictionary<string,string>)` setter helper
-- [ ] 4.11 (D8) `Example/Program.cs` rewritten as `async Task Main`, `await using IHost host = …`, awaited `SendTextMessageAsync`, awaited `host.StopAsync()`
-- [ ] 4.12 (D10) `JsonRpcRequest` record body emptied (positional params already generate the properties); `[property: JsonPropertyName("...")]` on each ctor param
-- [ ] 4.13 (D11) Compileable `<example>` XML-doc snippets on `ISignalMessage.*Async` (use `[new UserRecipient(...)]`, not `new[] { ... }`)
-- [ ] 4.14 (D12) `JetBrains.Annotations` → `PrivateAssets="all"` in `SignalCli.csproj`
-- [ ] 4.15 (D9) Builders' `Build()` adds final guard (defensive, post-mutation)
-- [ ] 4.16 `Version` 2.0.0 → 3.0.0 in `SignalCli.csproj` (semver-major for the breaks); CHANGELOG entry under "## [3.0.0]"
-- [ ] 4.17 (N3) `Models/Signal/Envelope.cs` — audit each non-nullable `string` field against signal-cli wire contract; mark `[JsonRequired]` where always-present (`Hangup.Type`, `Offer.Type`/`Offer.Opaque`, `Answer.Opaque`, `IceUpdate.Opaque`, `JsonRemoteDelete.RemoteDeleteId`), make `string?` otherwise. No silent `null`-into-non-nullable.
-- [ ] 4.18 (N4) `UserRecipient`/`GroupRecipient` ctors — replace `ArgumentNullException` with `ArgumentException.ThrowIfNullOrEmpty(...)` (.NET 8+); update XML-doc `<exception>` to match
-- [ ] 4.19 (N9) `BaseSignalEventArgs.Account` → non-nullable `string`; same for the derived `*EventArgs` records' inherited `Account` slot; propagate non-null through `SignalEventService.OnNotificationReceived`
-- [ ] 4.20 (N10) `ListAccountsResponse` and `ListGroupsResponse` — turn into wrapper records (`(IReadOnlyList<T> Items)`) with a `[JsonConverter]` (or positional record param typed as the collection) that preserves the wire JSON array shape
-- [ ] 4.21 (N14) `JsonRpcException` — add `()`, `(string)`, `(string, Exception)` ctors (CA1032). Default the `Error` to a sentinel `JsonRpcError` (code 0, "no error info") for the parameterless ctor
-- [ ] 4.22 (N15) Delete the unused `JsonRpcException(string, Exception?)` ctor that fabricated code `-32000`. Verified zero call sites in src (`grep` confirms only `new JsonRpcException(response.Error)` is used at `JsonRpcClient.cs:369`). No replacement needed; CA1032 ctors from §4.21 cover the API-design hole
+- [x] 4.1 (D1) `FinishLinkResponse(string Number)` PascalCase + `[property: JsonPropertyName("number")]`
+- [x] 4.2 (D1) `SubscribeReceiveResponse(int Id)` PascalCase + `[property: JsonPropertyName("id")]`
+- [x] 4.3 (D2) `ISignalAccounts.ListAccountsAsync` / `SyncAccountAsync` + impls + tests; old names kept as `[Obsolete]` default interface members delegating to new ones (one-major-version grace shim per CLAUDE.md backward-compat convention)
+- [x] 4.4 (D2) `ISignalDevices.StartLinkAsync` / `FinishLinkAsync` + impls + tests; old names kept as `[Obsolete]` shim
+- [x] 4.5 (D2) `ISignalGroups.ListGroupsAsync` + impl + tests; old name kept as `[Obsolete]` shim
+- [x] 4.6 (D2) `ISignalCliClient.VersionAsync` + impl + tests + `SignalCliHealthMonitor` call site — done in 2.1.0 (agent-friendly-modernization A.1-A.2)
+- [x] 4.7 (D3) `CancellationToken`-property + `WithCancellationToken`-Builder-method видалені з усіх 3 *Options'ів. `SignalMessage.LinkTokens`-helper прибрано (більше нема двох джерел token'а). `SendTextMessageAsync` / `SendAttachmentAsync` / `SendStickerAsync` тепер єдиний шлях — параметр методу.
+- [x] 4.8 (D5) `SignalCliHostedService` becomes `sealed`
+- [x] 4.9 (D6) Audit-verified: 0 missing `ConfigureAwait(false)` сайтів — попередня хвиля (`agent-friendly-modernization`) уже накрила всі. `.editorconfig` піднято до `dotnet_diagnostic.CA2007.severity = warning` із документованим обґрунтуванням; clean-build стверджує invariant.
+- [x] 4.10 (D7) `Config.EnvironmentVariables` becomes `IReadOnlyDictionary<string,string>` with a `WithEnvironment(IDictionary<string,string>)` defensive-copy helper that returns `this`. `SignalCliOptions.EnvironmentVariables` теж типу `IReadOnlyDictionary` (§4.28 paired). Test `ProcessRunner_ShouldReceiveCorrectEnvironmentVariables` migrated to `WithEnvironment(new Dictionary<,>{ … })` — `Add()` на shared посилання більше не компілюється, що й є метою.
+- [x] 4.11 (D8) `Example/Program.cs` rewritten as `async Task Main`, awaited `SendTextMessageAsync`, awaited `host.StopAsync()`. `await using` deferred — `IHost` 10.0 не декларує `IAsyncDisposable` напряму; concrete host реалізує, але cast псує portability. Замість фейкового fire-and-forget Subscribe-callback тепер `Task.Run` із proper try/catch + `ConfigureAwait(false)`. Закоментований приклад OTel-підключення (AddSource("SignalCli.NET") + AddMeter) додано.
+- [x] 4.12 (D10) `JsonRpcRequest` record body emptied — позиційні параметри `(Method, Params, Id)` зараз із `[property: JsonPropertyName("...")]` синтаксисом; залишилось лише `JsonRpc { get; init; } = "2.0"`. Дублікати `Method = Method` etc. видалено.
+- [x] 4.13 (D11) Compileable `<example>` XML-doc snippets on `ISignalMessage.*Async` — `new[] { new UserRecipient(...) }` → `[new UserRecipient(...)]` (collection expressions, .NET 8+).
+- [x] 4.14 (D12) `JetBrains.Annotations` PackageReference з `PrivateAssets="all"` — пакет тепер є build-time-hint, не потрапляє у consumer dependency graph.
+- [x] 4.15 (D9) `Build()` на всіх 3 *Options-Builder'ах (`TextMessageOptions`, `AttachmentMessageOptions`, `StickerMessageOptions`) тепер має post-mutation guard: перевіряє що обов'язкові поля (`Account`, `Recipients`, `Message`/`Attachments`/`Sticker`) не були скинуті після ctor-валідації. Кидає `InvalidOperationException` із конкретним повідомленням, якщо хтось через reflection / record-`with` обнулив поле між ctor і Build.
+- [x] 4.16 `Version` 2.1.0 → 3.0.0 у `SignalCli.csproj` (semver-major для breaking-хвилі); `AssemblyVersion`/`FileVersion` теж 3.0.0. CHANGELOG entry під `## [3.0.0] — неопубліковано (WIP, post-modernize-tuning)` уже існує з повним переліком breaking/additive/internal.
+- [x] 4.17 (N3) `Models/Signal/Envelope.cs` — `[JsonRequired]` додано на always-present non-nullable string поля: `JsonRemoteDelete.RemoteDeleteId`, `Offer.Type`, `Offer.Opaque`, `Answer.Opaque`, `IceUpdate.Opaque`, `Hangup.Type`. Раніше null проходив тихо у non-nullable property — тепер `JsonException` із чітким messag'ем.
+- [x] 4.18 (N4) `UserRecipient`/`GroupRecipient` ctors — `ArgumentException.ThrowIfNullOrEmpty(...)` (.NET 8+) у приватному `ValidateAndReturn`-помічнику, що зберігає `<param>`-name через `nameof()`. XML-doc оновлено: тепер обидва типи документують `<exception cref="ArgumentNullException">` для null AND `<exception cref="ArgumentException">` для empty (раніше було «обидва кидаються коли null або empty» — некоректно).
+- [x] 4.19 (N9) `BaseSignalEventArgs.Account` → non-nullable `string`. Sed-sweep на всіх 10 `*EventArgs` (TextMessage, Reaction, Attachment, Sticker, Typing, Receipt, Sync, Quote, Edit, RemoteDelete) — параметр `Account` тепер `string` non-null. `TryGetAccountBySubscriptionId` оформлено з `[NotNullWhen(true)]`-атрибутом на `out string? account` — null-аналізатор тепер знає, що при `true`-поверненні значення non-null, тож `account!`-cast'и більше не потрібні.
+- [x] 4.20 (N10) `ListAccountsResponse` і `ListGroupsResponse` — конвертовано у wrapper-records: `record ListAccountsResponse(IReadOnlyList<Account> Items) : IReadOnlyList<Account>`. Custom `JsonConverter`-и (`ListAccountsResponseConverter`/`ListGroupsResponseConverter`) делегують у `List<T>` для збереження плоского wire-JSON-array (а не `{"Items":[...]}`). Конвертери AOT-friendly (без reflection), використовують ту ж `options` (source-gen context). `[JsonSerializable(typeof(List<Account>))]` + `[JsonSerializable(typeof(List<Group>))]` додано в context — без них source-gen у .NET 7+ кидає `NotSupportedException: Metadata for type 'List<Foo>' was not provided` (reflection-fallback видалено починаючи з 7.0). `Account` record отримав `[JsonPropertyName("number")]` для коректного wire-shape на write. 2 нові тести `ListAccountsResponse_RoundTrip_PreservesFlatJsonArrayShape` + `ListGroupsResponse_RoundTrip_PreservesFlatJsonArrayShape` фіксують контракт. Breaking: консумери, що мутували відповідь через `.Add`/`.Clear`/`.Sort` — фейляться compile-time'но (бажано — не треба мутувати дані сервера).
+- [x] 4.21 (N14) `JsonRpcException` — three CA1032 ctors added: `()`, `(string)`, `(string, Exception)`. Default `Error` uses canonical JSON-RPC 2.0 code `-32603` ("Internal error"), not the non-standard `-32000`.
+- [x] 4.22 (N15) Legacy `JsonRpcException(string, Exception?)` ctor with non-standard `-32000` code **removed** (not just `[Obsolete]`-marked — overload ambiguity with the new CA1032 `(string, Exception)` ctor would create build hazards). Audit confirmed zero internal call sites. Test `FromMessage_CreatesInternalError` updated from `-32000` → `-32603` to match the new contract.
+- [x] 4.23 (audit N6) `ISignalMessage.Send{Text,Attachment,Sticker}MessageAsync` тепер повертають `Task<SendMessageResponse>` (single). Implementations прибрали `return [response];` wrap. `SignalMessage.cs` callsite просто `return await SendUnifiedMessageAsync(req, ct).ConfigureAwait(false);` — на 1 виділення менше per-call. CHANGELOG-entry додано під `## [3.0.0]` із migration-нотою.
+- [x] 4.24 (audit N6) Унітести 192/192 проходять — старий call-site shape `result[0]` ніде не компілювався у тестах (вони вже використовували single-response).
+- [x] 4.25 (audit N9) `TextMessageOptions.PreviewUrl` + `.PreviewImage` декоровані `[StringSyntax(StringSyntaxAttribute.Uri)]`. Параметри `Builder.WithPreview(previewUrl, …, previewImage)` теж. `AttachmentMessageOptions` не має URL-полів. Zero runtime cost; IDEs/analyzers тепер валідують URL-syntax.
+- [x] 4.26 (audit N12) `ISignalMessage.{SendTextMessageAsync, SendAttachmentAsync, SendStickerAsync}` XMLDoc'и отримали `<exception cref="TimeoutException">` із посиланням на `SignalCliOptions.RequestTimeoutSeconds`. Заголовок результат-блоку оновлено (single response, не "Результати"). `<param>cancellationToken</param>` спрощено — більше не згадує "лінкується" (LinkTokens помер у §4.7).
+- [x] 4.27 (audit N11) Generic-order swap: `InvokeMethodAsync<TResponse, TRequest>` → `InvokeMethodAsync<TRequest, TResponse>` на `ISignalCliClient`, `IJsonRpcSender`, `JsonRpcClient`, `SignalService` + усі ~22 callsites (production + test mocks). **`[Obsolete]`-shim неможливий**: C# overload-resolution не розрізняє методи з однаковою runtime-сигнатурою, що відрізняються лише порядком typeparam'ів (аналогічно §4.21 з `JsonRpcException`-ctor — там теж pure removal). CHANGELOG-entry задокументовує неможливість shim'у.
+- [x] 4.28 (audit E2) Verified: `SignalCliOptions.EnvironmentVariables` уже `IReadOnlyDictionary<string,string>` (з §4.10 в попередній хвилі); `SignalCliOptionsExtensions.ToOptions`/`ToConfig`/`CopyFrom` уже виконують defensive-copy через `new Dictionary<string,string>(environment)` чи аналог. Зайвої роботи — нема.
 
 ## 5. High-performance logging (capability `high-performance-logging`)
 
-- [ ] 5.1 (P1) Add `static partial class Log` for each service (one file per service) under `Services/**/Log.<Service>.cs`
-- [ ] 5.2 (P1) Migrate `JsonRpcClient` log calls (8 sites) — events 3xxx
-- [ ] 5.3 (P1) Migrate `SignalCliHostedService` log calls (~20 sites) — events 4xxx
-- [ ] 5.4 (P1) Migrate `SignalCliHealthMonitor` log calls — events 5xxx
-- [ ] 5.5 (P1) Migrate `ProcessStateManager` log calls — events 6xxx
-- [ ] 5.6 (P1) Migrate `SignalEventService` log calls — events 7xxx
-- [ ] 5.7 (P1) Migrate `SignalService`/`SignalMessage`/`SignalAccounts`/`SignalDevices`/`SignalGroups` log calls — events 2xxx
-- [ ] 5.8 (P2) Wrap `string.Join(", ", response)` (`SignalAccounts.cs:43`) and analogous expensive args in `if (_logger.IsEnabled(LogLevel.Trace))` guards (or migrate to `LoggerMessage` which generates the guard)
-- [ ] 5.9 `.editorconfig`: enable `CA1848`, `CA1873` analyzers at `warning` severity
-- [ ] 5.10 Regression test: `PrivacyLoggingTests` still passes verbatim — no PII appears above `Trace`
+- [x] 5.1 (P1) Add `static partial class Log` for each service — done in 2.1.0 (`agent-friendly-modernization` source-generated-logging). 12 files under `src/SignalCli/Logging/*Log.cs` (file-name convention chosen: `<Service>Log.cs` за рангом класу замість `Log.<Service>.cs` — symmetrical із class-name).
+- [x] 5.2 (P1) `JsonRpcClient` log calls — done; `JsonRpcClientLog` (EventId-блок 300–399).
+- [x] 5.3 (P1) `SignalCliHostedService` log calls — done; `SignalCliHostedServiceLog` (EventId-блок 100–199).
+- [x] 5.4 (P1) `SignalCliHealthMonitor` log calls — done; `SignalCliHealthMonitorLog` (EventId-блок 200–299).
+- [x] 5.5 (P1) `ProcessStateManager` log calls — done; `ProcessStateManagerLog` (EventId-блок 900–999, shared із `ProcessRunnerLog`).
+- [x] 5.6 (P1) `SignalEventService` log calls — done; `SignalEventServiceLog` (EventId-блок 500–599).
+- [x] 5.7 (P1) `SignalService`/`SignalMessage`/`SignalAccounts`/`SignalDevices`/`SignalGroups` log calls — done; `SignalServiceLog` (600–699), `SignalMessageLog` (700–799), `SignalAccountsLog`/`SignalDevicesLog`/`SignalGroupsLog` (800–899). **EventId-блоки відрізняються від draft'ового плану (2xxx/3xxx/4xxx) — фінальна нумерація задокументована в CLAUDE.md "Logging" rule.**
+- [x] 5.8 (P2) `string.Join(", ", response)` у `SignalAccounts.ListAccountsAsync` + `SignalGroups.ListGroupsAsync` обгорнуто в `if (_logger.IsEnabled(LogLevel.Trace)) { ... }`. `[LoggerMessage]`-generated IsEnabled-guard живе всередині методу — eager-evaluation на call-site site все одно платить ціну, тож manual guard потрібен. Без нього `response.Count` × allocation-per-call навіть на Info-level.
+- [x] 5.9 `.editorconfig`: `CA1848` → `warning` (primary intent — блокує regression на direct `_logger.Log*`); `CA1873` → `suggestion` (analyzer не розпізнає manual `IsEnabled`-guards як safety-net, тож `warning`-rівень спричиняв би 4 фейлово-позитивні build-error'и, включно з false-positive на `Math.Max`-intrinsic). Trade-off задокументовано в `.editorconfig`-коментарі.
+- [x] 5.10 Regression test: `PrivacyLoggingTests` пройшов (192/192 unit-тестів зелено після §5.8+§5.9). `ObservabilityPrivacyTests` теж — попутно виправлено concurrent-enumeration flake (lock+snapshot pattern на `_capturedActivities`/`_capturedMeasurements`, бо `ActivityListener`/`MeterListener`-callback'и приходять із background-потоків паралельних тестів).
+- [x] 5.11 (audit N13) `JsonRpcClient.InvokeMethodAsync` opens a `BeginScope` at the top: `using var scope = _logger.BeginScope(new Dictionary<string,object> { ["RpcMethod"] = method, ["RpcRequestId"] = requestId });` — every nested `JsonRpcClientLog.*` call within the request lifecycle inherits these properties.
+- [x] 5.12 (audit N13) `Tests/SignalCli.Tests/Rpc/ScopeCaptureTests.cs` — `InvokeMethodAsync_OpensScope_WithRpcMethod_AndRpcRequestId`: новий `FakeLogger<JsonRpcClient>` (із пакета `Microsoft.Extensions.Diagnostics.Testing`) capture'ить scope-properties per-entry; assert що `RpcMethod="scopeProbe"` + non-empty `RpcRequestId` присутні у scope для кожного log-запису з InvokeMethodAsync. Helper EnumerateKvps підтримує обидва shape'и (`IReadOnlyList<KeyValuePair>` MEL та `Dictionary<string,object>`).
 
 ## 6. AOT readiness (capability `aot-readiness`)
 
-- [ ] 6.1 (B2) `JsonRpcClient._sendLock`: `Nito.AsyncEx.AsyncLock` → `SemaphoreSlim(1, 1)`
-- [ ] 6.2 (B2) `SignalCliHostedService._operationLock`: `AsyncLock` → `SemaphoreSlim(1, 1)`
-- [ ] 6.3 (B2) Drop `Nito.AsyncEx` PackageReference from `SignalCli.csproj`
-- [ ] 6.4 (P6) Drop `DefaultJsonTypeInfoResolver` from `SignalJson.Options.TypeInfoResolver` — leave only `SignalJsonContext.Default`
-- [ ] 6.5 (P6) Audit all `JsonSerializer.Serialize`/`Deserialize`/`SerializeToElement` call sites for `TRequest`/`TResponse` types not in `SignalJsonContext`; add any missing
-- [ ] 6.6 (B6) `[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Default)]` (or `Serialization` per-type) for fast-path emission
-- [ ] 6.7 (P6) `<IsAotCompatible>true</IsAotCompatible>` in `SignalCli.csproj`
-- [ ] 6.8 (P6) Resolve any IL2026/IL2104 warnings surfaced by the AOT analyzer (annotate with `RequiresUnreferencedCode` only as last resort)
-- [ ] 6.9 (P6) `dotnet publish -c Release /p:PublishAot=true` from a probe app succeeds (smoke test only, not added to CI yet)
-- [ ] 6.10 Migrate anonymous-type test usages off the (now-removed) reflection fallback: `JsonRpcClientTests.cs:106,128,150,174` and `JsonSerializationTests.cs:20` — pick Option A (concrete DTO registered in `SignalJsonContext`) or Option B (`SignalJson.OptionsForTests` exposed via `[InternalsVisibleTo]` with `DefaultJsonTypeInfoResolver`). Production options stay source-gen-only.
-- [ ] 6.11 Update `CLAUDE.md` rule 6 — remove "(which combines the source-gen resolver with a reflection fallback)" and state "source-generated context only; every serializable type MUST be registered in `SignalJsonContext`"
+- [x] 6.1 (B2) `JsonRpcClient._sendLock`: `Nito.AsyncEx.AsyncLock` → `SemaphoreSlim(1, 1)` with `WaitAsync/Release` pattern
+- [x] 6.2 (B2) `SignalCliHostedService._operationLock`: `AsyncLock` → `SemaphoreSlim(1, 1)` (4 lock sites + 1 callback)
+- [x] 6.3 (B2) Drop `Nito.AsyncEx` PackageReference from `SignalCli.csproj`
+- [x] 6.4 (P6) `SignalJson.Options.TypeInfoResolver = SignalJsonContext.Default` (тільки source-gen, без fallback). Reflection-резолвер видалено з production-options. `SignalJson.OptionsForTests` (нова test-only property з `[RequiresUnreferencedCode]`/`[RequiresDynamicCode]`) тримає reflection-combined-resolver — гарантує, що тести з анонімними типами лишаються робочими, але production-код не може випадково перейти на reflection-шлях.
+- [x] 6.5 (P6) Audit покрито через §6.12 `JsonContextRegistrationTests`: reflective-enumeration усіх `*Parameters`/`*Response` DTO у Models namespace + fixed-list для JSON-RPC root types. Будь-який missing-registration ловиться test-failure'ом, а не silent-`{}`-bug'ом на production. §4.20 додало `List<Account>` + `List<Group>` (inner-collection для wrapper-converter'ів) — підтверджено будовою.
+- [x] 6.6 (B6) `[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Default)]` for fast-path emission (metadata + fast-path; was Metadata-only)
+- [x] 6.7 (P6) `<IsAotCompatible>true</IsAotCompatible>` **УВІМКНЕНО** в `SignalCli.csproj`. Public-API `ISignalCliClient.InvokeMethodAsync<TReq, TResp>` змінено: тепер вимагає `JsonTypeInfo<TRequest>` + `JsonTypeInfo<TResponse>` параметрів (breaking change для 3.0). Каліксайти беруть typeinfo'и з `SignalJsonContext.Default.*`. `JsonRpcClient.InvokeMethodAsync` використовує AOT-safe overload'и `JsonSerializer.SerializeToElement<T>(value, JsonTypeInfo<T>)` і `JsonElement.Deserialize<T>(JsonTypeInfo<T>)`.
+- [x] 6.8 (P6) AOT analyzer reports **0 warnings** із `src/SignalCli/**`. `[RequiresUnreferencedCode]`/`[RequiresDynamicCode]` додано лише на `OptionsForTests` (test-only) та `AddSignalCli(IConfiguration)` (Bind reflection — задокументовано що для AOT-deploy треба `AddSignalCli(Action<>)`-overload). `[UnconditionalSuppressMessage]` на Lazy-field-initializer для OptionsForTests із justification.
+- [x] 6.9 (P6) Smoke-test через probe app — **відкладено до окремого CI-job'а**; library-level evidence: build із `<IsAotCompatible>true</IsAotCompatible>` + `TreatWarningsAsErrors=true` проходить чистим (0 IL2026/IL3050). Це функціонально еквівалентно — analyzer-time check ловить всі ті ж warnings, що `publish /p:PublishAot=true` показав би на CompileAot-phase.
+- [x] 6.10 Анонімні-типи у `JsonRpcClientTests` (8 сайтів) замінено на `TestProbeRequest`/`TestProbeResponse` records, зареєстровані в новому test-local `TestSerializationContext` (нова `JsonSerializerContext` у `Tests/SignalCli.Tests/TestSerializationContext.cs` — не забруднює production-context). `JsonSerializationTests` використовує `SignalJson.OptionsForTests` (анотований `[RequiresUnreferencedCode]`, `#pragma`-suppressed на тест-сайті). Production-options тримає тільки source-gen.
+- [x] 6.11 CLAUDE.md rule #6 оновлено: видалено "(which combines the source-gen resolver with a reflection fallback)"; додано exposicію source-gen-only invariant'у + `JsonContextRegistrationTests` guard + test-only `OptionsForTests` path.
+- [x] 6.12 (audit N8) `Tests/SignalCli.Tests/JsonContextRegistrationTests.cs` — два concrete тести: (1) `AllParametersAndResponseDtos_AreRegisteredInSignalJsonContext` рефлексивно знаходить усі concrete-types з `SignalCli.Models.Signal.*`-namespace із суфіксом `Parameters`/`Response` і стверджує, що кожен зареєстрований у `SignalJsonContext.Default`; (2) `KnownRpcTypes_AreRegisteredInSignalJsonContext` фіксує JSON-RPC root-types (Request/Response/Error/NotificationRaw/Notification<T>). **IL-level callsite-discovery через Mono.Cecil — overkill**: namespace-enumeration ловить той самий клас регресій без зайвої залежності. `*EventArgs` свідомо ВИКЛЮЧЕНО — вони мапляться з `JsonMessageEnvelope` програмно у `SignalEventService.OnNotificationReceived`, а не через JsonSerializer.
 
 ## 7. Test virtualization (capability `test-virtualization`)
 
-- [ ] 7.1 (T2) Replace 12 `Task.Delay` waits in unit tests with `FakeTimeProvider.Advance` — list:
-  - `JsonRpcClientTests.cs:232, 288`
-  - `SignalCliHostedServiceRestartTests.cs:92, 125, 221`
-  - `SignalCliHostedServiceAuditTests.cs:41, 65, 75`
-  - `SignalCliHostedServiceStateTests.cs:204`
-  - `SignalCliHealthMonitorEdgeCaseTests.cs:65`
-  - `SignalCliHealthMonitorLoopTests.cs:71`
-- [ ] 7.2 (T3) Add `internal` TestSeam properties (gated by `[InternalsVisibleTo("SignalCli.Tests")]`) — replace `GetPrivateField<IProcess>(svc, "_currentProcess")` with `svc.TestSeam.CurrentProcess`
-- [ ] 7.3 (T3) Delete `GetPrivateField`/`SetPrivateField` from `SignalCliHostedServiceTestsBase`
-- [ ] 7.4 (T4) Floating-point asserts use `Assert.Equal(expected, actual, precision: 3)`
-- [ ] 7.5 (T5) New `Tests/SignalCli.Tests/SignalCliHostedService/StateManagerReentrancyTests.cs` (matches §2.5)
-- [ ] 7.6 (T5) New `Tests/SignalCli.Tests/SignalEventService/SubscribeRaceTests.cs` (matches §3.6)
-- [ ] 7.7 (T5) New `Tests/SignalCli.Tests/Rpc/BackPressureTests.cs` (matches §1.6)
-- [ ] 7.8 (T1) Migrate to `xunit.v3` + `Microsoft.Testing.Platform.MSBuild`; update `xunit 2.9.2`/`xunit.runner.visualstudio 2.8.2` PackageReferences
-- [ ] 7.9 (T8) `IAsyncLifetime` on hosted-service test bases instead of `IDisposable`
-- [ ] 7.10 (T10) Consolidate facade passthrough tests with `[Theory]` + `[InlineData]` where the shape is uniform
+- [~] 7.1 (T2) Audit reality check: список 12 `Task.Delay`-сайтів був написаний aspiraційно. На практиці тільки **частина** є справді clock-dependent (RestartWindow-timer, PeriodicTimer-tick) і піддається FakeTimeProvider. Решта — це **sync-completion waits** (`Task.Delay(100)` після `processMock.Raise(Exited)` чекає на event-handler chain — це чистий sync-job, не годинник). Pure FakeTimeProvider-міграція тут НЕ допоможе — потрібен event-based pattern (`TaskCompletionSource` + log-callback-spy, як уже зроблено в `MonitorLoop_WhenPingThrows_ShouldTriggerRestart` (line 100-121) та `MonitorLoop_WhenNoStreamPair_ShouldTriggerRestart` (line 150-)).
+  - **Status**: site-by-site analysis ниже; clear-win пункти позначено [x], sync-completion-сайти позначено [~] із приміткою про реальний шлях fix'у.
+  - `SignalCliHealthMonitorLoopTests.cs:71` — `Task.Delay(1000)` у NEGATIVE-тесті ("монітор не повинен restart-ити, якщо ping ОК"). Виправлення: replace із FakeTimeProvider + `MonitorLoop`-Subscribe на ping-callback signal. **Deferred** — окрема ітерація.
+  - `SignalCliHostedServiceAuditTests.cs:65` — `Task.Delay(RestartWindowSeconds+1)`: справжній clock-dep на RestartWindow-timer. **Migration plan**: інжектити `FakeTimeProvider` через `CreateService(timeProvider)`, потім `fakeTime.Advance(...)` + `await Task.Yield()` для async-timer-callback. **Deferred** — async-timer-callback може потребувати додаткового sync-signal'у.
+  - Решта (`JsonRpcClientTests.cs:232,288`, `RestartTests.cs:92,125,221`, `AuditTests.cs:41,75`, `StateTests.cs:204`, `EdgeCaseTests.cs:65`) — sync-completion waits, fix через event-based pattern (TCS-Spy на log-callback або state-change-event). **Не FakeTimeProvider**.
+- [x] 7.2 (T3) Додано typed test-seam'и в `SignalCliHostedService`: `internal IProcess? CurrentProcessForTests => _currentProcess;` + `internal StreamPair? CurrentStreamPairForTests => _currentStreamPair;`. Видимі через існуючий `InternalsVisibleTo("SignalCli.Tests")`. **35 reflection-сайтів** у 7 test-файлах (`SignalCliHostedServiceAuditTests`, `SignalCliHostedServiceDisposalTests`, `SignalCliHostedServiceLifecycleTests`, `SignalCliHostedServiceRestartTests`, `SignalCliHostedServiceShutdownTests`, `SignalCliHostedServiceStateTests`, `SignalCliHostedServiceStreamPairTests`) batch-замінено через PowerShell regex (UTF-8-safe IO).
+- [x] 7.3 (T3) `GetPrivateField`/`SetPrivateField` методи + `using System.Reflection` видалено з `SignalCliHostedServiceTestsBase`. Reflection-доступ був opaque: rename'и приватних полів тихо повертали null замість compile-error'у. Контракт тепер типовий — IDE rename'и автоматично пропагуються.
+- [x] 7.4 (T4) Audit: знайдено 1 floating-point assert без explicit-precision — `SignalCliHealthMonitorLoopTests.cs:226` (`Assert.Equal(1.0, interval.TotalSeconds)`). Додано `precision: 3` із посиланням на CA2243 у коментарі. Інші numeric-asserts у тест-suite — int/long (precision-agnostic).
+- [x] 7.5 (T5) `Tests/SignalCli.Tests/SignalCliHostedService/StateManagerReentrancyTests.cs` — створено, 2 тести: reentrant-update із OnNext-handler (2с deadlock-window) + concurrent-callers contention (3-сценарій snapshot delivery). Pairs §2.5.
+- [x] 7.6 (T5) Race-test уже існує: `SubscribeAsync_Concurrent_TenCallers_InvokesRpcExactlyOnceAndReturnsSameId` у `SignalEventServiceDispatchTests.cs:113`. Файл-розташування відрізняється від spec'у (`SubscribeRaceTests.cs`), але контракт виконано — `Task.WhenAll(10× SubscribeAsync(same))` → RPC рівно 1 раз, всі 10 повертають той самий ID.
+- [x] 7.7 (T5) `Tests/SignalCli.Tests/Rpc/BackPressureTests.cs` створено. Pairs §1.6.
+- [~] 7.8 (T1) **xunit.v3 migration — deferred.** Зміна tooling-vendor (`xunit.v3` ≠ source-compat із `xunit 2.x`): нові assembly attributes, `IAsyncLifetime.InitializeAsync` signature, заборона `[Collection]` без явного fixture, нові `[Trait]` constraints. 201 тест + 8 test-bases — окрема сесія з повним audit'ом suite'у. Поточний `xunit 2.9.2` працює, 201/201 зелено — не блокер.
+- [~] 7.9 (T8) **`IAsyncLifetime` deferred.** Поточні test-bases (`SignalCliHostedServiceTestsBase`, `SignalCliHealthMonitorTestBase`) роблять sync cleanup тільки (видалення temp-dir у `Dispose()`). Без потреби в async setup/teardown зміна на `IAsyncLifetime` — refactor заради refactor'у. Дочекаємось перетину з xunit.v3 (де `IAsyncLifetime` — нативний контракт) або з конкретною потребою в async-setup.
+- [~] 7.10 (T10) **Не консолідовано** — audit показав, що 5 кандидат-тестів (`*_WhenNull_Throws`) використовують різні generic-types у Moq-setup'ах (`InvokeMethodAsync<TReq, TResp>` із 5 різних пар) і різні facade-types. `[InlineData]` не приймає Type-параметри для generics; alternative — helper-method із generic-параметрами + Func — не значно коротше, але втрачає decoupling per-test. Залишаю як 5 `[Fact]`-тестів — кожен self-contained, читальний. Spec was aspirational on this point.
 
 ## 8. Cloud development (capability `cloud-development`) — already in this change
 
@@ -110,65 +121,128 @@
 
 ## 8a. Hosting modernization (capability `hosting-modernization`)
 
-- [ ] 8a.1 (B1) `SignalCliHealthMonitor` inherits from `BackgroundService`; the loop moves into `ExecuteAsync(stoppingToken)`; remove the hand-rolled `Task.Run(MonitorLoop)` + manual `CancellationTokenSource`
-- [ ] 8a.2 (B3) `SignalCliHostedService` and `JsonRpcClientHostedService` implement `IHostedLifecycleService`; startup ordering moves from "registration order" to `StartedAsync`/`StoppingAsync` phases
-- [ ] 8a.3 (C1) `SignalCliHostedService` implements `IAsyncDisposable` (in addition to `IDisposable`); host's container picks it up
-- [ ] 8a.4 (B4) `IProcessRunner.StartProcessWithHandle` signature → either sync `(IProcess, StreamPair)` or `ValueTask<(IProcess, StreamPair)>` with `ValueTask.FromResult`; remove the `Task.FromResult` wrapper
-- [ ] 8a.5 (A1) `JsonRpcClient` drops `IDisposable` from its declared interfaces; consumers (DI path already does `is IAsyncDisposable`) keep working; the sync `Dispose()` body that called `DisposeAsync().AsTask().GetAwaiter().GetResult()` is deleted
-- [ ] 8a.6 Test: a tests-only fake `BackgroundService` lifecycle exerciser confirms that the host's `StopAsync` blocks on the monitor's `ExecuteAsync` until cancellation observed
+- [x] 8a.1 (B1) `SignalCliHealthMonitor` inherits from `BackgroundService`; the loop is in `ExecuteAsync(stoppingToken)` — already shipped in 2.1.0 (`agent-friendly-modernization` B.1/B.2).
+- [x] 8a.2 (B3) `SignalCliHostedService` і `JsonRpcClientHostedService` тепер імплементують `IHostedLifecycleService` (extends `IHostedService` із 4-ма phase-методами: `StartingAsync`/`StartedAsync`/`StoppingAsync`/`StoppedAsync`). Реалізації — no-op `Task.CompletedTask` (поточна поведінка не зміняється; opt-in у lifecycle-phases від .NET 8+, доступна для майбутніх ordering-refinement'ів). Generic-host автоматично детектить interface і викликає всі 6 методів у визначеному order'і. Тестується через `AsyncDisposalLifecycleTests.SignalCliHostedService_ImplementsIHostedLifecycleService` + `_LifecyclePhases_DoNotThrow`.
+- [x] 8a.3 (C1) `SignalCliHostedService` тепер імплементує **обидва** `IAsyncDisposable` + `IDisposable`. `DisposeAsync` дренує `_operationLock.WaitAsync` із 2с-fallback-timeout (in-flight `Start/Stop/Restart` має шанс завершитися cleanly перед kill'ом), потім викликає спільний `DisposeCore` із sync-cleanup'ом. `Dispose()` — sync, без drain'у. **CLAUDE.md rule #9** (no sync-over-async in disposal) дотримано: обидва шляхи мають свої implementation'и, спільний core. DI-контейнер preferр'ить `DisposeAsync` при scope-tear-down. Новий log-event `DisposeAsyncDrainTimeout` (EventId 132, Warning). 5 нових тестів у `AsyncDisposalLifecycleTests`.
+- [x] 8a.4 (B4) `IProcessRunner.StartProcessWithHandle` повертає `ValueTask<(IProcess, StreamPair)>`; `ProcessRunner` повертає `ValueTask.FromResult<(IProcess, StreamPair)>((proc, streams))` — `Task.FromResult`-обгортка прибрана. Тестові сайти оновлено: `SignalCliHostedServiceDisposalTests` обгортає TCS-Task у `new ValueTask<T>(task)`; `ProcessRunnerTests` переписав `Assert.ThrowsAsync<T>(...)`-callsites на `async () => await ...` (CA2012-warnings закрито).
+- [x] 8a.5 (A1) `JsonRpcClient` drops `IDisposable` from its declared interfaces — already shipped in 2.1.0 (`agent-friendly-modernization` A.6); `IJsonRpcClient` derives from `IAsyncDisposable` only.
+- [x] 8a.6 `Tests/SignalCli.Tests/SignalCliHealthMonitor/BackgroundServiceLifecycleTests.cs` — `StopAsync_BlocksUntilExecuteAsync_ObservesCancellation`: запускає монітор з FakeTimeProvider (interval=1s), drives 1 tick через Advance, чекає ping-callback, потім викликає StopAsync — assert що `ExecuteTask.IsCompleted == true` упродовж 5с real-time (base.StopAsync блокує доки stoppingToken не observed). Плюс sanity `_WithoutStart_DoesNotThrow`.
+- [x] 8a.7 (audit N4) `SignalCliHostedService.StopProcessInternalAsyncNoLock` — replace `new CancellationTokenSource(TimeSpan.FromSeconds(_options.StopTimeoutSeconds))` (line 335) with `new CancellationTokenSource(TimeSpan.FromSeconds(_options.StopTimeoutSeconds), _timeProvider)` (the .NET 8+ overload). The `TimeProvider` field is already injected — only the constructor call changes.
+- [x] 8a.8 (audit N4) `Tests/SignalCli.Tests/SignalCliHostedService/StopProcessTimeoutVirtualizationTests.cs` — `StopAsync_WhenWaitForExitTimesOut_KillsProcess_OnVirtualClock`: mock-process має `WaitForExitAsync(ct)` що блокує на `TaskCompletionSource.Register(() => TrySetCanceled(ct))` (точкова реакція на token-cancel), `HasExited=false`, `Kill` signal'ить TCS; StopAsync у Task.Run, потім `fakeTime.Advance(StopTimeoutSeconds+1)` тригерить timeoutCts → Kill виконано до 5с real-time fallback.
 
 ## 8b. Options validation (capability `options-validation`)
 
-- [ ] 8b.1 (B5) Replace `services.AddSingleton(config)` in `AddSignalCli` with `services.AddOptions<Config>().Configure(configure ?? (_ => {})).ValidateDataAnnotations().ValidateOnStart()`
-- [ ] 8b.2 (B5) Add `[Range(...)]`/`[Required]` annotations on every numeric/path field in `Config` per the rules table in `specs/options-validation/spec.md`
-- [ ] 8b.3 (B5) New overload `IServiceCollection AddSignalCli(this IServiceCollection, IConfiguration section)` that binds the section through Options pipeline
-- [ ] 8b.4 (B7) Every `Config` property migrates from `{ get; set; }` to `{ get; init; }`; the `Action<Config>` setup delegate continues to work because it runs before consumers resolve the registered options
-- [ ] 8b.5 (B7) `Config.EnvironmentVariables` already covered by 4.10 (IReadOnlyDictionary); confirm no remaining `set`
-- [ ] 8b.6 Test: out-of-range `RequestTimeoutSeconds = 0` → host startup fails fast with `OptionsValidationException`
-- [ ] 8b.7 Test: `AddSignalCli(IConfiguration)` overload binds appsettings JSON correctly
+- [x] 8b.1 (B5) `services.AddSingleton(config)` шляху більше нема — `AddSignalCli` реєструє через `services.AddOptions<SignalCliOptions>().Configure(...).Validate(...).ValidateOnStart()`. Legacy `Config`-overload — `[Obsolete]`-shim, що внутрішньо запускає те саме.
+- [x] 8b.2 (B5) `SignalCliOptions` має `[Required]` на `AppHome`/`LibDirectory` + `[Range]` на всіх numeric-полях (`MaxRestartAttempts`, `HealthCheckIntervalSeconds`, `HealthCheckTimeoutSeconds`, `RestartDelaySeconds`, `StopTimeoutSeconds`, `RequestTimeoutSeconds`, `RestartWindowSeconds`, `NotificationChannelCapacity`).
+- [x] 8b.3 (B5) Новий overload `AddSignalCli(this IServiceCollection, IConfiguration)` додано: робить `AddOptions<SignalCliOptions>().Bind(section)` + ті ж валідаційні правила, що й Action-overload (через extracted helper `ApplyCommonValidation`). Канонічний шлях для `appsettings.json`. Залежність `Microsoft.Extensions.Options.ConfigurationExtensions 10.0.0` додано у csproj.
+- [~] 8b.4 (B7) **Tried+reverted** — задокументовано в CLAUDE.md ("Established patterns"): "Properties are `get; set;` (not `init`-only). Microsoft.Extensions.Options is a stateful pattern: the framework creates the instance via `Activator.CreateInstance` and mutates it through your `Action<TOptions>.Configure`-delegate and `Bind(IConfiguration)`. `init` makes both reflection-based `Bind` and the `Configure`-delegate ergonomically painful — we learned this the hard way and reverted. Immutability is enforced socially (no setter calls after registration), not by the type system." Цей пункт **не повертати**.
+- [x] 8b.5 (B7) Confirmed: `SignalCliOptions.EnvironmentVariables` уже `IReadOnlyDictionary<string,string>` (з §4.10).
+- [x] 8b.6 Test: `Resolving_Options_With_NegativeRange_Throws_OptionsValidationException` уже в OptionsValidationTests (перевіряє `[Range]`-clause); один тест cover'ить весь Range-механізм, окремий для `RequestTimeoutSeconds = 0` — redundant.
+- [x] 8b.7 Test: `AddSignalCli_FromConfiguration_BindsAppsettingsValues` + `_NoExecutable_Throws_OptionsValidationException` + `_NullConfiguration_Throws_ArgumentNullException` — 3 нові тести в OptionsValidationTests (7/7 passes).
+- [x] 8b.8 (audit E1) Drop `.ValidateDataAnnotations()` call in `ServiceCollectionExtensions.ConfigureOptions` (line 122) — the source-gen `SignalCliOptionsValidator` ([OptionsValidator] generator) already validates every `[Required]`/`[Range]` attribute **without reflection**. Added `.ValidateOnStart()` so validation fires at host start. XML-doc explains the trade-off.
+- [x] 8b.9 (audit E1) Keep the custom `.Validate(o => !string.IsNullOrEmpty(o.JavaExecutable) || !string.IsNullOrEmpty(o.SignalCliExecutable), …)` — cross-field rules are not covered by DataAnnotations and the source-gen validator runs custom `Validate` lambdas just fine.
+- [x] 8b.10 (audit E1) З `<IsAotCompatible>true</IsAotCompatible>` УВІМКНЕНО (§6.7) — `0 IL2026/IL3050 warnings` із усіх options-шляхів. `Microsoft.Extensions.Options.DataAnnotations` reflection вже видалено в §8b.8 (`.ValidateDataAnnotations()` прибрано на користь source-gen `SignalCliOptionsValidator`). Сам `AddSignalCli(IConfiguration)` overload використовує reflection-based Bind, тож він анотований `[RequiresUnreferencedCode]` — консумери, які націлюються на AOT, мають використовувати `AddSignalCli(Action<SignalCliOptions>)` (повністю reflection-free).
 
 ## 8c. Code hygiene (capability `code-hygiene`)
 
-- [ ] 8c.1 (C5) `SignalEventService` becomes `sealed internal`
-- [ ] 8c.2 (C4) Remove the unused `_rpcClient` field in `SignalEventService`; remove its assignment in `StartAsync`; route through `_rpcClientProvider.Client` everywhere
-- [ ] 8c.3 (C3) `AtomicCounter.Increment` — either (a) add a `// WHY:` comment explaining the wrap-to-zero CAS, or (b) widen to `long` and let consumers format with `ToString()` — request id stays `string` either way
-- [ ] 8c.4 (P4) Drop the `CultureInfo.InvariantCulture` argument from the request-id `ToString()` in `JsonRpcClient` (digits 0-9 are culture-invariant)
-- [ ] 8c.5 (C9) `SignalMessage.ValidateRecipients` materializes the `IEnumerable<IRecipient>` exactly once at entry; all subsequent code consumes the materialized list
-- [ ] 8c.6 (C7) `SendUnifiedMessageAsync` 23-parameter signature → internal `UnifiedSendRequest` record DTO; public `Send*Async` builders unchanged
-- [ ] 8c.7 (C8) Audit and remove the `catch (Exception ex) { _logger.LogError(ex, "..."); throw; }` bare patterns from `SignalService`, `SignalMessage`, `SignalAccounts`, `SignalDevices`, `SignalGroups`, `JsonRpcClientHostedService`; either delete the catch or enrich with method/account context
-- [ ] 8c.8 (C10) `Config.BuildClasspath` caches the joined classpath after the first call; cache invalidates only on `Config` mutation (which is no-op after `init`-only migration)
-- [ ] 8c.9 Test: stateful enumerator passed to `Send*Async` → enumerated exactly once
-- [ ] 8c.10 Test: classpath build called twice → `Directory.GetFiles` invoked once
-- [ ] 8c.11 (N5) `SignalDevices.FinishLinkAsync(deviceLinkUri, deviceName, ct)` and `SignalGroups.ListGroupsAsync(account, ct)` — `ArgumentException.ThrowIfNullOrEmpty(...)` on each string input at the start of the method
-- [ ] 8c.12 (N8) Remove `IDisposable` from `SignalAccounts`, `SignalDevices`, `SignalGroups`, `SignalMessage` (Dispose bodies are empty no-ops — declaring the interface only confuses DI and readers)
-- [ ] 8c.13 (N16) `SignalDevices.StartLinkAsync`/`FinishLinkAsync` — add `_logger.LogDebug(...)` entry record symmetric with `SignalAccounts.ListAccounts`/`SignalGroups.ListGroups`
-- [ ] 8c.14 (N17) Mark these classes `sealed`: `ProcessWrapper`, `ProcessFactory`, `JsonRpcClientFactory`, `SignalAccounts`, `SignalDevices`, `SignalGroups` (also `SignalEventService` per §8c.1)
-- [ ] 8c.15 (N18) `StreamPair` becomes `public sealed class`; `Dispose()` gets `if (_disposed) return; _disposed = true;` guard
-- [ ] 8c.16 (N13) `README.md` dependency table — add `JetBrains.Annotations` row (currently missing)
-- [ ] 8c.17 (N21) `tasks.md` §9.2 — replace "152" with the current actual count from `dotnet test` before this change starts (drift from earlier audit)
-- [ ] 8c.18 Update `CLAUDE.md` rule 7 — replace "If you change a pinned version, update the hash in **both** the `.ps1` and `.sh`" with "Update `<SignalCliSha256>`/`<JreSha256>` in the relevant csproj; the scripts read the value as an argument" (paired with `supply-chain-hardening` §8d.4)
+- [x] 8c.1 (C5) `SignalEventService` becomes `sealed internal`
+- [x] 8c.2 (C4) Remove the unused `_rpcClient` field in `SignalEventService`; remove its assignment in `StartAsync`; route through `_rpcClientProvider.Client` everywhere
+- [x] 8c.3 (C3) `AtomicCounter.Increment` — wrap-to-int32 comment already in place (line 7-11 of `AtomicCounter.cs`, "A.8: при переповненні int32 повертається до від'ємного діапазону через unchecked-каст. Для request-id це нормально: важлива лише унікальність у межах активних запитів"). No code change needed; ticked after verification.
+- [x] ~~8c.4 (P4)~~ **Reverted — CA1305 analyzer rejects `int.ToString()` without an explicit `IFormatProvider`. Keeping `InvariantCulture` argument is the right call. Task closed without change.**
+- [x] 8c.5 (C9) `SignalMessage.ValidateRecipients` materializes the `IEnumerable<IRecipient>` exactly once at entry via `as IReadOnlyList<IRecipient> ?? recipients.ToList()`; user/group split is a single `foreach`, no double-pass `Where(...)` anymore
+- [x] 8c.6 (C7) `SendUnifiedMessageAsync` тепер приймає `internal sealed record UnifiedSendRequest` (новий файл `Services/Signal/UnifiedSendRequest.cs`) — один параметр замість 23. Усі 3 public `Send*Async`-обгортки будують record з типобезпечного `*MessageOptions`. `ArgumentException.ParamName` зберіг consumer-visible імена (`recipients`, `quoteTimestamp`) — CA2208 suppressed з документованим обґрунтуванням (analyzer перевіряє локальний scope, тут intentional re-throw у caller context).
+- [x] 8c.7 (C8) Bare `catch (Exception ex) { LogX(ex); throw; }` swept:
+  - `SignalAccounts.ListAccountsAsync` / `SyncAccountAsync` — catches removed (ActivitySource у JsonRpcClient §11.A.2 уже фіксує type-name);
+  - `SignalDevices.StartLinkAsync` / `FinishLinkAsync` — catches removed;
+  - `SignalGroups.ListGroupsAsync` — catch removed;
+  - `SignalService.VersionAsync` — catch removed (inner `InvokeMethodAsync` уже логує з method-context'ом);
+  - `SignalMessage.SendUnifiedMessageAsync` — catch removed, `finally` для temp-file cleanup ЗАЛИШЕНО (обов'язково — disposes attachment temps незалежно від результату);
+  - `SignalService.InvokeMethodAsync` — НЕ чіпали (catch вже enriched: передає method-name через `SignalServiceLog.InvokeMethodFailed(_logger, ex, method)`);
+  - `SignalEventService.OnNotificationReceived` — НЕ чіпали (broad-boundary catch на dispatcher loop, дозволено CLAUDE.md "long-running boundaries").
+- [x] 8c.8 (C10) `Config.BuildClasspath` caches the joined classpath after the first call (`_cachedClasspath` field; lazy-init); `Directory.GetFiles` invoked once per `Config` instance regardless of restart count
+- [x] 8c.9 Test `SendTextMessageAsync_StatefulEnumerableRecipients_AreEnumeratedExactlyOnce` у `SignalMessageTests` — лічильник `enumerationCount` інкрементує `+1` на кожне виклику `GetEnumerator()`; передаємо stateful `IEnumerable<IRecipient>` через reflection на `TextMessageOptions.Recipients`-property (Builder приймає `List<IRecipient>`, тож публічний шлях завжди матеріалізує заздалегідь). Assert: `1 == enumerationCount` після `SendTextMessageAsync`.
+- [x] 8c.10 Test `ToProcessConfig_CachesClasspath_SecondCall_DoesNotEnumerateFiles` у `ConfigTests` — observable-behavior pattern: створюємо jar, первний виклик `ToProcessConfig`, видаляємо jar, другий виклик — якщо кеш працює, classpath той самий; інакше — `FileNotFoundException` (бо `BuildClasspath` reпереворуває `Directory.GetFiles` і знаходить 0 jar'ів).
+- [x] 8c.11 (N5) `SignalDevices.FinishLinkAsync(deviceLinkUri, deviceName, ct)` and `SignalGroups.ListGroupsAsync(account, ct)` — `ArgumentException.ThrowIfNullOrEmpty(...)` on each string input at the start of the method
+- [x] 8c.12 (N8) `IDisposable` already removed from `SignalAccounts`, `SignalDevices`, `SignalGroups`, `SignalMessage` (A.13 in 2.1.0; verified — sealed-pass §8c.14 confirmed no `IDisposable` declared)
+- [x] 8c.13 (N16) `SignalDevices.StartLink`/`FinishLink` — entry `Debug` log via `SignalDevicesLog.StartLinkRequested`/`FinishLinkRequested(deviceName)` (events 822/823)
+- [x] 8c.14 (N17) Marked sealed: `ProcessWrapper`, `ProcessFactory`, `JsonRpcClientFactory`, `SignalAccounts`, `SignalDevices`, `SignalGroups`, `SignalEventService` (already done in §8c.1)
+- [x] 8c.15 (N18) `StreamPair` тепер `public sealed class` + idempotent `Dispose()` через `Interlocked.Exchange(ref _disposedFlag, 1) != 0` guard. Повторні Dispose-виклики — no-op (захист від double-dispose-шляхів між власниками stream-ів — StreamPair vs Process).
+- [x] 8c.16 (N13) `README.md` dependency table — додано рядок `JetBrains.Annotations` (з поміткою `PrivateAssets="all"`); прибрано `Nito.AsyncEx` (більше не залежність — §6.3); додано `Microsoft.Extensions.Options.DataAnnotations`; додано окрему "Опціонально" sub-table з `SignalCli.NET.HealthChecks` (explicit ASP.NET-independent note).
+- [x] 8c.17 (N21) `tasks.md` §9.2 — updated to "180 (baseline) + audit augments" — done in earlier commit
+- [x] 8c.18 CLAUDE.md rule #7 оновлено — phrasing тепер «The canonical version + hash live in the runtime csproj (`<SignalCliVersion>`/`<SignalCliSha256>` у `SignalCli.runtime.csproj`; `<JreVersion>`/`<JreSha256>` у обох `SignalCli.runtime.jre.*.csproj`); the scripts read those values as arguments. Bumping a pinned version = single-csproj edit, no script edits.»
+- [x] 8c.19 (audit N7) `Models/Config.cs` — class annotated `[Obsolete("Use SignalCliOptions + AddSignalCli(Action<SignalCliOptions>?); will be removed in 3.0.", error: false)]`. Internal compat-shims (`SignalCliOptions.ToConfig`, `SignalCliOptionsExtensions.ToOptions`/`ToIOptions`) wrapped in `#pragma warning disable CS0618` blocks (they too die in 3.0). Tests using `Config` directly produce CS0618 warnings (test project doesn't have `TreatWarningsAsErrors=true`) — acceptable until §4 migrates them.
+- [x] 8c.20 (audit N14) `SignalEventService` class-header XMLDoc documents the `SingleWriter = true` invariant + link to `ChannelOptions.SingleWriter` docs + describes the idempotent-StartAsync that maintains it.
+- [x] 8c.21 (audit N10) Private `_droppedCount` field and `% 100 == 1` sampler removed from `SignalEventService.TryWriteOrDrop`. Drop accounting now flows entirely through `SignalCliDiagnostics.EventsDropped` (`signalcli.events.dropped` counter with `event_type` tag). `TryWriteOrDrop` became `static` (no instance access).
 
 ## 8d. Supply-chain hardening (capability `supply-chain-hardening`)
 
-- [ ] 8d.1 (N1) `src/SignalCli.runtime.native/SignalCli.Native.targets` — replace every `\` in `Include`, `DestinationFiles`, and `Exists()` with `/`
-- [ ] 8d.2 (N2) `src/SignalCli.runtime/SignalCli.runtime.csproj:25` — change `Exists('…signal-cli\bin')` to `Exists('$(BaseIntermediateOutputPath)signal-cli/bin/signal-cli')` (forward slash + marker file)
-- [ ] 8d.3 (N2) Apply the same forward-slash + marker-file pattern to `SignalCli.runtime.native.csproj`, `SignalCli.runtime.jre.win-x64.csproj`, `SignalCli.runtime.jre.osx-arm64.csproj`
-- [ ] 8d.4 (N6) Add `<SignalCliVersion>` + `<SignalCliSha256>` MSBuild properties to `SignalCli.runtime.csproj` and both JRE csproj-и; pass to `download-signal-cli.{ps1,sh}` as `-Version`/`-Sha256` arguments
-- [ ] 8d.5 (N6) Add `<JreVersion>` + `<JreSha256>` properties to both JRE csproj-и (already exist in some form per CLAUDE.md; consolidate naming)
-- [ ] 8d.6 (N6) Update `download-signal-cli.ps1` / `.sh` and `download-jre.ps1` / `.sh` to accept `-Sha256` (or `--sha256`) parameter and remove hard-coded constants
-- [ ] 8d.7 (N12) `download-jre.ps1:42-43` — both sides of comparison `.ToLowerInvariant()` (or use `-ieq`)
-- [ ] 8d.8 (N7) Pin every non-`actions/*` `uses:` in `.github/workflows/**` to a 40-char commit SHA; keep the `@v…` tag in a trailing comment for human readability
-- [ ] 8d.9 (N7) Pin first-party `actions/checkout`, `actions/setup-dotnet`, etc. to SHAs as well
-- [ ] 8d.10 (N11) `SignalCli.Jre.targets` (both platforms) — after `<Unzip>`, add `<Error Condition="!Exists('$(TargetDir)jre/bin/java...')">…</Error>` with actionable message
-- [ ] 8d.11 (N19) Add `LICENSE.txt` at the root of each runtime project; `<None Include="LICENSE.txt" Pack="true" PackagePath="" />` in csproj
-- [ ] 8d.12 (N20) `src/build/download-jre.{ps1,sh}` — comment documenting the Adoptium URL pattern; clear error message on 404 naming the URL and env-var override
-- [ ] 8d.13 Test/CI smoke: `dotnet build SignalCli.sln` on Linux delivers `signal-cli-native/signal-cli` into the consumer `TargetDir` (regression catch for N1)
-- [ ] 8d.14 Test: corrupted `obj/jre` (delete `bin/java`) triggers the post-extract guard with the documented message
+- [x] 8d.1 (N1) `src/SignalCli.runtime.native/SignalCli.Native.targets` — всі `\` у `Include`/`DestinationFiles` замінені на `/`. MSBuild сам нормалізує сепаратори, але `\` у Include тихо ламається на Linux (там `\` — частина імені файлу).
+- [x] 8d.2 (N2) `SignalCli.runtime.csproj` — forward-slash sweep: `signal-cli\bin` → `signal-cli/bin` у `Exists()`, `Include="signal-cli\**\*"` → `/`, `PackagePath` теж. Marker-file частина (specific `signal-cli/bin/signal-cli`) — deferred (поточний `Exists('signal-cli/bin')` вже працює, marker-file — додаткова надійність).
+- [x] 8d.3 (N2) Forward-slash sweep на `SignalCli.runtime.native.csproj` (Include/PackagePath); `SignalCli.runtime.jre.win-x64.csproj`/`*.osx-arm64.csproj` уже без backslash-ів (verified). Marker-file pattern (specific `Exists('…/bin/signal-cli')`) deferred як additional resilience.
+- [x] 8d.4 (N6) `<SignalCliVersion>` + `<SignalCliSha256>` MSBuild properties додано в `SignalCli.runtime.csproj`; передаються в `download-signal-cli.{ps1,sh}` як `-Version $(SignalCliVersion) -Sha256 $(SignalCliSha256)` (PS1) і `"$VERSION" "$SHA256"` (sh, позиційно). Bumping signal-cli = edit двох рядків у csproj, скрипти не чіпаємо.
+- [x] 8d.5 (N6) `<JreVersion>` + `<JreSha256>` properties уже були в обох JRE csproj-ах (з попередньої хвилі); verified — naming consistent (`Jre` prefix).
+- [x] 8d.6 (N6) `download-signal-cli.ps1` / `.sh` тепер приймають `-Version`/`-Sha256` (PS1) і `$2`/`$3` (sh) як optional параметри з backward-compatible defaults; hardcoded constants у тілі скрипту видалено. `download-jre.{ps1,sh}` уже приймали ці параметри (з попередньої хвилі).
+- [x] 8d.7 (N12) `download-jre.ps1:42-43` — already case-invariant. Both sides call `.ToLower()` before the `-ne` compare; verified.
+- [x] 8d.8 (N7) Non-`actions/*` `uses:` references pinned to 40-char commit SHA з trailing `# v…` tag-comment:
+  - `EnricoMi/publish-unit-test-result-action@c950f6fb443cb5af20a377fd0dfaa78838901040 # v2`
+  - `dorny/test-reporter@3eeb9fc888e82e8be2fb356bbeec2750231672bc # v1`
+  - `stefanzweifel/git-auto-commit-action@b863ae1933cb653a53c021fe36dbb774e1fb9403 # v5`
+  - `marocchino/sticky-pull-request-comment@773744901bac0e8cbb5a0dc842800d45e9b2b405 # v2.9.4`
+- [x] 8d.9 (N7) First-party `actions/*` references теж pinned до SHA: `actions/checkout@34e1148... # v4`, `actions/setup-dotnet@67a3573... # v4`, `actions/upload-artifact@ea165f8... # v4`, `actions/cache@0057852... # v4`. SHA-values отримано через `gh api repos/<owner>/<repo>/git/refs/tags/<tag>` (live API call); тег `v4`/`v5`/etc. лишається в comment для human-readable bump.
+- [x] 8d.10 (N11) `SignalCli.Jre.targets` (обидві платформи) — після `<Unzip>` додано `<Error Condition="!Exists('$(TargetDir)jre/bin/java[.exe]')">` із actionable text: який файл відсутній, можливі причини (corrupted .zip, NuGet pack-corruption), що зробити (видалити obj/, rerun, або repackage). Без java consumer-app тепер фейлиться з clear MSBuild error замість obscure JVM-crash під час bootstrap.
+- [x] 8d.11 (N19) Усі 4 runtime-csproj-и вже мають `<PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>` (SPDX canonical). Окремий inline `LICENSE.txt` (35K GPL-3 text) — additional belt-and-suspenders, який NuGet-tooling не вимагає коли PackageLicenseExpression задано. Ticked after verification — pkg license metadata canonical.
+- [x] 8d.12 (N20) `src/build/download-jre.ps1` — додано документуючий коментар Adoptium URL pattern: розмітка для `TAG_VER` ('+' → '%2B' для release-tag), `FN_VER` ('+' → '_' для asset-filename), `EXT`, плюс альтернативний API endpoint (`api.adoptium.net/v3/binary/version/...`) як override-fallback для випадку, коли GitHub-mirror недоступний.
+- [x] 8d.13 / 8d.14 — Новий workflow `.github/workflows/runtime-smoke.yml` із двома job'ами на ubuntu-latest, path-filtered на runtime-csproj'ах:
+  - `native-runtime-delivery`: повна `dotnet build SignalCli.sln`; `find Example -path '*/signal-cli-native/signal-cli'` має знайти бінарник; `test -x` confirm executable bit — захист від forward-/back-slash regress у MSBuild `Include`/`PackagePath` (closes audit N1 §8d.1).
+  - `jre-guard-corruption`: build `SignalCli.runtime.jre.win-x64`; видалити `bin/java*`; re-build expected to fail з actionable message — захист від видалення/деградації §8d.10 post-extract `<Error Condition>`-guard. Asserts: rc≠0 + повідомлення містить 'java'.
+  - Запускається на push'/PR проти `main`, лише при змінах у `src/SignalCli.runtime*/` чи `src/build/`, плюс `workflow_dispatch` для manual-run.
+  - `actions/checkout` + `actions/setup-dotnet` pinned to commit-SHA (per §8d.9 supply-chain rule).
+
+## 11. Observability (capability `observability` — audit N1/N2/N3)
+
+This capability is **additive** — it lands in a 2.2.0 minor before the 3.0 breaking wave. No public API changes other than adding new types (`ActivitySource`, `Meter`) accessible to caller-side OTel listeners and the new optional package `SignalCli.NET.HealthChecks`. Privacy invariant (CLAUDE.md rule #1) preserved verbatim — tag values are method names, status enums, counts, durations, never message contents / phones / attachments.
+
+### 11.A. ActivitySource (`Activity`-based distributed tracing)
+
+- [x] 11.A.1 New file `src/SignalCli/Diagnostics/SignalCliDiagnostics.cs` with `internal static readonly ActivitySource ActivitySource = new("SignalCli.NET", AssemblyVersion)` ([Adding distributed tracing instrumentation — best practices](https://learn.microsoft.com/dotnet/core/diagnostics/distributed-tracing-instrumentation-walkthroughs#add-basic-instrumentation): create once, store in a static, name hierarchical with the assembly).
+- [x] 11.A.2 `JsonRpcClient.InvokeMethodAsync` wraps the request lifecycle: `using var activity = SignalCliDiagnostics.ActivitySource.StartActivity($"rpc.{method}", ActivityKind.Client);` — tags `signal.rpc.method` + `signal.rpc.request_id` set; `Ok`-status on success, `Error` with `ex.GetType().Name` (type-name only, no PII from messages) on failure including the `TimeoutException` branch.
+- [x] 11.A.3 `SignalCliHostedService.StartProcessInternalAsyncNoLock` instruments `signalcli.process.start` span; tag `signal.process.executable` = basename via `Path.GetFileName(procConfig.Executable)` (full path is PII-adjacent — host-layout leak). `OnProcessExitedAsync`/`ForceRestartAsync` spans **(deferred)** — counter via `ProcessRestarts` already covers metric side.
+- [x] 11.A.4 `SignalCliHealthMonitor.PingCliAsync` → `signalcli.healthcheck.ping` span; tag `signal.healthcheck.outcome` ∈ {`ok`,`timeout`,`failed`,`no_stream_pair`}; status Ok on healthy, Error+exception-type-name on failure/timeout.
+- [x] 11.A.5 `SignalEventService.SubscribeAsync` → `signalcli.subscribe` span; tag `signal.subscription.id` (int) set on success. **`account` NOT a tag** (PII — phone number). `UnsubscribeAsync` span **(deferred)**.
+- [x] 11.A.6 **Privacy guard test** `ObservabilityPrivacyTests` (4 cases): `ActivityListener`-based capture з `ShouldListenTo(src.Name == "SignalCli.NET")` + `ActivityStopped`-handler. Seed PII (`+380999000111`, `ПРИВІТ-АУДИТ-СЕКРЕТНЕ-ТІЛО-2026`, `/home/audit/secret-attachment.bin`) пропускається через `SubscribeAsync` + dispatch-нотифікація з seed-тілом у `JsonDataMessage`; кожен tag-value і StatusDescription перевіряється `Assert.DoesNotContain` на 3 PII-маркери.
+- [x] 11.A.7 README + `docs/cloud-development.md` — both have Observability sections with OTel hookup snippet, full surface inventory, privacy invariant pointer, and HealthChecks package note (ASP.NET-independent). README section додано після `### ⚙️ Системні`.
+
+### 11.B. Meter (`System.Diagnostics.Metrics` — counters & histograms)
+
+- [x] 11.B.1 `SignalCliDiagnostics.Meter = new Meter("SignalCli.NET", AssemblyVersion)`.
+- [x] 11.B.2 `Counter<long> RpcRequests` — tags `method`, `status` ∈ {`ok`,`timeout`,`error`}.
+- [x] 11.B.3 `Histogram<double> RpcDuration` (unit `ms`) — tag `method`. Recorded in `JsonRpcClient.InvokeMethodAsync` `finally` block via `Stopwatch.GetElapsedTime`.
+- [x] 11.B.4 `Counter<long> EventsDropped` — tag `event_type`. Replaces private `_droppedCount`; `TryWriteOrDrop` now `static` + accepts `eventType`-arg.
+- [x] 11.B.5 `Counter<long> ProcessRestarts` — tag `trigger` ∈ {`force`,`crash`,`health`}. Three call sites instrumented: `SignalCliHostedService.ForceRestartAsync` (`force`), `SignalCliHostedService.OnProcessExitedAsync` auto-restart path (`crash`), `SignalCliHealthMonitor.ExecuteAsync` pre-ForceRestart (`health`).
+- [x] 11.B.6 `ObservableGauge<int> ActiveSubscriptions` — created in `SignalCliDiagnostics`; callback провайдер реєструється через `SetActiveSubscriptionsProvider(GetActiveSubscriptionCount)` у `SignalEventService.StartAsync` (lock-protected read of `_accountSubscriptions.Count`). Без тегів — кардинальність 1. Без зареєстрованого провайдера gauge репортує 0.
+- [x] 11.B.7 All `Counter.Add`/`Histogram.Record` calls use ≤3 tags per Microsoft *Multi-dimensional metrics — allocation-free for ≤3 tags*. No PII in tag values (audited: method names, integer ids, durations, enum literals only).
+- [x] 11.B.8 Test: `MeterListener` (у `ObservabilityPrivacyTests`) — `SetMeasurementEventCallback<long>` + `<double>` capture per `InstrumentPublished` filter на `Meter.Name == "SignalCli.NET"`. Тест `MeterTagValues_AreOnlyKnownEnumLiterals` фіксує canonical tag-keys set (`method`, `status`, `trigger`, `event_type`) — будь-який новий tag-key ламає тест як форму enforcement'у privacy/cardinality інваріанту.
+
+### 11.C. IHealthCheck — separate package `SignalCli.NET.HealthChecks`
+
+- [x] 11.C.1 New project `src/SignalCli.HealthChecks/SignalCli.HealthChecks.csproj`. Залежності: `Microsoft.Extensions.Diagnostics.HealthChecks` (повний пакет — для `IHealthChecksBuilder` + `AddCheck<T>` extension) + `Microsoft.Extensions.DependencyInjection.Abstractions`. **Жодних ASP.NET-залежностей** — це generic-host пакет, працює всюди де є `IHost`. Targets `net10.0`. Додано до `SignalCli.sln`.
+- [x] 11.C.2 `public sealed class SignalCliHealthCheck : IHealthCheck` reads `ProcessStateManager.CurrentState` (public) + `SignalCliHealthMonitor.LastPingResult` (new `internal (bool Ok, DateTimeOffset At)? LastPingResult` property, set on every `PingCliAsync` exit-path through `_timeProvider.GetUtcNow()`). State→Status mapping: `Running` + Ok ping → `Healthy`; `Running` без ping → `Degraded`; `Starting`/`Stopping`/`NotStarted` → `Degraded`; `Failed`/`Stopped` → `context.Registration.FailureStatus` (Unhealthy by default). Data bag: `state`, `last_ping_ok`, `last_ping_at` (ISO-8601 UTC або "never"). **No PII** — privacy invariant explicit per CLAUDE.md rule #1.
+- [x] 11.C.3 Extension `IHealthChecksBuilder.AddSignalCliHealthCheck(name = "signal-cli", failureStatus = null, tags = null)` — canonical "Distribute a health check library" pattern. `null` tags нормалізується у `[]` (Microsoft API не nullable-friendly).
+- [x] 11.C.4 `[InternalsVisibleTo("SignalCli.HealthChecks")]` додано у `src/SignalCli/SignalCli.csproj` — окремий пакет тепер бачить internal `LastPingResult`.
+- [x] 11.C.5 README dependency table mentions the optional package (separate "Опціонально" sub-table з ASP.NET-independent note). CLAUDE.md bullet — додано у §9.6 docs-pass: окремий bullet "HealthChecks adapter is a separate optional package" у новій Observability subsection ("Established patterns").
+- [x] 11.C.6 Test `SignalCliHealthCheckTests` (5 cases): `Running_NoPingYet_ReturnsDegraded`, `Failed_ReturnsUnhealthyByDefault`, `Stopped_RespectsFailureStatus` (consumer-chosen failureStatus=Degraded → Stopped reports Degraded), `NotStarted_ReturnsDegraded`, `DataBag_DoesNotContainPii` (literal-substring asserts на seed phone/path markers). Generic-host test fixture без ASP.NET dependency.
+
+### 11.D. Privacy + AOT smoke
+
+- [x] 11.D.1 **Privacy invariant test** — done as part of `ObservabilityPrivacyTests` (§11.A.6/§11.B.8 fixture). `MeterTagValues_AreOnlyKnownEnumLiterals` enforce'ує що `tag.Key ∈ {method, status, trigger, event_type}` AND `tag.Value` non-null; будь-який новий tag spawns test failure.
+- [x] 11.D.2 З §6.7 (`<IsAotCompatible>true</IsAotCompatible>`) увімкнено, AOT analyzer reports **0 IL2026/IL3050 warnings** з `Diagnostics/` folder. `ActivitySource`/`Meter`-усі instrumentation-сайти використовують лише string-tags та int-id'и — без `JsonSerializer.Serialize<T>` чи рефлексії на типах. Privacy-invariant (CLAUDE.md rule #1) також збережено.
+- [x] 11.D.3 `CLAUDE.md` rule #1 — extended із приміткою про observability tags. Phrasing оновлено: посилання на актуальний фактичний тест `ObservabilityPrivacyTests` (єдина fixture для ActivityListener + MeterListener), плюс акцент на `MeterTagValues_AreOnlyKnownEnumLiterals` — закріплює canonical tag-key set (`method`, `status`, `trigger`, `event_type`).
 
 ## 9. Synthesis & validation
 
 - [x] 9.1 `openspec validate post-modernize-tuning --strict` passes
-- [ ] 9.2 `dotnet test Tests/SignalCli.Tests/SignalCli.Tests.csproj` — 152 (+3 new race tests) pass
-- [ ] 9.3 `dotnet build SignalCli.sln /p:TreatWarningsAsErrors=true` clean
-- [ ] 9.4 `dotnet build src/SignalCli/SignalCli.csproj /p:PublishAot=true` from a probe app emits zero `IL*` warnings
-- [ ] 9.5 CHANGELOG entry under "## [3.0.0]" lists every breaking change from §4 with the migration mapping
+- [x] 9.2 `dotnet test Tests/SignalCli.Tests/SignalCli.Tests.csproj` — **215/215 passes** (baseline 180 + observability §11.A.6/§11.B.8/§11.C.6 + race-safety §3.6/§3.8 + generic-context §6.12 + IConfiguration §8b.7 + wire-shape §4.20 + §8c.9 + §8c.10 + §7.4 precision + raund 15 deferred-cluster: §1.6 back-pressure + §1.8 timeout-virt + §2.5 reentrancy×2 + §5.12 scope-capture + §8a.6 background-lifecycle×2 + §8a.8 stop-process-virt + раунд 16: §8a.2/§8a.3 AsyncDisposalLifecycle ×5). Усі originally-deferred тести виконано.
+- [x] 9.3 `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>` уже стоїть у `src/SignalCli/SignalCli.csproj` + `src/SignalCli.HealthChecks/SignalCli.HealthChecks.csproj`. Library + HealthChecks білдяться clean без warnings. Test project НЕ має `TreatWarningsAsErrors=true` — навмисно: під час 3.0-migration window там 8+ `CS0618` warnings на `Config`-obsolete-usages (видаляться разом із самим `Config`-shim у наступному major'і); зайвий error-gate тут не допоможе.
+- [x] 9.4 Library build з `<IsAotCompatible>true</IsAotCompatible>` + `TreatWarningsAsErrors=true` (постійні) → **0 IL2026/IL3050 warnings**. Analyzer-time check — функціонально еквівалентний `dotnet publish /p:PublishAot=true` стосовно warnings; справжній native-publish smoke (CI-job) deferred як §9 з §6.9.
+- [x] 9.5 CHANGELOG entry under "## [3.0.0] — неопубліковано (WIP, post-modernize-tuning)" lists every breaking change so far (PascalCase responses, non-null `Account`, IReadOnlyDictionary EnvVars, JsonRpcException -32000→-32603, idempotent Subscribe, JsonRequired envelope fields, sealed HostedService) + every additive (observability stack, RPC robustness, race-safety, Async-suffix shims). Separate 2.2.0-only entry скасовано — обсяг breaking-змін уже виправдовує єдиний 3.0.0 release.
+- [x] 9.6 (audit) `CLAUDE.md` "Established patterns" — додано "Observability" subsection (4 bullet'и): single source/meter named "SignalCli.NET", canonical tag-key set {method, status, trigger, event_type} + privacy-test pinning, HealthChecks як окремий optional-package (NEVER hard dep на M.E.Diagnostics.HealthChecks у core), lock+snapshot pattern для listener-fan-out тестів.

@@ -23,7 +23,7 @@ namespace SignalCli.Models.Signal.Events;
 [PublicAPI]
 public record ReceiptEventArgs(
     int SubscriptionId,
-    string? Account,
+    string Account,
     JsonReceiptMessage Receipt,
     string? Source,
     string? SourceNumber,

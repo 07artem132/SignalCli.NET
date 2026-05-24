@@ -34,12 +34,8 @@ public class SignalCliHealthMonitorEdgeCaseTests : SignalCliHealthMonitorTestBas
 
         var pingCount = 0;
         JsonRpcClientMock
-            .Setup(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
-                It.IsAny<string>(),
-                It.IsAny<VersionParameters>(),
-                It.IsAny<CancellationToken>()
-            ))
-            .Returns<string, VersionParameters, CancellationToken>(async (m, p, ct) => 
+            .Setup(c => c.InvokeMethodAsync<VersionParameters, VersionResponse>(It.IsAny<string>(), It.IsAny<VersionParameters>(), It.IsAny<JsonTypeInfo<VersionParameters>>(), It.IsAny<JsonTypeInfo<VersionResponse>>(), It.IsAny<CancellationToken>()))
+            .Returns<string, VersionParameters, JsonTypeInfo<VersionParameters>, JsonTypeInfo<VersionResponse>, CancellationToken>(async (m, p, _, _, ct) =>
             {
                 pingCount++;
                 await Task.Delay(TimeSpan.FromSeconds(2), ct); // Використовуємо переданий токен
@@ -83,12 +79,8 @@ public class SignalCliHealthMonitorEdgeCaseTests : SignalCliHealthMonitorTestBas
 
         var errorThrown = false;
         JsonRpcClientMock
-            .Setup(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
-                It.IsAny<string>(),
-                It.IsAny<VersionParameters>(),
-                It.IsAny<CancellationToken>()
-            ))
-            .Returns<string, VersionParameters, CancellationToken>((m, p, ct) => 
+            .Setup(c => c.InvokeMethodAsync<VersionParameters, VersionResponse>(It.IsAny<string>(), It.IsAny<VersionParameters>(), It.IsAny<JsonTypeInfo<VersionParameters>>(), It.IsAny<JsonTypeInfo<VersionResponse>>(), It.IsAny<CancellationToken>()))
+            .Returns<string, VersionParameters, JsonTypeInfo<VersionParameters>, JsonTypeInfo<VersionResponse>, CancellationToken>((m, p, _, _, ct) =>
             {
                 if (errorThrown) return Task.FromResult(new VersionResponse("test-version"));
                 errorThrown = true;

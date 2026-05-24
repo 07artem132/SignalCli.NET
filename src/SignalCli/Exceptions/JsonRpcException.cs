@@ -12,11 +12,47 @@ namespace SignalCli.Exceptions;
 /// </remarks>
 public class JsonRpcException : Exception
 {
+    // post-modernize-tuning §4.21 (audit N14, CA1032): sentinel "no error info"
+    // повертається з ctor-ів, що не приймають JsonRpcError напряму. Використовує
+    // канонічний JSON-RPC 2.0 код -32603 ("Internal error"), не нестандартний -32000.
+    private static JsonRpcError DefaultError => new() { Code = -32603, Message = "JSON-RPC error" };
+
     /// <summary>
     /// Деталізована інформація про помилку JSON-RPC.
     /// </summary>
     /// <value>Об'єкт <see cref="JsonRpcError"/> з кодом та повідомленням помилки.</value>
     public JsonRpcError Error { get; init; }
+
+    /// <summary>
+    /// post-modernize-tuning §4.21 (CA1032): стандартний parameterless ctor.
+    /// <see cref="Error"/> заповнюється sentinel-значенням (`code -32603, "JSON-RPC error"`).
+    /// </summary>
+    public JsonRpcException() : base("JSON-RPC error")
+    {
+        Error = DefaultError;
+    }
+
+    /// <summary>
+    /// post-modernize-tuning §4.21 (CA1032): стандартний message-only ctor.
+    /// <see cref="Error"/> заповнюється sentinel-значенням з переданим повідомленням
+    /// і канонічним кодом -32603 ("Internal error" per JSON-RPC 2.0).
+    /// </summary>
+    /// <param name="message">Повідомлення про помилку.</param>
+    public JsonRpcException(string message) : base(message)
+    {
+        Error = new JsonRpcError { Code = -32603, Message = message };
+    }
+
+    /// <summary>
+    /// post-modernize-tuning §4.21 (CA1032): стандартний (message, innerException) ctor.
+    /// <see cref="Error"/> заповнюється канонічним -32603 + переданим повідомленням.
+    /// </summary>
+    /// <param name="message">Повідомлення про помилку.</param>
+    /// <param name="innerException">Внутрішній виняток, що спричинив цю помилку.</param>
+    public JsonRpcException(string message, Exception innerException) : base(message, innerException)
+    {
+        Error = new JsonRpcError { Code = -32603, Message = message };
+    }
 
     /// <summary>
     /// Створює новий екземпляр винятку з інформацією про помилку JSON-RPC.
@@ -29,22 +65,8 @@ public class JsonRpcException : Exception
         Error = error ?? throw new ArgumentNullException(nameof(error));
     }
 
-    /// <summary>
-    /// Створює новий екземпляр винятку з текстовим повідомленням та опціональним внутрішнім винятком.
-    /// </summary>
-    /// <param name="message">Повідомлення про помилку.</param>
-    /// <param name="inner">Внутрішній виняток, що спричинив цю помилку.</param>
-    /// <remarks>
-    /// Автоматично створює об'єкт <see cref="JsonRpcError"/> з кодом -32000 (внутрішня помилка сервера)
-    /// та вказаним повідомленням.
-    /// </remarks>
-    public JsonRpcException(string message, Exception? inner = null)
-        : base(message, inner)
-    {
-        Error = new JsonRpcError
-        {
-            Code = -32000,
-            Message = message
-        };
-    }
+    // post-modernize-tuning §4.22 (audit N15/E3): legacy `JsonRpcException(string, Exception?)`
+    // з нестандартним кодом -32000 ВИДАЛЕНО. Аудит підтвердив zero внутрішніх call sites;
+    // зовнішні consumers мають мігрувати на канонічний `JsonRpcException(string, Exception)`
+    // (-32603 per JSON-RPC 2.0) або передавати власний `JsonRpcError`.
 }

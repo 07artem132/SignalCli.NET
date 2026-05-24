@@ -27,7 +27,7 @@ public class SignalCliHostedServiceAuditTests : SignalCliHostedServiceTestsBase
         var initial = ProcessStartCallCount;
         Assert.Equal(1, initial);
 
-        var process = GetPrivateField<IProcess>(service, "_currentProcess");
+        var process = service.CurrentProcessForTests;
         var processMock = Mock.Get(process!);
 
         // Намагаємось викликати OnProcessExited та StopAsync «майже одночасно».
@@ -58,7 +58,7 @@ public class SignalCliHostedServiceAuditTests : SignalCliHostedServiceTestsBase
         var service = CreateService();
         await service.StartAsync(CancellationToken.None);
         // Перший крах -> авто-рестарт (1 of 1)
-        var first = GetPrivateField<IProcess>(service, "_currentProcess");
+        var first = service.CurrentProcessForTests;
         Mock.Get(first!).Raise(p => p.Exited += null, EventArgs.Empty);
 
         // Чекаємо стабілізації нового процесу понад RestartWindow — лічильник скинеться.
@@ -67,7 +67,7 @@ public class SignalCliHostedServiceAuditTests : SignalCliHostedServiceTestsBase
         // Другий крах — за старою (лінійною) логікою цей рестарт уже був би заборонений
         // (бюджет вичерпано). Із віконним скиданням рестарт має відбутися.
         var afterFirstRestartCount = ProcessStartCallCount;
-        var second = GetPrivateField<IProcess>(service, "_currentProcess");
+        var second = service.CurrentProcessForTests;
         Assert.NotNull(second);
         Mock.Get(second!).Raise(p => p.Exited += null, EventArgs.Empty);
 

@@ -37,18 +37,21 @@ namespace SignalCli.Interfaces.Signal
         /// <exception cref="OperationCanceledException">
         /// Виникає, якщо операцію скасовано.
         /// </exception>
+        /// <exception cref="TimeoutException">
+        /// Виникає, якщо signal-cli не відповів за <see cref="Models.SignalCliOptions.RequestTimeoutSeconds"/>.
+        /// </exception>
         /// <example>
         /// <code>
-        /// var textOptions = new TextMessageOptions.Builder("+380501234567", 
-        ///                          new[] { new UserRecipient("+380501234567") }, 
+        /// var textOptions = new TextMessageOptions.Builder("+380501234567",
+        ///                          [new UserRecipient("+380501234567")],
         ///                          "Привіт, світ!")
         ///                          .UseStyle()
         ///                          .Build();
-        /// var result = await signalMessage.SendTextMessageAsync(textOptions);
+        /// var response = await signalMessage.SendTextMessageAsync(textOptions);
         /// </code>
         /// </example>
-        /// <param name="cancellationToken">A.3: токен скасування — лінкується з <c>options.CancellationToken</c>, якщо обидва задано.</param>
-        public Task<List<SendMessageResponse>> SendTextMessageAsync(TextMessageOptions options, CancellationToken cancellationToken = default);
+        /// <param name="cancellationToken">Токен скасування операції.</param>
+        public Task<SendMessageResponse> SendTextMessageAsync(TextMessageOptions options, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Відправляє повідомлення з вкладеннями.
@@ -75,18 +78,21 @@ namespace SignalCli.Interfaces.Signal
         /// <exception cref="OperationCanceledException">
         /// Виникає, якщо операцію скасовано.
         /// </exception>
+        /// <exception cref="TimeoutException">
+        /// Виникає, якщо signal-cli не відповів за <see cref="Models.SignalCliOptions.RequestTimeoutSeconds"/>.
+        /// </exception>
         /// <example>
         /// <code>
-        /// var attachmentOptions = new AttachmentMessageOptions.Builder("+380501234567", 
-        ///                                new[] { new UserRecipient("+380501234567") }, 
+        /// var attachmentOptions = new AttachmentMessageOptions.Builder("+380501234567",
+        ///                                [new UserRecipient("+380501234567")],
         ///                                attachmentsList)
         ///                                .WithMessage("Привіт, світ з вкладенням!")
         ///                                .Build();
-        /// var result = await signalMessage.SendAttachmentAsync(attachmentOptions);
+        /// var response = await signalMessage.SendAttachmentAsync(attachmentOptions);
         /// </code>
         /// </example>
-        /// <param name="cancellationToken">A.3: токен скасування — лінкується з <c>options.CancellationToken</c>, якщо обидва задано.</param>
-        public Task<List<SendMessageResponse>> SendAttachmentAsync(AttachmentMessageOptions options, CancellationToken cancellationToken = default);
+        /// <param name="cancellationToken">Токен скасування операції.</param>
+        public Task<SendMessageResponse> SendAttachmentAsync(AttachmentMessageOptions options, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Відправляє стікер.
@@ -112,16 +118,19 @@ namespace SignalCli.Interfaces.Signal
         /// <exception cref="OperationCanceledException">
         /// Виникає, якщо операцію скасовано.
         /// </exception>
+        /// <exception cref="TimeoutException">
+        /// Виникає, якщо signal-cli не відповів за <see cref="Models.SignalCliOptions.RequestTimeoutSeconds"/>.
+        /// </exception>
         /// <example>
         /// <code>
-        /// var stickerOptions = new StickerMessageOptions.Builder("+380501234567", 
-        ///                          new[] { new UserRecipient("+380501234567") }, 
+        /// var stickerOptions = new StickerMessageOptions.Builder("+380501234567",
+        ///                          [new UserRecipient("+380501234567")],
         ///                          "stickerPackId:stickerId")
         ///                          .Build();
-        /// var result = await signalMessage.SendStickerAsync(stickerOptions);
+        /// var response = await signalMessage.SendStickerAsync(stickerOptions);
         /// </code>
         /// </example>
-        /// <param name="cancellationToken">A.3: токен скасування — лінкується з <c>options.CancellationToken</c>, якщо обидва задано.</param>
-        public Task<List<SendMessageResponse>> SendStickerAsync(StickerMessageOptions options, CancellationToken cancellationToken = default);
+        /// <param name="cancellationToken">Токен скасування операції.</param>
+        public Task<SendMessageResponse> SendStickerAsync(StickerMessageOptions options, CancellationToken cancellationToken = default);
     }
 }

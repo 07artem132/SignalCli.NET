@@ -30,8 +30,7 @@ public class SignalEventServiceTests
         var signalCli = new Mock<ISignalCliClient>();
         // subscribeReceive повертає ідентифікатор підписки
         signalCli
-            .Setup(c => c.InvokeMethodAsync<JsonElement, SubscribeReceiveParameters>(
-                It.IsAny<string>(), It.IsAny<SubscribeReceiveParameters>(), It.IsAny<CancellationToken>()))
+            .Setup(c => c.InvokeMethodAsync<SubscribeReceiveParameters, JsonElement>(It.IsAny<string>(), It.IsAny<SubscribeReceiveParameters>(), It.IsAny<JsonTypeInfo<SubscribeReceiveParameters>>(), It.IsAny<JsonTypeInfo<JsonElement>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(JsonSerializer.SerializeToElement(SubId));
 
         return new SignalEventService(

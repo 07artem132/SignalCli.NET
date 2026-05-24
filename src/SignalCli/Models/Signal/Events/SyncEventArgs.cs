@@ -23,7 +23,7 @@ namespace SignalCli.Models.Signal.Events;
 [PublicAPI]
 public record SyncEventArgs(
     int SubscriptionId,
-    string? Account,
+    string Account,
     JsonSyncMessage SyncMessage,
     string? Source,
     string? SourceNumber,

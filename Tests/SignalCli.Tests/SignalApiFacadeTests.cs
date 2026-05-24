@@ -19,12 +19,12 @@ public class SignalApiFacadeTests
     public async Task ListAccounts_ReturnsResponse()
     {
         var client = Client();
-        var expected = new ListAccountsResponse { new Account("+1") };
-        client.Setup(c => c.InvokeMethodAsync<ListAccountsResponse, ListAccountsParameters>(
-            "listAccounts", It.IsAny<ListAccountsParameters>(), It.IsAny<CancellationToken>()))
+        // post-modernize-tuning §4.20 (audit N10): wrapper-record (Items: IReadOnlyList<Account>).
+        var expected = new ListAccountsResponse([new Account("+1")]);
+        client.Setup(c => c.InvokeMethodAsync<ListAccountsParameters, ListAccountsResponse>("listAccounts", It.IsAny<ListAccountsParameters>(), It.IsAny<JsonTypeInfo<ListAccountsParameters>>(), It.IsAny<JsonTypeInfo<ListAccountsResponse>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expected);
 
-        var result = await new SignalAccounts(client.Object, Mock.Of<ILogger<SignalAccounts>>()).ListAccounts();
+        var result = await new SignalAccounts(client.Object, Mock.Of<ILogger<SignalAccounts>>()).ListAccountsAsync();
 
         Assert.Same(expected, result);
     }
@@ -33,12 +33,11 @@ public class SignalApiFacadeTests
     public async Task ListAccounts_WhenNull_Throws()
     {
         var client = Client();
-        client.Setup(c => c.InvokeMethodAsync<ListAccountsResponse, ListAccountsParameters>(
-            It.IsAny<string>(), It.IsAny<ListAccountsParameters>(), It.IsAny<CancellationToken>()))
+        client.Setup(c => c.InvokeMethodAsync<ListAccountsParameters, ListAccountsResponse>(It.IsAny<string>(), It.IsAny<ListAccountsParameters>(), It.IsAny<JsonTypeInfo<ListAccountsParameters>>(), It.IsAny<JsonTypeInfo<ListAccountsResponse>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((ListAccountsResponse)null!);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => new SignalAccounts(client.Object, Mock.Of<ILogger<SignalAccounts>>()).ListAccounts());
+            () => new SignalAccounts(client.Object, Mock.Of<ILogger<SignalAccounts>>()).ListAccountsAsync());
     }
 
     // ---- SignalDevices ----
@@ -46,11 +45,10 @@ public class SignalApiFacadeTests
     public async Task StartLink_ReturnsResponse()
     {
         var client = Client();
-        client.Setup(c => c.InvokeMethodAsync<StartLinkResponse, StartLinkParameters>(
-            "startLink", It.IsAny<StartLinkParameters>(), It.IsAny<CancellationToken>()))
+        client.Setup(c => c.InvokeMethodAsync<StartLinkParameters, StartLinkResponse>("startLink", It.IsAny<StartLinkParameters>(), It.IsAny<JsonTypeInfo<StartLinkParameters>>(), It.IsAny<JsonTypeInfo<StartLinkResponse>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new StartLinkResponse("sgnl://linkdevice?uuid=x"));
 
-        var result = await new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>()).StartLink();
+        var result = await new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>()).StartLinkAsync();
 
         Assert.Equal("sgnl://linkdevice?uuid=x", result.DeviceLinkUri);
     }
@@ -60,15 +58,14 @@ public class SignalApiFacadeTests
     {
         var client = Client();
         FinishLinkParameters? captured = null;
-        client.Setup(c => c.InvokeMethodAsync<FinishLinkResponse, FinishLinkParameters>(
-            "finishLink", It.IsAny<FinishLinkParameters>(), It.IsAny<CancellationToken>()))
-            .Callback<string, FinishLinkParameters, CancellationToken>((_, p, _) => captured = p)
+        client.Setup(c => c.InvokeMethodAsync<FinishLinkParameters, FinishLinkResponse>("finishLink", It.IsAny<FinishLinkParameters>(), It.IsAny<JsonTypeInfo<FinishLinkParameters>>(), It.IsAny<JsonTypeInfo<FinishLinkResponse>>(), It.IsAny<CancellationToken>()))
+            .Callback<string, FinishLinkParameters, JsonTypeInfo<FinishLinkParameters>, JsonTypeInfo<FinishLinkResponse>, CancellationToken>((_, p, _, _, _) => captured = p)
             .ReturnsAsync(new FinishLinkResponse("+380501234567"));
 
         var result = await new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>())
-            .FinishLink("sgnl://uri", "MyDevice");
+            .FinishLinkAsync("sgnl://uri", "MyDevice");
 
-        Assert.Equal("+380501234567", result.number);
+        Assert.Equal("+380501234567", result.Number);
         // Перевіряємо, що аргументи реально дійшли у параметри RPC (а не лише "не null")
         Assert.Equal("sgnl://uri", captured!.deviceLinkUri);
         Assert.Equal("MyDevice", captured.deviceName);
@@ -78,12 +75,11 @@ public class SignalApiFacadeTests
     public async Task StartLink_WhenNull_Throws()
     {
         var client = Client();
-        client.Setup(c => c.InvokeMethodAsync<StartLinkResponse, StartLinkParameters>(
-            It.IsAny<string>(), It.IsAny<StartLinkParameters>(), It.IsAny<CancellationToken>()))
+        client.Setup(c => c.InvokeMethodAsync<StartLinkParameters, StartLinkResponse>(It.IsAny<string>(), It.IsAny<StartLinkParameters>(), It.IsAny<JsonTypeInfo<StartLinkParameters>>(), It.IsAny<JsonTypeInfo<StartLinkResponse>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((StartLinkResponse)null!);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>()).StartLink());
+            () => new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>()).StartLinkAsync());
     }
 
     // ---- SignalGroups ----
@@ -92,14 +88,14 @@ public class SignalApiFacadeTests
     {
         var client = Client();
         ListGroupsParameters? captured = null;
-        var expected = new ListGroupsResponse();
-        client.Setup(c => c.InvokeMethodAsync<ListGroupsResponse, ListGroupsParameters>(
-            "listGroups", It.IsAny<ListGroupsParameters>(), It.IsAny<CancellationToken>()))
-            .Callback<string, ListGroupsParameters, CancellationToken>((_, p, _) => captured = p)
+        // post-modernize-tuning §4.20 (audit N10): wrapper-record (Items: IReadOnlyList<Group>).
+        var expected = new ListGroupsResponse([]);
+        client.Setup(c => c.InvokeMethodAsync<ListGroupsParameters, ListGroupsResponse>("listGroups", It.IsAny<ListGroupsParameters>(), It.IsAny<JsonTypeInfo<ListGroupsParameters>>(), It.IsAny<JsonTypeInfo<ListGroupsResponse>>(), It.IsAny<CancellationToken>()))
+            .Callback<string, ListGroupsParameters, JsonTypeInfo<ListGroupsParameters>, JsonTypeInfo<ListGroupsResponse>, CancellationToken>((_, p, _, _, _) => captured = p)
             .ReturnsAsync(expected);
 
         var result = await new SignalGroups(client.Object, Mock.Of<ILogger<SignalGroups>>())
-            .ListGroups("+380501234567");
+            .ListGroupsAsync("+380501234567");
 
         Assert.Same(expected, result);
         // account має дійти у параметри listGroups
@@ -111,8 +107,7 @@ public class SignalApiFacadeTests
     public async Task SignalService_Version_ReturnsResponse()
     {
         var rpc = new Mock<IJsonRpcClient>();
-        rpc.Setup(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
-            "version", It.IsAny<VersionParameters>(), It.IsAny<CancellationToken>()))
+        rpc.Setup(c => c.InvokeMethodAsync<VersionParameters, VersionResponse>("version", It.IsAny<VersionParameters>(), It.IsAny<JsonTypeInfo<VersionParameters>>(), It.IsAny<JsonTypeInfo<VersionResponse>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new VersionResponse("0.14.3"));
         var provider = new Mock<IJsonRpcClientProvider>();
         provider.Setup(p => p.Client).Returns(rpc.Object);
@@ -126,11 +121,10 @@ public class SignalApiFacadeTests
     public async Task SyncAccount_ReturnsResponse()
     {
         var client = Client();
-        client.Setup(c => c.InvokeMethodAsync<SyncAccountsResponse, SyncAccountsParameters>(
-            "sendSyncRequest", It.IsAny<SyncAccountsParameters>(), It.IsAny<CancellationToken>()))
+        client.Setup(c => c.InvokeMethodAsync<SyncAccountsParameters, SyncAccountsResponse>("sendSyncRequest", It.IsAny<SyncAccountsParameters>(), It.IsAny<JsonTypeInfo<SyncAccountsParameters>>(), It.IsAny<JsonTypeInfo<SyncAccountsResponse>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SyncAccountsResponse());
 
-        var result = await new SignalAccounts(client.Object, Mock.Of<ILogger<SignalAccounts>>()).SyncAccount();
+        var result = await new SignalAccounts(client.Object, Mock.Of<ILogger<SignalAccounts>>()).SyncAccountAsync();
 
         Assert.NotNull(result);
     }
@@ -139,32 +133,29 @@ public class SignalApiFacadeTests
     public async Task FinishLink_WhenNull_Throws()
     {
         var client = Client();
-        client.Setup(c => c.InvokeMethodAsync<FinishLinkResponse, FinishLinkParameters>(
-            It.IsAny<string>(), It.IsAny<FinishLinkParameters>(), It.IsAny<CancellationToken>()))
+        client.Setup(c => c.InvokeMethodAsync<FinishLinkParameters, FinishLinkResponse>(It.IsAny<string>(), It.IsAny<FinishLinkParameters>(), It.IsAny<JsonTypeInfo<FinishLinkParameters>>(), It.IsAny<JsonTypeInfo<FinishLinkResponse>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((FinishLinkResponse)null!);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>()).FinishLink("u", "n"));
+            () => new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>()).FinishLinkAsync("u", "n"));
     }
 
     [Fact]
     public async Task ListGroups_WhenNull_Throws()
     {
         var client = Client();
-        client.Setup(c => c.InvokeMethodAsync<ListGroupsResponse, ListGroupsParameters>(
-            It.IsAny<string>(), It.IsAny<ListGroupsParameters>(), It.IsAny<CancellationToken>()))
+        client.Setup(c => c.InvokeMethodAsync<ListGroupsParameters, ListGroupsResponse>(It.IsAny<string>(), It.IsAny<ListGroupsParameters>(), It.IsAny<JsonTypeInfo<ListGroupsParameters>>(), It.IsAny<JsonTypeInfo<ListGroupsResponse>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((ListGroupsResponse)null!);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => new SignalGroups(client.Object, Mock.Of<ILogger<SignalGroups>>()).ListGroups("+1"));
+            () => new SignalGroups(client.Object, Mock.Of<ILogger<SignalGroups>>()).ListGroupsAsync("+1"));
     }
 
     [Fact]
     public async Task SignalService_InvokeMethod_WhenNull_Throws()
     {
         var rpc = new Mock<IJsonRpcClient>();
-        rpc.Setup(c => c.InvokeMethodAsync<VersionResponse, VersionParameters>(
-            It.IsAny<string>(), It.IsAny<VersionParameters>(), It.IsAny<CancellationToken>()))
+        rpc.Setup(c => c.InvokeMethodAsync<VersionParameters, VersionResponse>(It.IsAny<string>(), It.IsAny<VersionParameters>(), It.IsAny<JsonTypeInfo<VersionParameters>>(), It.IsAny<JsonTypeInfo<VersionResponse>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((VersionResponse)null!);
         var provider = new Mock<IJsonRpcClientProvider>();
         provider.Setup(p => p.Client).Returns(rpc.Object);

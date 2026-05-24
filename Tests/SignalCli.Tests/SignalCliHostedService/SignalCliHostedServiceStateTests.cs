@@ -82,7 +82,7 @@ public class SignalCliHostedServiceStateTests : SignalCliHostedServiceTestsBase
             .Subscribe(info => states.Add(info.State));
 
         await service.StartAsync(CancellationToken.None);
-        var process = GetPrivateField<IProcess>(service, "_currentProcess");
+        var process = service.CurrentProcessForTests;
         var processMock = Mock.Get(process!);
 
         // Очищаем текущий список состояний
@@ -105,8 +105,13 @@ public class SignalCliHostedServiceStateTests : SignalCliHostedServiceTestsBase
     public async Task ProcessRunner_ShouldReceiveCorrectEnvironmentVariables()
     {
         // Arrange
-        Config.EnvironmentVariables.Add("JAVA_HOME", "");
-        Config.EnvironmentVariables.Add("PATH", "");
+        // post-modernize-tuning §4.10: EnvironmentVariables — IReadOnlyDictionary;
+        // мутація через WithEnvironment (defensive copy), а не Add() на shared посиланні.
+        Config.WithEnvironment(new Dictionary<string, string>
+        {
+            ["JAVA_HOME"] = "",
+            ["PATH"] = "",
+        });
         var service = CreateService();
 
         ProcessConfig? capturedConfig = null;
