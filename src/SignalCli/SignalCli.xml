@@ -102,6 +102,64 @@
         <member name="F:SignalCli.Diagnostics.SignalCliDiagnostics.SubscribeActivityName">
             <summary>Subscribe/unsubscribe activity names (§11.A.5).</summary>
         </member>
+        <member name="T:SignalCli.Exceptions.JsonRpcErrorCode">
+            <summary>
+            JSON-RPC error codes used by signal-cli — standard JSON-RPC 2.0 codes
+            (<c>-32700..-32603</c>) plus signal-cli-specific custom codes (<c>-1..-6</c>).
+            </summary>
+            <remarks>
+            <para>
+            signal-cli-protocol-alignment (typed-rpc-errors): pinned against signal-cli source at
+            commit <c>bda4e7f</c> (after 0.14.3) — see
+            <c>src/main/java/org/asamk/signal/jsonrpc/SignalJsonRpcCommandHandler.java:35-280</c>
+            for the custom codes and
+            <c>src/main/java/org/asamk/signal/jsonrpc/JsonRpcResponse.java:75-119</c>
+            for the standard ones.
+            </para>
+            <para>
+            Consumers typically use this via <see cref="P:SignalCli.Exceptions.JsonRpcException.KnownCode"/> to switch on
+            the typed enum instead of integer codes. Two high-leverage codes have derived exception
+            types: <see cref="T:SignalCli.Exceptions.RateLimitException"/> (<c>-5</c>) and
+            <see cref="T:SignalCli.Exceptions.UntrustedIdentityException"/> (<c>-4</c>).
+            </para>
+            </remarks>
+        </member>
+        <member name="F:SignalCli.Exceptions.JsonRpcErrorCode.ParseError">
+            <summary>Malformed JSON received (server could not parse).</summary>
+        </member>
+        <member name="F:SignalCli.Exceptions.JsonRpcErrorCode.InvalidRequest">
+            <summary>Request object does not conform to JSON-RPC shape.</summary>
+        </member>
+        <member name="F:SignalCli.Exceptions.JsonRpcErrorCode.MethodNotFound">
+            <summary>Method does not exist or is not available.</summary>
+        </member>
+        <member name="F:SignalCli.Exceptions.JsonRpcErrorCode.InvalidParams">
+            <summary>Invalid method parameters (wrong account, missing required field, etc.).</summary>
+        </member>
+        <member name="F:SignalCli.Exceptions.JsonRpcErrorCode.InternalError">
+            <summary>Generic server-side error during command dispatch.</summary>
+        </member>
+        <member name="F:SignalCli.Exceptions.JsonRpcErrorCode.UserError">
+            <summary>User-input error (bad phone number, invalid argument, business-logic refusal).</summary>
+        </member>
+        <member name="F:SignalCli.Exceptions.JsonRpcErrorCode.IoError">
+            <summary>I/O error (file system access, network failure during signal-cli execution).</summary>
+        </member>
+        <member name="F:SignalCli.Exceptions.JsonRpcErrorCode.UntrustedIdentity">
+            <summary>
+            Untrusted identity — key verification failure for the recipient.
+            Surfaced as <see cref="T:SignalCli.Exceptions.UntrustedIdentityException"/>.
+            </summary>
+        </member>
+        <member name="F:SignalCli.Exceptions.JsonRpcErrorCode.RateLimit">
+            <summary>
+            Server rate limit hit. Consumer should retry with exponential backoff.
+            Surfaced as <see cref="T:SignalCli.Exceptions.RateLimitException"/>.
+            </summary>
+        </member>
+        <member name="F:SignalCli.Exceptions.JsonRpcErrorCode.CaptchaRejected">
+            <summary>Captcha challenge rejected by the Signal server.</summary>
+        </member>
         <member name="T:SignalCli.Exceptions.JsonRpcException">
             <summary>
             Виняток, що виникає при помилках JSON-RPC взаємодії.
@@ -117,6 +175,22 @@
             Деталізована інформація про помилку JSON-RPC.
             </summary>
             <value>Об'єкт <see cref="T:SignalCli.Models.Rpc.JsonRpcError"/> з кодом та повідомленням помилки.</value>
+        </member>
+        <member name="P:SignalCli.Exceptions.JsonRpcException.KnownCode">
+            <summary>
+            signal-cli-protocol-alignment (typed-rpc-errors): типізований доступ до коду помилки.
+            Повертає <see cref="T:SignalCli.Exceptions.JsonRpcErrorCode"/>-значення, якщо <see cref="P:SignalCli.Exceptions.JsonRpcException.Error"/>.Code входить
+            до відомого набору (standard JSON-RPC 2.0 <c>-32700..-32603</c> + signal-cli custom
+            <c>-1..-6</c>); інакше <c>null</c> (forward-compat для нових кодів у майбутніх signal-cli).
+            </summary>
+            <remarks>
+            Використовуй замість порівняння <see cref="P:SignalCli.Exceptions.JsonRpcException.Error"/>.Code з magic-числами:
+            <code>
+            catch (JsonRpcException ex) when (ex.KnownCode == JsonRpcErrorCode.UserError) { ... }
+            </code>
+            Для двох high-leverage кодів (<c>-5</c> RateLimit, <c>-4</c> UntrustedIdentity) є окремі
+            derived-типи — <see cref="T:SignalCli.Exceptions.RateLimitException"/>, <see cref="T:SignalCli.Exceptions.UntrustedIdentityException"/>.
+            </remarks>
         </member>
         <member name="M:SignalCli.Exceptions.JsonRpcException.#ctor">
             <summary>
@@ -147,6 +221,37 @@
             <param name="error">Об'єкт з інформацією про помилку JSON-RPC.</param>
             <exception cref="T:System.ArgumentNullException">Виникає, якщо параметр error дорівнює null.</exception>
         </member>
+        <member name="T:SignalCli.Exceptions.RateLimitException">
+            <summary>
+            Виняток, що виникає коли signal-cli повертає JSON-RPC error code <c>-5</c> (rate limit).
+            </summary>
+            <remarks>
+            signal-cli-protocol-alignment (typed-rpc-errors): derived тип для high-leverage коду,
+            щоб consumer'и могли робити <c>catch (RateLimitException)</c> + retry-with-backoff
+            замість inspect-message-text. <see cref="P:SignalCli.Exceptions.JsonRpcException.Error"/>.Code завжди <c>-5</c>
+            (= <see cref="F:SignalCli.Exceptions.JsonRpcErrorCode.RateLimit"/>) by construction.
+            </remarks>
+        </member>
+        <member name="M:SignalCli.Exceptions.RateLimitException.#ctor(SignalCli.Models.Rpc.JsonRpcError)">
+            <summary>Створює новий екземпляр <see cref="T:SignalCli.Exceptions.RateLimitException"/> з RPC-error payload.</summary>
+            <param name="error">JSON-RPC error від signal-cli.</param>
+        </member>
+        <member name="T:SignalCli.Exceptions.UntrustedIdentityException">
+            <summary>
+            Виняток, що виникає коли signal-cli повертає JSON-RPC error code <c>-4</c>
+            (untrusted identity — key verification failure для отримувача).
+            </summary>
+            <remarks>
+            signal-cli-protocol-alignment (typed-rpc-errors): derived тип для high-leverage коду,
+            щоб consumer'и могли robити <c>catch (UntrustedIdentityException)</c> + verify-safety-number
+            flow замість inspect-message-text. <see cref="P:SignalCli.Exceptions.JsonRpcException.Error"/>.Code завжди <c>-4</c>
+            (= <see cref="F:SignalCli.Exceptions.JsonRpcErrorCode.UntrustedIdentity"/>) by construction.
+            </remarks>
+        </member>
+        <member name="M:SignalCli.Exceptions.UntrustedIdentityException.#ctor(SignalCli.Models.Rpc.JsonRpcError)">
+            <summary>Створює новий екземпляр <see cref="T:SignalCli.Exceptions.UntrustedIdentityException"/> з RPC-error payload.</summary>
+            <param name="error">JSON-RPC error від signal-cli.</param>
+        </member>
         <member name="T:SignalCli.Extensions.ServiceCollectionExtensions">
             <summary>
             Розширення для <see cref="T:Microsoft.Extensions.DependencyInjection.IServiceCollection"/>, що дозволяють зареєструвати всі необхідні сервіси для роботи з Signal CLI.
@@ -158,8 +263,8 @@
         <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.AddSignalCli(Microsoft.Extensions.DependencyInjection.IServiceCollection,Microsoft.Extensions.Configuration.IConfiguration)">
             <inheritdoc cref="M:SignalCli.Extensions.ServiceCollectionExtensions.&lt;G&gt;$7B30185E57B8298C6754F16C0BCF4773.AddSignalCli(Microsoft.Extensions.Configuration.IConfiguration)"/>
         </member>
-        <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.AddSignalCli(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{SignalCli.Models.Config})">
-            <inheritdoc cref="M:SignalCli.Extensions.ServiceCollectionExtensions.&lt;G&gt;$7B30185E57B8298C6754F16C0BCF4773.AddSignalCli(System.Action{SignalCli.Models.Config})"/>
+        <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.AddSignalCliWithBundledRuntimeDefaults(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{SignalCli.Models.SignalCliOptions})">
+            <inheritdoc cref="M:SignalCli.Extensions.ServiceCollectionExtensions.&lt;G&gt;$7B30185E57B8298C6754F16C0BCF4773.AddSignalCliWithBundledRuntimeDefaults(System.Action{SignalCli.Models.SignalCliOptions})"/>
         </member>
         <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.AddSignalEvents(Microsoft.Extensions.DependencyInjection.IServiceCollection)">
             <inheritdoc cref="M:SignalCli.Extensions.ServiceCollectionExtensions.&lt;G&gt;$7B30185E57B8298C6754F16C0BCF4773.AddSignalEvents"/>
@@ -194,9 +299,6 @@
             D.9: компайл-тайм-валідатор (без reflection, AOT-safe) — джерело істини для
             <c>[Required]</c>/<c>[Range]</c>-перевірок після видалення <c>.ValidateDataAnnotations()</c> (E1).
             </summary>
-        </member>
-        <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.CopyFrom(SignalCli.Models.SignalCliOptions,SignalCli.Models.SignalCliOptions)">
-            <summary>Поле-в-поле копіювання SignalCliOptions snapshot → інстанс із Options-фреймворку.</summary>
         </member>
         <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.RegisterCoreServices(Microsoft.Extensions.DependencyInjection.IServiceCollection)">
             <summary>
@@ -251,32 +353,30 @@
             </example>
             <para>Реєстрація ідемпотентна — повторні виклики не дублюють хост-сервіси.</para>
             <para>
-            <b>AOT-warning:</b> `OptionsBuilder.Bind&lt;TOptions&gt;(IConfiguration)` тягне
-            <c>Microsoft.Extensions.Configuration.Binder</c>, що використовує reflection. Для
-            AOT-deploy'у користуйтеся `AddSignalCli(Action&lt;SignalCliOptions&gt;)`-overload'ом
-            (повністю reflection-free).
+            <b>AOT-warning:</b> `OptionsBuilder.Bind&lt;TOptions&gt;(IConfiguration)` annotated
+            <c>[RequiresUnreferencedCode]/[RequiresDynamicCode]</c> у фреймворку, тож цей overload
+            SHALL bear ті ж самі attributes. Configuration source-gen (увімкнений у csproj через
+            <c>EnableConfigurationBindingGenerator=true</c>) допомагає іншим call-site'ам, але
+            сам <c>OptionsBuilder.Bind</c> досі несе attribute. Для AOT-deploy'у користуйтеся
+            <c>AddSignalCli(Action&lt;SignalCliOptions&gt;)</c>-overload'ом (повністю reflection-free).
             </para>
             </remarks>
         </member>
-        <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.&lt;G&gt;$7B30185E57B8298C6754F16C0BCF4773.AddSignalCli(System.Action{SignalCli.Models.Config})">
+        <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.&lt;G&gt;$7B30185E57B8298C6754F16C0BCF4773.AddSignalCliWithBundledRuntimeDefaults(System.Action{SignalCli.Models.SignalCliOptions})">
             <summary>
-            Додає всі необхідні сервіси для роботи з Signal CLI до контейнера DI (legacy-overload).
+            deprecated-shim-removal §1 (config-auto-resolve-migration): додає SignalCli з
+            preset'ом bundled-runtime defaults — <c>AppHome = AppContext.BaseDirectory</c>,
+            <c>LibDirectory = "SignalCli/lib"</c>, <c>JavaExecutable</c> auto-resolved через
+            <see cref="T:SignalCli.Utilities.JavaPathResolver"/> (bundled JRE → JAVA_HOME → Windows Oracle → PATH).
+            Споживач у <paramref name="configure"/> може override'нути будь-яке поле — наприклад
+            на Linux native-режимі задає <c>SignalCliExecutable</c> і нулить <c>JavaExecutable</c>.
             </summary>
-            <param name="configure">
-            Делегат для налаштування <see cref="T:SignalCli.Models.Config"/>. Може бути <c>null</c> — тоді
-            використовується <see cref="M:SignalCli.Models.Config.CreateDefault"/> без подальших змін.
-            </param>
-            <returns>Колекція сервісів з доданими сервісами Signal CLI.</returns>
+            <param name="configure">Опціональний делегат для override'у defaults.</param>
             <remarks>
-            <para>
-            D.3: legacy-overload. Внутрішньо адаптує <see cref="T:SignalCli.Models.Config"/> у
-            <see cref="T:SignalCli.Models.SignalCliOptions"/> — усі решта сервісів працюють з <c>IOptions</c>-моделлю.
-            </para>
-            <para>
-            Рекомендується новий overload із <see cref="T:SignalCli.Models.SignalCliOptions"/>, що дає
-            явну типізовану валідацію (DataAnnotations + ValidateOnStart). Цей метод
-            буде видалений у 3.0.
-            </para>
+            Цей extension — replacement для legacy <c>AddSignalCli(Action&lt;Config&gt;?)</c>,
+            що ра ніше робив той самий auto-resolve через <c>Config.CreateDefault()</c>. Призначений
+            для consumer'ів пакетів <c>SignalCli.Runtime.Jre.{win-x64,osx-arm64}</c>. Consumer'и
+            без bundled-runtime використовують <c>AddSignalCli(Action&lt;SignalCliOptions&gt;)</c> напряму.
             </remarks>
         </member>
         <member name="M:SignalCli.Extensions.ServiceCollectionExtensions.&lt;G&gt;$7B30185E57B8298C6754F16C0BCF4773.AddSignalEvents">
@@ -591,13 +691,6 @@
             <param name="cancellationToken">Токен скасування для переривання операції.</param>
             <returns>Об'єкт з інформацією про версію Signal CLI.</returns>
         </member>
-        <member name="M:SignalCli.Interfaces.SignalCli.ISignalCliClient.Version(System.Threading.CancellationToken)">
-            <summary>
-            Застаріле: використовуйте <see cref="M:SignalCli.Interfaces.SignalCli.ISignalCliClient.VersionAsync(System.Threading.CancellationToken)"/>.
-            </summary>
-            <param name="cancellationToken">Токен скасування для переривання операції.</param>
-            <returns>Об'єкт з інформацією про версію Signal CLI.</returns>
-        </member>
         <member name="T:SignalCli.Interfaces.SignalCli.IStreamPairProvider">
             <summary>
             Інтерфейс, що надає доступ до поточної пари потоків для взаємодії з процесом 
@@ -673,11 +766,6 @@
             </code>
             </example>
         </member>
-        <member name="M:SignalCli.Interfaces.Signal.ISignalAccounts.ListAccounts(System.Threading.CancellationToken)">
-            <summary>Застаріле: використовуйте <see cref="M:SignalCli.Interfaces.Signal.ISignalAccounts.ListAccountsAsync(System.Threading.CancellationToken)"/>.</summary>
-            <param name="cancellationToken">Токен скасування операції.</param>
-            <returns>Список зареєстрованих акаунтів.</returns>
-        </member>
         <member name="M:SignalCli.Interfaces.Signal.ISignalAccounts.SyncAccountAsync(System.Threading.CancellationToken)">
             <summary>
             Надішліть повідомлення із запитом на синхронізацію на основний пристрій (для груп, контактів, ...).
@@ -689,11 +777,6 @@
             <exception cref="T:System.InvalidOperationException">Виникає при помилці отримання списку акаунтів.</exception>
             <exception cref="T:SignalCli.Exceptions.JsonRpcException">Виникає при помилці JSON-RPC запиту.</exception>
             <exception cref="T:System.OperationCanceledException">Виникає, якщо операцію скасовано.</exception>
-        </member>
-        <member name="M:SignalCli.Interfaces.Signal.ISignalAccounts.SyncAccount(System.Threading.CancellationToken)">
-            <summary>Застаріле: використовуйте <see cref="M:SignalCli.Interfaces.Signal.ISignalAccounts.SyncAccountAsync(System.Threading.CancellationToken)"/>.</summary>
-            <param name="cancellationToken">Токен скасування операції.</param>
-            <returns>Пустий об'єкт.</returns>
         </member>
         <member name="T:SignalCli.Interfaces.Signal.ISignalDevices">
             <summary>
@@ -713,11 +796,6 @@
             <exception cref="T:System.InvalidOperationException">Виникає при помилці початку процесу зв'язування.</exception>
             <exception cref="T:SignalCli.Exceptions.JsonRpcException">Виникає при помилці JSON-RPC запиту.</exception>
             <exception cref="T:System.OperationCanceledException">Виникає, якщо операцію скасовано.</exception>
-        </member>
-        <member name="M:SignalCli.Interfaces.Signal.ISignalDevices.StartLink(System.Threading.CancellationToken)">
-            <summary>Застаріле: використовуйте <see cref="M:SignalCli.Interfaces.Signal.ISignalDevices.StartLinkAsync(System.Threading.CancellationToken)"/>.</summary>
-            <param name="cancellationToken">Токен скасування операції.</param>
-            <returns>Інформація для зв'язування, включаючи URI для QR-коду.</returns>
         </member>
         <member name="M:SignalCli.Interfaces.Signal.ISignalDevices.FinishLinkAsync(System.String,System.String,System.Threading.CancellationToken)">
             <summary>
@@ -746,13 +824,6 @@
                 cancellationToken);
             </code>
             </example>
-        </member>
-        <member name="M:SignalCli.Interfaces.Signal.ISignalDevices.FinishLink(System.String,System.String,System.Threading.CancellationToken)">
-            <summary>Застаріле: використовуйте <see cref="M:SignalCli.Interfaces.Signal.ISignalDevices.FinishLinkAsync(System.String,System.String,System.Threading.CancellationToken)"/>.</summary>
-            <param name="deviceLinkUri">URI для зв'язування, отриманий під час сканування QR-коду.</param>
-            <param name="deviceName">Назва нового пристрою.</param>
-            <param name="cancellationToken">Токен скасування операції.</param>
-            <returns>Результат зв'язування з номером пристрою.</returns>
         </member>
         <member name="T:SignalCli.Interfaces.Signal.ISignalEventService">
             <summary>
@@ -926,12 +997,6 @@
             }
             </code>
             </example>
-        </member>
-        <member name="M:SignalCli.Interfaces.Signal.ISignalGroups.ListGroups(System.String,System.Threading.CancellationToken)">
-            <summary>Застаріле: використовуйте <see cref="M:SignalCli.Interfaces.Signal.ISignalGroups.ListGroupsAsync(System.String,System.Threading.CancellationToken)"/>.</summary>
-            <param name="account">Ідентифікатор акаунту.</param>
-            <param name="cancellationToken">Токен скасування операції.</param>
-            <returns>Список груп.</returns>
         </member>
         <member name="T:SignalCli.Interfaces.Signal.ISignalMessage">
             <summary>
@@ -1135,205 +1200,6 @@
             EventId-блок 600–699.
             </summary>
         </member>
-        <member name="T:SignalCli.Models.Config">
-            <summary>
-            Конфігурація Signal CLI.
-            </summary>
-            <remarks>
-            Містить налаштування для запуску та контролю процесу Signal CLI,
-            включаючи шляхи до файлів, параметри логування та автоперезапуску.
-            <para>
-            audit N7: legacy-тип, що зберігається для backward compat одного мажорного релізу.
-            Новий код має використовувати <see cref="T:SignalCli.Models.SignalCliOptions"/> + <c>IOptions{T}</c>-pipeline.
-            </para>
-            </remarks>
-        </member>
-        <member name="F:SignalCli.Models.Config.DefaultBundledJreDirectory">
-            <summary>
-            Піддиректорія (відносно вихідної папки застосунку), куди пакети
-            SignalCli.Runtime.Jre.* розпаковують вбудований JRE.
-            </summary>
-        </member>
-        <member name="P:SignalCli.Models.Config.UseManualReceiveMode">
-            <summary>
-            Режим отримання повідомлень.
-            </summary>
-            <value>
-            true - ручне отримання повідомлень (режим manual);
-            false - автоматичне отримання при запуску (режим on-start).
-            </value>
-        </member>
-        <member name="P:SignalCli.Models.Config.MaxRestartAttempts">
-            <summary>
-            Максимальна кількість спроб перезапуску процесу.
-            </summary>
-            <value>
-            Кількість спроб; 0 - автоперезапуск відключений.
-            </value>
-        </member>
-        <member name="P:SignalCli.Models.Config.HealthCheckIntervalSeconds">
-            <summary>
-            Інтервал між перевірками стану процесу (у секундах).
-            </summary>
-        </member>
-        <member name="P:SignalCli.Models.Config.HealthCheckTimeoutSeconds">
-            <summary>
-            Максимальний час очікування відповіді при перевірці стану (у секундах).
-            </summary>
-        </member>
-        <member name="P:SignalCli.Models.Config.RestartDelaySeconds">
-            <summary>
-            Затримка перед перезапуском процесу (у секундах).
-            </summary>
-        </member>
-        <member name="P:SignalCli.Models.Config.StopTimeoutSeconds">
-            <summary>
-            Час очікування граційного завершення signal-cli (після команди "exit"),
-            перш ніж процес буде завершено примусово (у секундах).
-            </summary>
-        </member>
-        <member name="P:SignalCli.Models.Config.RequestTimeoutSeconds">
-            <summary>
-            Максимальний час очікування на відповідь JSON-RPC запиту (у секундах).
-            </summary>
-            <remarks>
-            Кожен запит обмежується цим таймаутом; за його перевищення таск
-            фолтиться <see cref="T:System.TimeoutException"/>, що відрізняється від
-            <see cref="T:System.OperationCanceledException"/> ініційованого викликачем.
-            За замовчуванням 30 с.
-            </remarks>
-        </member>
-        <member name="P:SignalCli.Models.Config.RestartWindowSeconds">
-            <summary>
-            Вікно стабільності, після якого лічильник перезапусків скидається в 0 (у секундах).
-            </summary>
-            <remarks>
-            Якщо процес залишається у стані Running протягом цього інтервалу,
-            "бюджет" перезапусків (<see cref="P:SignalCli.Models.Config.MaxRestartAttempts"/>) відновлюється
-            — щоб поодинокі транзитивні збої за тривалу роботу не вимикали авто-рестарт назавжди.
-            За замовчуванням 60 с.
-            </remarks>
-        </member>
-        <member name="P:SignalCli.Models.Config.AppHome">
-            <summary>
-            Головна директорія програми.
-            </summary>
-            <remarks>
-            Директорія, де розташовані піддиректорії /config, /log, /lib та інші.
-            </remarks>
-        </member>
-        <member name="P:SignalCli.Models.Config.CliLogLevelCli">
-            <summary>
-            Рівень логування для Signal CLI.
-            </summary>
-        </member>
-        <member name="P:SignalCli.Models.Config.LogFileCli">
-            <summary>
-            Шлях до файлу логу Signal CLI.
-            </summary>
-            <remarks>
-            За замовчуванням (через <see cref="M:SignalCli.Models.Config.CreateDefault"/>) обчислюється
-            як <c>Path.Combine(AppHome, "signal.log")</c> — змінення <see cref="P:SignalCli.Models.Config.AppHome"/>
-            автоматично переносить лог-файл.
-            </remarks>
-        </member>
-        <member name="P:SignalCli.Models.Config.StoragePathCli">
-            <summary>
-            Шлях до директорії з даними Signal CLI.
-            </summary>
-            <remarks>
-            За замовчуванням (через <see cref="M:SignalCli.Models.Config.CreateDefault"/>) обчислюється
-            як <c>Path.Combine(AppHome, "SignalCliStorageData")</c> — змінення
-            <see cref="P:SignalCli.Models.Config.AppHome"/> автоматично переносить сховище даних.
-            </remarks>
-        </member>
-        <member name="P:SignalCli.Models.Config.JavaExecutable">
-            <summary>
-            Шлях до виконуваного файлу Java.
-            </summary>
-        </member>
-        <member name="P:SignalCli.Models.Config.SignalCliExecutable">
-            <summary>
-            Шлях до нативного (GraalVM) виконуваного файлу signal-cli.
-            </summary>
-            <remarks>
-            Якщо задано, бібліотека запускає цей бінарник напряму і <b>Java не потрібна</b>
-            (режим native). Інакше використовується JVM-режим через <see cref="P:SignalCli.Models.Config.JavaExecutable"/>
-            та classpath із JAR-файлів. Нативні білди signal-cli офіційно доступні лише для Linux x64.
-            </remarks>
-        </member>
-        <member name="P:SignalCli.Models.Config.LibDirectory">
-            <summary>
-            Піддиректорія з JAR-файлами Signal CLI.
-            </summary>
-        </member>
-        <member name="P:SignalCli.Models.Config.EnvironmentVariables">
-            <summary>
-            Змінні середовища для процесу Signal CLI.
-            </summary>
-            <remarks>
-            post-modernize-tuning §4.10 (audit D7): тип на читання — <see cref="T:System.Collections.Generic.IReadOnlyDictionary`2"/>,
-            мутація — через <see cref="M:SignalCli.Models.Config.WithEnvironment(System.Collections.Generic.IDictionary{System.String,System.String})"/> (повертає снапшот). Це усуває можливість
-            мутувати dictionary після того, як Config зареєстровано в DI як singleton — раніше
-            будь-хто з <c>IOptions&lt;&gt;</c>-resolve міг змінити вміст і вплинути на інші компоненти.
-            </remarks>
-        </member>
-        <member name="M:SignalCli.Models.Config.WithEnvironment(System.Collections.Generic.IDictionary{System.String,System.String})">
-            <summary>
-            post-modernize-tuning §4.10 (audit D7): defensive copy. Замість того, щоб віддавати
-            викликачу мутабельне посилання, копіюємо передану мапу і запечатуємо її read-only-вʼю.
-            </summary>
-            <param name="environment">Початкова мапа змінних середовища.</param>
-            <returns>Те саме <see cref="T:SignalCli.Models.Config"/>-посилання (fluent-стиль).</returns>
-        </member>
-        <member name="M:SignalCli.Models.Config.ToProcessConfig">
-            <summary>
-            Створює конфігурацію процесу для запуску Signal CLI.
-            </summary>
-            <returns>Об'єкт конфігурації процесу з налаштованими параметрами.</returns>
-            <exception cref="T:System.IO.FileNotFoundException">Виникає, якщо JAR-файли не знайдено.</exception>
-        </member>
-        <member name="M:SignalCli.Models.Config.BuildClasspath">
-            <summary>
-            Будує рядок classpath для JVM на основі JAR-файлів.
-            </summary>
-            <returns>Рядок classpath для JVM.</returns>
-            <exception cref="T:System.IO.FileNotFoundException">Виникає, якщо JAR-файли не знайдено.</exception>
-        </member>
-        <member name="M:SignalCli.Models.Config.CreateDefault">
-            <summary>
-            Створює конфігурацію за замовчуванням.
-            </summary>
-            <returns>Об'єкт конфігурації з параметрами за замовчуванням.</returns>
-        </member>
-        <member name="M:SignalCli.Models.Config.TryResolveJavaPath">
-            <summary>
-            Намагається знайти Java; повертає порожній рядок, якщо її немає (без винятку).
-            </summary>
-        </member>
-        <member name="M:SignalCli.Models.Config.ResolveJavaPath">
-            <summary>
-            Знаходить шлях до виконуваного файлу Java в системі
-            (Windows, Linux та macOS).
-            </summary>
-            <returns>Шлях до виконуваного файлу Java.</returns>
-            <exception cref="T:System.InvalidOperationException">Виникає, якщо не вдалося знайти Java.</exception>
-        </member>
-        <member name="M:SignalCli.Models.Config.ResolveBundledJava(System.String)">
-            <summary>
-            Шукає вбудований JRE, який пакети SignalCli.Runtime.Jre.* розпаковують
-            у піддиректорію <c>jre/</c> вихідної папки застосунку.
-            </summary>
-            <param name="baseDirectory">Вихідна (базова) директорія застосунку.</param>
-            <returns>Повний шлях до <c>jre/bin/java[.exe]</c>, якщо знайдено; інакше null.</returns>
-        </member>
-        <member name="M:SignalCli.Models.Config.ResolveOnPath(System.String)">
-            <summary>
-            Шукає виконуваний файл у каталогах змінної середовища PATH.
-            </summary>
-            <param name="executable">Назва виконуваного файлу (наприклад, "java" або "java.exe").</param>
-            <returns>Повний шлях, якщо знайдено; інакше null.</returns>
-        </member>
         <member name="T:SignalCli.Models.Rpc.JsonRpcError">
             <summary>
             Інформація про помилку JSON-RPC.
@@ -1509,7 +1375,8 @@
             <c>SignalCliOptionsValidator</c> (D.9). Помилки видно одразу на <c>host.StartAsync()</c>.
             </para>
             <para>
-            Для backward compat існує застарілий <see cref="T:SignalCli.Models.Config"/>; він буде видалений у 3.0.
+            deprecated-shim-removal §5 (v4.0): єдиний configuration surface — legacy <c>Config</c>-shim
+            видалено разом з його `AddSignalCli(Action&lt;Config&gt;?)` overload'ом.
             </para>
             </remarks>
         </member>
@@ -1583,34 +1450,33 @@
             а downstream-сервіси читають read-only-вʼю — мутації після StartAsync виключені.
             </remarks>
         </member>
-        <member name="M:SignalCli.Models.SignalCliOptions.ToConfig">
-            <summary>
-            Конвертує <see cref="T:SignalCli.Models.SignalCliOptions"/> у legacy-<see cref="T:SignalCli.Models.Config"/>
-            (внутрішні сервіси досі споживають <see cref="T:SignalCli.Models.Config"/> як singleton).
-            </summary>
-            <remarks>audit N7: internal compat-shim — зникне у 3.0 разом із <see cref="T:SignalCli.Models.Config"/>.</remarks>
-        </member>
         <member name="T:SignalCli.Models.SignalCliOptionsExtensions">
             <summary>
-            Internal-розширення для <see cref="T:SignalCli.Models.SignalCliOptions"/> та конвертації з legacy <see cref="T:SignalCli.Models.Config"/>.
+            Internal-розширення для <see cref="T:SignalCli.Models.SignalCliOptions"/> — побудова <see cref="T:SignalCli.Models.SignalCli.ProcessConfig"/>.
             </summary>
             <remarks>
-            D.4: реалізує побудову <see cref="T:SignalCli.Models.SignalCli.ProcessConfig"/> із типованих опцій. Внутрішньо
-            делегує legacy <c>Config.ToProcessConfig</c> через <see cref="M:SignalCli.Models.SignalCliOptions.ToConfig"/>
-            — щоб логіка побудови команди (native vs JVM, classpath, env) лишалась в одному місці.
-            audit N7: усе цьому файлі — internal compat-shim, зникне у 3.0 разом із <see cref="T:SignalCli.Models.Config"/>.
+            deprecated-shim-removal §5 (remove-config-type): уся логіка побудови signal-cli launch-command
+            (native vs JVM, classpath, env, args) живе тут напряму. Раніше делегувалося через
+            <c>Config.ToProcessConfig</c>; legacy Config-type видалено.
             </remarks>
         </member>
         <member name="M:SignalCli.Models.SignalCliOptionsExtensions.ToProcessConfig(SignalCli.Models.SignalCliOptions)">
-            <summary>Будує <see cref="T:SignalCli.Models.SignalCli.ProcessConfig"/> для запуску signal-cli з опцій.</summary>
-        </member>
-        <member name="M:SignalCli.Models.SignalCliOptionsExtensions.ToOptions(SignalCli.Models.Config)">
             <summary>
-            Конвертує legacy <see cref="T:SignalCli.Models.Config"/> у нові <see cref="T:SignalCli.Models.SignalCliOptions"/> (поле-в-поле).
+            Будує <see cref="T:SignalCli.Models.SignalCli.ProcessConfig"/> для запуску signal-cli з типованих опцій.
             </summary>
+            <exception cref="T:System.IO.FileNotFoundException">JAR-файли не знайдено у JVM-режимі.</exception>
+            <exception cref="T:System.InvalidOperationException">Ні JavaExecutable, ні SignalCliExecutable не задано.</exception>
         </member>
-        <member name="M:SignalCli.Models.SignalCliOptionsExtensions.ToIOptions(SignalCli.Models.Config)">
-            <summary>Обгортає legacy <see cref="T:SignalCli.Models.Config"/> в <see cref="T:Microsoft.Extensions.Options.IOptions`1"/>.</summary>
+        <member name="M:SignalCli.Models.SignalCliOptionsExtensions.BuildClasspath(SignalCli.Models.SignalCliOptions)">
+            <summary>
+            Будує classpath-рядок для JVM-mode'у на основі JAR-файлів у <c>AppHome/LibDirectory</c>.
+            </summary>
+            <remarks>
+            deprecated-shim-removal §5: classpath cache (раніше на Config-instance'і) видалено —
+            <see cref="M:SignalCli.Models.SignalCliOptionsExtensions.ToProcessConfig(SignalCli.Models.SignalCliOptions)"/> викликається рідко (раз на startup + на restart), кеш
+            не давав measurable виграшу. Якщо профайлинг колись покаже cost — додамо
+            <see cref="T:System.Collections.Concurrent.ConcurrentDictionary`2"/> keyed на (AppHome, LibDirectory).
+            </remarks>
         </member>
         <member name="T:SignalCli.Models.SignalCliOptionsValidator">
             <summary>
@@ -4948,7 +4814,7 @@
             Реалізація IJsonRpcClient — відправка запитів, отримання повідомлень.
             </summary>
             <remarks>
-            Гарантує обмежений час життя запитів (<see cref="P:SignalCli.Models.Config.RequestTimeoutSeconds"/>)
+            Гарантує обмежений час життя запитів (<see cref="P:SignalCli.Models.SignalCliOptions.RequestTimeoutSeconds"/>)
             та коректний lifecycle читачів stdout/stderr: цикли скасовуються та чекаються до
             завершення на зміні <see cref="T:SignalCli.Models.SignalCli.StreamPair"/> й при <see cref="M:SignalCli.Services.Rpc.JsonRpcClient.DisposeAsync"/>.
             </remarks>
@@ -5030,7 +4896,7 @@
             <returns>Об'єкт відповіді від сервера JSON-RPC.</returns>
             <exception cref="T:System.ObjectDisposedException">Виникає, якщо об'єкт був утилізований.</exception>
             <exception cref="T:System.ArgumentNullException">Виникає, якщо параметри дорівнюють null.</exception>
-            <exception cref="T:System.TimeoutException">Виникає, якщо відповідь не отримано за <see cref="P:SignalCli.Models.Config.RequestTimeoutSeconds"/>.</exception>
+            <exception cref="T:System.TimeoutException">Виникає, якщо відповідь не отримано за <see cref="P:SignalCli.Models.SignalCliOptions.RequestTimeoutSeconds"/>.</exception>
             <exception cref="T:System.OperationCanceledException">Виникає, якщо викликач скасував запит через <paramref name="cancellationToken"/>.</exception>
             <exception cref="T:System.InvalidOperationException">Виникає, якщо отримано нульову відповідь або не вдалося перетворити результат.</exception>
             <exception cref="T:SignalCli.Exceptions.JsonRpcException">Виникає, якщо сервер повернув помилку.</exception>
@@ -5251,7 +5117,7 @@
             HostedService, який:
             1) Запускає та зупиняє Signal-CLI при старті/зупинці застосунку.
             2) Автоматично перезапускає його при аварійному завершенні (до MaxRestartAttempts
-               у межах вікна <see cref="P:SignalCli.Models.Config.RestartWindowSeconds"/>).
+               у межах вікна <see cref="P:SignalCli.Models.SignalCliOptions.RestartWindowSeconds"/>).
             3) Надає доступ до StreamPair через IStreamPairProvider.
             </summary>
         </member>
@@ -5343,7 +5209,7 @@
         </member>
         <member name="M:SignalCli.Services.SignalCli.SignalCliHostedService.ScheduleRestartWindowReset">
             <summary>
-            Стартує таймер, який після <see cref="P:SignalCli.Models.Config.RestartWindowSeconds"/> у стані Running
+            Стартує таймер, який після <see cref="P:SignalCli.Models.SignalCliOptions.RestartWindowSeconds"/> у стані Running
             скине лічильник перезапусків у 0. Викликається тільки тоді, коли процес щойно перейшов
             у Running; будь-який наступний рестарт/стоп має скасувати цей таймер.
             </summary>
@@ -5709,6 +5575,33 @@
             Атомарно збільшує лічильник на одиницю та повертає нове значення.
             </summary>
             <returns>Нове значення лічильника (int32; може wrap-around-итися без винятку).</returns>
+        </member>
+        <member name="T:SignalCli.Utilities.JavaPathResolver">
+            <summary>
+            deprecated-shim-removal §1 (config-auto-resolve-migration): bundled-JRE / JAVA_HOME / PATH
+            lookup logic, мігровано з legacy <c>Models.Config</c>. Static internal — щоб AOT-shape
+            був reflection-free і consumer'и не могли випадково розширити цю логіку. Використовується
+            extension'ом <see cref="M:SignalCli.Extensions.ServiceCollectionExtensions.AddSignalCliWithBundledRuntimeDefaults(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{SignalCli.Models.SignalCliOptions})"/>.
+            </summary>
+        </member>
+        <member name="M:SignalCli.Utilities.JavaPathResolver.TryResolveBundledJre(System.String)">
+            <summary>
+            Шукає вбудований JRE у <c>&lt;baseDirectory&gt;/jre/bin/java[.exe]</c> (розпакований
+            пакетом <c>SignalCli.Runtime.Jre.*</c>). Повертає <c>null</c> якщо не знайдено.
+            </summary>
+        </member>
+        <member name="M:SignalCli.Utilities.JavaPathResolver.TryResolveOnPath(System.String)">
+            <summary>
+            Шукає виконуваний файл у каталогах змінної середовища <c>PATH</c>.
+            Повертає перший знайдений шлях або <c>null</c>.
+            </summary>
+        </member>
+        <member name="M:SignalCli.Utilities.JavaPathResolver.TryResolveJavaPath(System.String)">
+            <summary>
+            Soft-resolve Java у такому порядку: bundled JRE → JAVA_HOME/bin → Windows Oracle javapath
+            → PATH. Якщо нічого не знайдено — повертає <see cref="F:System.String.Empty"/> (НЕ throw'ить),
+            щоб consumer міг вибрати native-режим (<c>SignalCliExecutable</c>) без винятку.
+            </summary>
         </member>
         <member name="T:SignalCli.Utilities.MimeTypeHelper">
             <summary>
