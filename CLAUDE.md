@@ -118,6 +118,29 @@ The patterns below are not aspirational. They were rolled out across the codebas
 - **Strong typing over magic strings:** `TextStyleMode` enum, not `string? mode = "styled"`. For protocol values that must compare case-insensitively, use `StringComparison.OrdinalIgnoreCase`; reserve `ToUpperInvariant()` for values crossing the process boundary (critical rule #5).
 - **`unchecked Interlocked.Increment` for monotonic ID counters.** `AtomicCounter` is one line: `unchecked((int)Interlocked.Increment(ref _seed))`. Don't try to "reset" — int32 wraparound is fine for request IDs (uniqueness in active set is what matters).
 
+#### AOT readiness (post-`post-modernize-tuning` §6)
+
+- **Source-gen-only JSON in production.** `SignalJson.Options.TypeInfoResolver = SignalJsonContext.Default` (no `DefaultJsonTypeInfoResolver` fallback). Every type that crosses the JSON boundary from `src/SignalCli/**` MUST be registered via `[JsonSerializable(typeof(T))]` in `Serialization/SignalJsonContext.cs`. `JsonContextRegistrationTests` reflectively scans every `*Parameters`/`*Response` DTO in `Models/Signal/*` and asserts each is in the context — adding a new DTO without registration fails this test immediately, NOT at runtime with `NotSupportedException`.
+- **`SignalJson.OptionsForTests` is test-only.** Annotated `[RequiresUnreferencedCode]`/`[RequiresDynamicCode]` on its property getter; the Lazy-field-initializer carries `[UnconditionalSuppressMessage]` with justification (real access is gated through the property). Tests that need anonymous-type payloads (`new { Hello = "world" }`) use this; production code MUST NOT.
+- **Test-local source-gen contexts** for test-only DTOs. `TestSerializationContext` in `Tests/SignalCli.Tests/TestSerializationContext.cs` registers `TestProbeRequest`/`TestProbeResponse` for `JsonRpcClientTests` — separate context, does NOT pollute production `SignalJsonContext`. Pattern: when a new test needs typed JSON probes, extend the test-local context, not the production one.
+- **Wrapper-record + custom `JsonConverter` for List-shaped responses.** `ListAccountsResponse`/`ListGroupsResponse` are `record(IReadOnlyList<T> Items) : IReadOnlyList<T>` with `[JsonConverter]` that reads/writes a flat JSON array (delegating to `JsonSerializer.Deserialize<List<T>>(ref reader, JsonTypeInfo<List<T>>)`). Both the wrapper type AND `List<T>` MUST be in source-gen context. See `Models/Signal/Accounts/ListAccountsResponse.cs` for canonical shape.
+- **`IHostedLifecycleService` + `IAsyncDisposable`** on `SignalCliHostedService` (post-`hosting-modernization` §8a.2/§8a.3). Phase-methods are no-op `Task.CompletedTask`; `DisposeAsync` drains `_operationLock.WaitAsync` with 2s `TimeProvider`-aware timeout, then runs shared `DisposeCore`. **Critical rule #9 enforced**: `Dispose()` is sync-only with its own implementation (NOT `DisposeAsync().GetAwaiter().GetResult()`).
+
+#### Mass-edit safety
+
+- **PowerShell file I/O preserves encoding ONLY via `[System.IO.File]`.** `Get-Content -Raw` + `Set-Content -Encoding UTF8` mangles Cyrillic by reading via system codepage (often Windows-1251) and writing UTF-8-BOM. For batch-edits across `.cs` files use:
+  ```powershell
+  $text  = [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
+  $bytes = [System.IO.File]::ReadAllBytes($path)
+  $hasBom = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
+  # ... mutate $text ...
+  $enc = if ($hasBom) { New-Object System.Text.UTF8Encoding($true) } else { New-Object System.Text.UTF8Encoding($false) }
+  [System.IO.File]::WriteAllText($path, $text, $enc)
+  ```
+  Mojibake'd cyrillic mid-batch is fixed by `git checkout` of the affected files + redo with the safe pattern. Symptom: `прибрано — клас` → `РїСЂРёР±СЂР°РЅРѕ вЂ" РєР»Р°СЃ`.
+- **GitHub Actions `actions/*` SHAs MUST come from existing workflows in this repo**, not from notes or docs. `grep -rn "actions/" .github/workflows/*.yml | grep -v <new-file>` and copy. Typo-pinning produces fast-fail "Unable to resolve action" — round 16 lost one PR-cycle to a 1-char typo in `actions/checkout` SHA.
+- **PowerShell `Get-FileHash` is fragile on `windows-latest` GitHub-runner** (rare `Microsoft.PowerShell.Utility` auto-load race). All download scripts (`src/build/download-jre.ps1`, `src/SignalCli.runtime/download-signal-cli.ps1`) compute SHA-256 directly via `System.Security.Cryptography.SHA256.Create().ComputeHash(stream)` + `BitConverter.ToString().Replace("-","")` — cross-version-safe across WinPS 5.1 and PS 7.x, no module-loading dependency. Don't revert to `Get-FileHash`.
+
 #### Observability
 
 - **Two surfaces only**, both named `"SignalCli.NET"`: `SignalCliDiagnostics.ActivitySource` for tracing (spans `rpc.<method>`, `signalcli.process.start`, `signalcli.healthcheck.ping`, `signalcli.subscribe`), `SignalCliDiagnostics.Meter` for metrics (`signalcli.rpc.requests`, `signalcli.rpc.duration`, `signalcli.process.restarts`, `signalcli.events.dropped`, `signalcli.subscriptions.active`). Adding new instruments goes in `SignalCli/Diagnostics/SignalCliDiagnostics.cs` only — do not spawn a second source.
@@ -127,13 +150,12 @@ The patterns below are not aspirational. They were rolled out across the codebas
 
 ### Backward compatibility convention
 
-When we deprecate API, the rule is **one major version of `[Obsolete]` shim** before removal. Currently in flight (will be removed in **3.0**):
+When we deprecate API, the rule is **one major version of `[Obsolete]` shim** before removal. Already removed in **3.0** (see `CHANGELOG.md [3.0.0]`): `Version()`, `AddSignalCli(Action<Config>?)`-shim arg/property removal-shims, `*Options.CancellationToken`+`WithCancellationToken`. Currently in flight (will be removed in **4.0**):
 
-- `ISignalCliClient.Version()` → use `VersionAsync()`.
-- `AddSignalCli(Action<Config>?)` → use `AddSignalCli(Action<SignalCliOptions>?)`. `Config` itself is `[Obsolete]`-shimmed.
-- `*Options.CancellationToken` properties and `WithCancellationToken` builder methods on `TextMessageOptions`/`AttachmentMessageOptions`/`StickerMessageOptions` → pass `CancellationToken` directly to `Send*Async(options, ct)`.
+- `AddSignalCli(Action<Config>?)` — Config itself stays as `[Obsolete]` shim because Integration E2E tests still depend on `Config.CreateDefault()`-auto-resolve of bundled-JRE. Tests use `#pragma CS0618 disable` around the call site. Real production consumers should migrate to `AddSignalCli(Action<SignalCliOptions>?)` or `AddSignalCli(IConfiguration)`.
+- `ISignalCliClient.InvokeMethodAsync<TResponse, TRequest>` (old generic-param order) — replaced by `<TRequest, TResponse>` per JsonSerializer.Deserialize<TValue>-convention; **no shim possible** for generic-arity-but-same-signature reorders (C# overload resolution can't disambiguate).
 
-When adding a new deprecation, mirror this shape: real new API + `[Obsolete("Use Y; will be removed in 3.0")]` shim that delegates, plus a `CHANGELOG.md` entry under "Інше". Internal call sites are migrated immediately; external call sites get one major release of grace.
+When adding a new deprecation, mirror this shape: real new API + `[Obsolete("Use Y; will be removed in 4.0")]` shim that delegates, plus a `CHANGELOG.md` entry under "Інше". Internal call sites are migrated immediately; external call sites get one major release of grace. **Exception:** when the shim is technically impossible (generic-order, ctor-overload-ambiguity per `JsonRpcException` §4.22, etc.), do the pure removal and document the impossibility in the CHANGELOG migration note.
 
 ## Critical rules (do not regress — these are audit findings + post-2.1.0 invariants)
 
@@ -151,6 +173,9 @@ When adding a new deprecation, mirror this shape: real new API + `[Obsolete("Use
 12. **Options validation has exactly one path: source-gen `[OptionsValidator]`.** `ServiceCollectionExtensions.ConfigureOptions` registers `SignalCliOptionsValidator` (source-gen, reflection-free, AOT-safe) via `TryAddEnumerable<IValidateOptions<SignalCliOptions>>`. Cross-field rules go in `.Validate(o => …, "msg")` lambdas. **Do not re-add `.ValidateDataAnnotations()`** alongside the `[OptionsValidator]`: it duplicates the same `[Required]`/`[Range]` checks through reflection and is the reason `<IsAotCompatible>true</IsAotCompatible>` still trips IL2026 warnings. `post-modernize-tuning` §8b.8 removes the redundant call; do not bring it back.
 13. **Source-gen JSON has no reflection fallback.** Every type passed to `JsonSerializer.Serialize`/`Deserialize`/`SerializeToElement` from `src/SignalCli/**` MUST be registered in `Serialization/SignalJsonContext.cs`. The `JsonContextRegistrationTests` suite (added in `post-modernize-tuning` §6.12) reflectively enumerates `InvokeMethodAsync<TRequest,TResponse>` call sites and asserts each type pair is in the context — if your new RPC method adds a DTO that's not in the context, this test fails loudly instead of producing silent `"{}"` payloads at runtime.
 14. **Typed/idempotent state errors.** `SignalEventService.SubscribeAsync` is **idempotent** (post-`subscription-race-safety` §3.7): re-subscribing the same account returns the existing `subscriptionId` instead of throwing a generic `InvalidOperationException` with a locale-dependent Ukrainian message. Argument null/empty checks throw `ArgumentException` (via `ArgumentException.ThrowIfNullOrEmpty`) with the correct `paramName`. When you add new state-error sites elsewhere, mirror this: prefer idempotency over throwing; if you must throw, prefer a derived typed exception (or `ObjectDisposedException`/`ArgumentException` subclasses) over a generic `InvalidOperationException` so callers can pattern-match without inspecting the message text.
+15. **AOT-safe JsonSerializer overloads only in production.** `<IsAotCompatible>true</IsAotCompatible>` is enabled on `src/SignalCli/SignalCli.csproj`. Every `JsonSerializer.Serialize`/`Deserialize`/`SerializeToElement` call in `src/SignalCli/**` MUST use the `JsonTypeInfo<T>`-taking overload, NOT the generic `<T>(_, options)` overload (which is reflection-based and trips IL2026/IL3050). `ISignalCliClient.InvokeMethodAsync<TRequest, TResponse>` requires `JsonTypeInfo<TRequest>` + `JsonTypeInfo<TResponse>` as explicit parameters — consumers pass them from `SignalJsonContext.Default.*`. The only production exception is `AddSignalCli(IConfiguration)` (annotated `[RequiresUnreferencedCode]`+`[RequiresDynamicCode]` because `Bind` uses reflection — AOT-targeting consumers must use `AddSignalCli(Action<SignalCliOptions>?)` instead).
+16. **Integration E2E tests use legacy `Action<Config>` overload.** `Tests/SignalCli.Tests.Integration/SignalCliE2EVersionTests.cs` calls `services.AddSignalCli((Config cfg) => …)` inside `#pragma warning disable CS0618` because the legacy flow runs `Config.CreateDefault()` first — which auto-resolves the bundled-JRE path on Windows/macOS (`Config.ResolveBundledJava`) AND sets `LibDirectory = "SignalCli/lib"` (default) which satisfies `[Required(AllowEmptyStrings = false)]` on `SignalCliOptions`. The `Action<SignalCliOptions>?` overload skips both, so the test would fail with `OptionsValidationException`. **Do not "modernize" the Integration test off the legacy overload** until either (a) Config-shim is fully removed in 4.0, or (b) auto-resolve logic is migrated into the SignalCliOptions-overload path.
+17. **`InternalsVisibleTo` is the seam for source-gen context in tests.** `SignalJsonContext` is `internal` to keep the source-gen layer hidden from consumers (they pass `JsonTypeInfo<T>` from their own contexts if they need custom). Both `Tests/SignalCli.Tests` and `Tests/SignalCli.Tests.Integration` have `InternalsVisibleTo` to access `SignalJsonContext.Default.*` for AOT-safe `InvokeMethodAsync` calls. **Do not make `SignalJsonContext` public** as a workaround for new test access — add the test project to `InternalsVisibleTo` in `src/SignalCli/SignalCli.csproj`.
 
 ## Planning (OpenSpec)
 
@@ -174,6 +199,25 @@ This repo uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for change pla
 
 When you start a new material piece of work, create a new `openspec/changes/<change-name>/` directory with `proposal.md` / `design.md` / `tasks.md` / `specs/<capability>/spec.md`, mirror the structure of an archived change (e.g. `archive/2026-05-24-agent-friendly-modernization/`), and run `openspec validate <change> --strict` before implementing.
 
+**Post-merge archive workflow (canonical):**
+
+```bash
+# 1. After PR merges to main:
+git checkout main && git pull
+# 2. Archive (uses today's date as prefix, --skip-specs matches repo pattern —
+#    we do NOT maintain a top-level openspec/specs/ tree; spec content lives
+#    inside each change directory and moves with it to archive/):
+npx -y @fission-ai/openspec@latest archive <change-name> --yes --skip-specs
+# 3. Commit the file moves:
+git add -A && git commit -m "chore(openspec): archive <change-name> → YYYY-MM-DD"
+# 4. Rebase against coverage-bot auto-commit, then push:
+git pull --rebase origin main && git push origin main
+# 5. Update CLAUDE.md "Implemented, merged, archived" list to add the new entry
+#    with archive-path pointer, in a follow-up commit.
+```
+
+`--skip-specs` is mandatory in this repo: previous changes never synced delta-specs to `openspec/specs/`, and switching now would create two sources of truth. Spec content is read from `openspec/changes/archive/<date>-<name>/specs/<capability>/spec.md` when referenced.
+
 ## Working style (how Claude and the user collaborate on this repo)
 
 These are conventions we landed during the 2.1.0 work. They aren't strict — but they're what worked and what we expect from each other going forward.
@@ -186,6 +230,11 @@ These are conventions we landed during the 2.1.0 work. They aren't strict — bu
 - **Comments and log messages stay in Ukrainian.** Match the codebase's voice when you edit. The CHANGELOG, README, and PR/commit titles can be Ukrainian or English — mirror the surrounding style.
 - **Don't create `*.md` documentation files unless asked.** This `CLAUDE.md`, `README.md`, and `CHANGELOG.md` are the only durable docs we maintain. Working notes belong in OpenSpec change documents.
 - **Don't add `[Obsolete]` shims for code that has no real external consumer** — just delete and document in `CHANGELOG.md`. Reserve the shim convention for things that we know are in user code (e.g. `Version()`, the `Config`-based registration, the deprecated `*Options.CancellationToken`).
+- **Use the `microsoft-docs` MCP for any .NET/Microsoft API question before coding.** Tools: `mcp__microsoft-docs__microsoft_docs_search`, `microsoft_code_sample_search`, `microsoft_docs_fetch`. Examples of past saves: confirmed `AddInMemoryCollection` ships inside `Microsoft.Extensions.Configuration` (no standalone `…Configuration.Memory` package on nuget.org); pinned the AOT-safe `JsonSerializer.SerializeToElement(value, JsonTypeInfo<T>)` / `JsonElement.Deserialize(JsonTypeInfo<T>)` overload signatures before redesigning `InvokeMethodAsync`; confirmed `Microsoft.Extensions.Diagnostics.Testing` is the package id for `FakeLogger<T>`. Use this *before* speculatively adding a `<PackageReference>` or guessing a method name — guessing wastes round-trips on non-existent packages or wrong overloads.
+- **Custom CI workflows: prefer static-check over consumer-build-simulation.** `runtime-smoke.yml` `jre-guard-static-check` `grep`s the `.targets` files for the post-extract `<Error Condition>` guard text + an actionable hint — catches the "guard removed" regression class in 3 seconds on ubuntu-latest. The original attempt to simulate consumer-build by deleting `bin/java` after JRE-package build never triggered the guard (it lives on consumer's `TargetDir`, not the runtime-package's own build). When a CI check needs a real consumer, look for an existing one (e.g. `Tests/SignalCli.Tests.Integration` for native delivery) instead of bolting on a synthetic consumer project.
+- **PR webhook auto-handling: skip purely informational bot comments.** `github-actions[bot]` posts coverage badges (`marocchino/sticky-pull-request-comment`) and `Test Results 0/0` after every CI run; these are NOT review comments and require NO action. Address only real CI failures and human-author comments. CI-failure response loop: read `gh api repos/<owner>/<repo>/actions/jobs/<id>/logs` (individual job log, more reliable than `gh run view`), find root cause, fix, push. Most failures during this PR cluster batched into single fix-commits per CI-cycle.
+- **`git pull --rebase` before every push to `main`.** Automated coverage-badge bot (`stefanzweifel/git-auto-commit-action`) commits to main after every successful CI run with `[skip ci]` — your local main lags within minutes of any merge. Force-pushes are forbidden (CLAUDE.md "Git" section); rebase is the only safe path.
+- **Verify-then-tick is the bookkeeping rule for OpenSpec tasks.** Don't mass-`sed 's/\[ \]/[x]/'` without first confirming each unchecked task is actually shipped. Round-16 audit found `agent-friendly-modernization` with 55 unchecked tasks but CLAUDE.md confirmed "shipped as 2.1.0" — safe to bulk-tick. Generalize: cross-reference CLAUDE.md "Implemented and merged" before sweeping ticks; if status ambiguous, leave for explicit review.
 
 ## Git
 
