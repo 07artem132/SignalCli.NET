@@ -21,7 +21,8 @@ namespace SignalCli.Models;
 /// <c>SignalCliOptionsValidator</c> (D.9). Помилки видно одразу на <c>host.StartAsync()</c>.
 /// </para>
 /// <para>
-/// Для backward compat існує застарілий <see cref="Config"/>; він буде видалений у 3.0.
+/// deprecated-shim-removal §5 (v4.0): єдиний configuration surface — legacy <c>Config</c>-shim
+/// видалено разом з його `AddSignalCli(Action&lt;Config&gt;?)` overload'ом.
 /// </para>
 /// </remarks>
 public sealed class SignalCliOptions
@@ -107,30 +108,5 @@ public sealed class SignalCliOptions
     public IReadOnlyDictionary<string, string> EnvironmentVariables { get; set; } =
         new Dictionary<string, string>();
 
-    /// <summary>
-    /// Конвертує <see cref="SignalCliOptions"/> у legacy-<see cref="Config"/>
-    /// (внутрішні сервіси досі споживають <see cref="Config"/> як singleton).
-    /// </summary>
-    /// <remarks>audit N7: internal compat-shim — зникне у 3.0 разом із <see cref="Config"/>.</remarks>
-#pragma warning disable CS0618 // Config is obsolete — internal compat-shim, removed in 3.0
-    internal Config ToConfig() => new()
-    {
-        AppHome = AppHome,
-        LibDirectory = LibDirectory,
-        JavaExecutable = JavaExecutable ?? string.Empty,
-        SignalCliExecutable = SignalCliExecutable,
-        CliLogLevelCli = CliLogLevelCli,
-        LogFileCli = LogFileCli,
-        StoragePathCli = StoragePathCli,
-        UseManualReceiveMode = UseManualReceiveMode,
-        MaxRestartAttempts = MaxRestartAttempts,
-        HealthCheckIntervalSeconds = HealthCheckIntervalSeconds,
-        HealthCheckTimeoutSeconds = HealthCheckTimeoutSeconds,
-        RestartDelaySeconds = RestartDelaySeconds,
-        StopTimeoutSeconds = StopTimeoutSeconds,
-        RequestTimeoutSeconds = RequestTimeoutSeconds,
-        RestartWindowSeconds = RestartWindowSeconds,
-        EnvironmentVariables = EnvironmentVariables,
-    };
-#pragma warning restore CS0618
+    // deprecated-shim-removal §5: ToConfig() shim видалено разом із Config-типом.
 }

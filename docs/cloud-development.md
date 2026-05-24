@@ -11,7 +11,7 @@
 ## Що робить hook
 
 1. Ставить **`.NET 10 SDK`** через apt (`dotnet-sdk-10.0` зі штатних `noble-updates`). Базовий cloud-образ Ubuntu 24.04 не має dotnet — без цього кроку нічого не побудується.
-2. `dotnet restore Tests/SignalCli.Tests/SignalCli.Tests.csproj` — тягне NuGet для тестового проєкту і референсованого `src/SignalCli`. Кеш переживає між сесіями.
+2. `dotnet restore Tests/SignalCli.Tests/SignalCli.Tests.csproj` — тягне NuGet для тестового проєкту і референсованого `src/SignalCli`. Якщо контейнер зберігає `~/.nuget/packages` між сесіями — кеш переживає; у строго ефемерному середовищі restore виконується щоразу заново.
 3. `dotnet build src/SignalCli/SignalCli.csproj` — sanity-перевірка, що SDK + код у робочому стані. На цьому етапі warm-up завершується.
 
 ### Що hook свідомо НЕ робить
@@ -20,7 +20,7 @@
   ```bash
   dotnet build SignalCli.sln
   ```
-- **НЕ запускає тести.** 152 unit-тести виконуються секунди — запускайте з сесії, щоб бачити вивід.
+- **НЕ запускає тести.** 215 unit-тестів виконуються секунди — запускайте з сесії, щоб бачити вивід.
 - **НЕ робить NuGet vulnerability audit.** У warm-up передається `/p:NuGetAudit=false` — приватний GitHub-feed (`nuget.pkg.github.com/07artem132/`) у `NuGet.Config` потребує токен. Аудит вразливостей робиться окремим кроком у CI.
 
 ## Поширені команди в сесії
@@ -29,7 +29,7 @@
 # Швидко (тільки бібліотека)
 dotnet build src/SignalCli/SignalCli.csproj
 
-# Усі юніт-тести (~152, секунди)
+# Усі юніт-тести (~215, секунди)
 dotnet test  Tests/SignalCli.Tests/SignalCli.Tests.csproj
 
 # Конкретні тести
@@ -46,7 +46,8 @@ dotnet test  Tests/SignalCli.Tests.Integration/SignalCli.Tests.Integration.cspro
 
 Hook потребує:
 
-- `archive.ubuntu.com` / `security.ubuntu.com` — для `apt-get install dotnet-sdk-10.0`.
+- `archive.ubuntu.com` / `security.ubuntu.com` — для `apt update` і базових пакетів.
+- `packages.microsoft.com` — для `dotnet-sdk-10.0` (allowlisted у нашій container-policy; див. CLAUDE.md "Restoring packages in a sandboxed env").
 - `api.nuget.org` — для `dotnet restore`.
 
 Для **повної** збірки `SignalCli.sln` додатково:
@@ -59,7 +60,7 @@ Hook потребує:
 ## Якщо потрібно змінити hook
 
 - Зміни — у `.claude/hooks/session-start.sh`. Він **синхронний** (блокує старт сесії, доки не завершиться) — це гарантує, що Claude не починає роботу, поки `dotnet` не готовий.
-- Async-режим (`{"async": true, "asyncTimeout": <ms>}` у першому рядку stdout) теж підтримується — старт сесії стає миттєвим, але з'являється гонка: агент може спробувати запустити тести до того, як restore завершився. Перемикайтеся на async лише якщо це вас не лякає.
+- Async-режим (`{"async": true, "asyncTimeout": <ms>}` у першому рядку stdout) теж підтримується — старт сесії стає миттєвим, але з'являється конкретна гонка: `dotnet test`/`dotnet build`, викликаний агентом у перші секунди, може стартувати до завершення `dotnet restore` і впасти з `NU1102` ("Unable to find package") або `MSB1009` на відсутньому `obj/project.assets.json`. Перемикайтеся на async лише якщо готові розрізняти ці помилки від справжніх.
 - Логи hook видно у виводі сесії під заголовком `SessionStart`.
 
 ## Observability (post-modernize-tuning §11)

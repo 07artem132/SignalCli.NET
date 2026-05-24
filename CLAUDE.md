@@ -49,6 +49,76 @@ For Claude Code on the Web sessions, see [`docs/cloud-development.md`](docs/clou
 
 Patterns in use: Dependency Injection, Options pattern (`IOptions<TOptions>` + source-gen validation), Hosted Services / BackgroundService, Factory, Adapter/Wrapper (`IProcess`), Builder (`*Options.Builder`), Provider, Observer/Rx + async streams via `Channel<T>`, Facade, State Machine, Watchdog, Source-generated logging.
 
+## signal-cli protocol behavior we depend on
+
+These are facts about the *upstream* signal-cli Java app that our wrapper relies on. Each is cited
+to a specific signal-cli source file at commit `bda4e7f` (after 0.14.3). Re-verify against newer
+signal-cli releases when bumping the pinned version in `SignalCli.runtime.csproj`.
+
+- **Graceful shutdown trigger = stdin EOF or SIGTERM/SIGINT.** signal-cli has no `exit` JSON-RPC
+  method and does not read literal text on stdin — every stdin line is parsed as JSON
+  (`JsonRpcReader.java:59-75`). Our wrapper closes stdin (`StandardInput.Close()`) in
+  `StopProcessInternalAsyncNoLock`; signal-cli's reader-loop terminates naturally on EOF, its
+  dispatcher's finally-block clears subscriptions (`SignalJsonRpcDispatcherHandler.java:212-214`),
+  and the JVM shuts down cleanly. Signal handlers (SIGINT/SIGTERM via `sun.misc.Signal` —
+  `Shutdown.java:24-25`) are the second valid trigger but Windows has no POSIX signals, so we
+  prefer stdin-close as the cross-platform path. **Critical rule:** never re-add
+  `WriteLineAsync("exit")` — literal "exit" produces `-32700 Parse error` and the process keeps
+  running. See `signal-cli-protocol-alignment` capability `graceful-shutdown-fix` for history.
+
+- **Stdout = pure JSON-RPC, line-flushed.** signal-cli's `JsonWriterImpl.write` calls
+  `writer.flush()` after every JSON line (`JsonWriterImpl.java:30`), so our `ReadLineAsync` loop
+  observes each message promptly even though Java's default for non-TTY stdout is block-buffered.
+  signal-cli never emits banner/version/log output on stdout — all diagnostics go to stderr via
+  SLF4J/Logback. The `UnknownMessage` log line in our `ProcessMessageAsync` should fire
+  approximately never in practice; if it does, suspect protocol drift in a newer signal-cli release.
+
+- **Parallel request processing → match by `id`, not by order.** signal-cli's `JsonRpcReader`
+  uses `Executors.newVirtualThreadPerTaskExecutor()` to handle requests
+  (`JsonRpcReader.java:58`). Response arrival order is non-deterministic — multiple in-flight
+  requests are dispatched to virtual threads that complete in execution-time order, not request
+  order. Our `JsonRpcClient._pendingRequests : ConcurrentDictionary<string, TaskCompletionSource>`
+  keyed by request `id` is mandatory; never refactor to a queue or order-based correlation.
+
+- **`subscribeReceive` is NOT idempotent at the protocol level.** signal-cli returns a fresh ID
+  via `AtomicInteger.getAndIncrement()` for every call
+  (`SignalJsonRpcDispatcherHandler.java:143`). Our idempotency lives entirely in
+  `SignalEventService._pendingSubscribes` (reservation TCS pattern). If our code path ever
+  bypasses the reservation, signal-cli delivers duplicate `receive` notifications for each
+  subscription ID — and unsubscribing one ID leaves the others active.
+
+- **Jackson `maxStringLength = 20_000_000` PER STRING TOKEN.** signal-cli uses Jackson 2.20.2
+  (`gradle/libs.versions.toml:10`) with `StreamReadConstraints` defaults — does NOT override
+  `maxStringLength` (Util.java:51-56 creates the ObjectMapper minimally). Our
+  `MaxInlineEncodedAttachmentBytes = 12_000_000` (after `attachment-threshold-margin`) keeps the
+  base64-encoded attachment string ≤ 16M with 4M of margin for the rest of the `send` request.
+  Total-JSON-line length is also checked in `JsonRpcClient.SendRequestAsync` against 20M (a
+  separate, looser check) — both are needed because the constraints address different limits
+  (per-token vs per-line).
+
+- **Error codes outside JSON-RPC 2.0 standard.** signal-cli emits these in addition to
+  `-32600..-32603` and `-32700` (`SignalJsonRpcCommandHandler.java:35-280`):
+  - `-1` `UserError` (bad input, invalid number)
+  - `-3` `IoError` (file system / network)
+  - `-4` `UntrustedIdentity` (key verification failure) — surfaced as `UntrustedIdentityException`
+  - `-5` `RateLimit` (server throttle) — surfaced as `RateLimitException`
+  - `-6` `CaptchaRejected`
+  All errors are sent on **stdout** (same channel as success responses), never stderr. The
+  typed surface is `SignalCli.Exceptions.JsonRpcErrorCode` enum + `JsonRpcException.KnownCode`
+  property; `RateLimitException` and `UntrustedIdentityException` are the two derived types
+  for high-leverage codes.
+
+- **Java 25 requirement.** signal-cli 0.14.0+ requires JDK 25 (`build.gradle.kts:7-8`).
+  `signal-cli 0.14.3` (our pinned version in `SignalCli.runtime.csproj`) is the first 0.14.x.
+  Bumping signal-cli later than 0.14.x without bumping JDK fails at JVM startup with
+  `UnsupportedClassVersionError`. The bundled-JRE packages
+  (`SignalCli.Runtime.Jre.{win-x64,osx-arm64}`) pin Temurin 25 SHA-256 in their csproj.
+
+**When bumping `<SignalCliVersion>` in `SignalCli.runtime.csproj`:** re-verify each of the
+seven facts above against the new signal-cli source. The PR description SHALL include a one-line
+confirmation that these facts were re-verified, even if zero edits resulted. Discrepancies SHALL
+be resolved either by adapting the wrapper or by updating this section + the commit citation.
+
 ## Conventions (match the existing code)
 
 - Modern C#: file-scoped namespaces, primary constructors, records for DTOs, `required`/collection expressions where natural, `Func<>`/`Action<>` over custom delegates.
@@ -97,6 +167,7 @@ The patterns below are not aspirational. They were rolled out across the codebas
 #### Background loops + time
 
 - **Periodic workers are `BackgroundService` + `PeriodicTimer(interval, TimeProvider)`.** No raw `Task.Run` + `while (!ct.IsCancellationRequested) { await Task.Delay(...); }` patterns. `SignalCliHealthMonitor` is the canonical reference.
+- **.NET 10 changed `BackgroundService.ExecuteAsync` to run entirely on a background thread** ([compatibility breaking change](https://learn.microsoft.com/dotnet/core/compatibility/extensions/10.0/backgroundservice-executeasync-task)). The synchronous prefix no longer blocks other services starting. Consequences: (1) do NOT place startup-blocking initialization at the top of `ExecuteAsync` expecting `StartAsync`-semantics — use the constructor or a `StartAsync` override; (2) order-dependent boot work goes through `IHostedLifecycleService.StartingAsync`/`StartedAsync`. `SignalCliHealthMonitor.ExecuteAsync` is already compliant — first statement is `new PeriodicTimer(...)`, immediately followed by `await timer.WaitForNextTickAsync(...)`, no sync prefix.
 - **`TimeProvider` consistency inside a class:** if a class accepts a `TimeProvider`, then *every* wait it performs goes through it: `Task.Delay(_, _, TimeProvider, ct)`, `new CancellationTokenSource(timeout, TimeProvider)` (the .NET 8+ overload — [`What is TimeProvider?` — *Use with .NET*](https://learn.microsoft.com/dotnet/standard/datetime/timeprovider-overview#use-with-net) explicitly lists this constructor as TimeProvider-aware), `TimeProvider.CreateTimer(...)`, `new PeriodicTimer(interval, TimeProvider)`. No mixing real and virtual clocks in one class. `SignalCliHostedService.ScheduleRestartWindowReset` uses `_timeProvider.CreateTimer(...)`, not `Task.Run(() => Task.Delay(...))`. `SignalCliHealthMonitor.PingCliAsync` uses `new CancellationTokenSource(timeout, _timeProvider)` — this is the canonical site; both `JsonRpcClient.InvokeMethodAsync` and `SignalCliHostedService.StopProcessInternalAsyncNoLock` will follow the same pattern after `post-modernize-tuning` §1.7 / §8a.7. **Do not introduce a new `new CancellationTokenSource(TimeSpan)` (parameterless-of-TimeProvider) inside a class that already injects a `TimeProvider`** — pass `_timeProvider` to the overload.
 - **Tests under `SignalCliHealthMonitor/` and `SignalCliHostedService/Restart*/` must not call `Task.Delay(>10ms)`.** Use `FakeTimeProvider.Advance(...)`. If you find yourself wanting to wait for real time in those suites, you are reaching for the wrong tool.
 
@@ -125,6 +196,19 @@ The patterns below are not aspirational. They were rolled out across the codebas
 - **Test-local source-gen contexts** for test-only DTOs. `TestSerializationContext` in `Tests/SignalCli.Tests/TestSerializationContext.cs` registers `TestProbeRequest`/`TestProbeResponse` for `JsonRpcClientTests` — separate context, does NOT pollute production `SignalJsonContext`. Pattern: when a new test needs typed JSON probes, extend the test-local context, not the production one.
 - **Wrapper-record + custom `JsonConverter` for List-shaped responses.** `ListAccountsResponse`/`ListGroupsResponse` are `record(IReadOnlyList<T> Items) : IReadOnlyList<T>` with `[JsonConverter]` that reads/writes a flat JSON array (delegating to `JsonSerializer.Deserialize<List<T>>(ref reader, JsonTypeInfo<List<T>>)`). Both the wrapper type AND `List<T>` MUST be in source-gen context. See `Models/Signal/Accounts/ListAccountsResponse.cs` for canonical shape.
 - **`IHostedLifecycleService` + `IAsyncDisposable`** on `SignalCliHostedService` (post-`hosting-modernization` §8a.2/§8a.3). Phase-methods are no-op `Task.CompletedTask`; `DisposeAsync` drains `_operationLock.WaitAsync` with 2s `TimeProvider`-aware timeout, then runs shared `DisposeCore`. **Critical rule #9 enforced**: `Dispose()` is sync-only with its own implementation (NOT `DisposeAsync().GetAwaiter().GetResult()`).
+- **`AddSignalCli(IConfiguration)` is AOT-safe via the configuration-binding source-generator** (`<EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>` in `SignalCli.csproj`; lands in `audit-followup-2026` capability `configuration-binder-aot`). Before that change ships, the overload bears `[RequiresUnreferencedCode]`+`[RequiresDynamicCode]` because `OptionsBuilder.Bind` uses reflection. After it ships, both overloads (`Action<SignalCliOptions>` and `IConfiguration`) are AOT-safe; the AOT-warning XMLDoc paragraph is removed.
+- **`VerifyReferenceTrimCompatibility` / `VerifyReferenceAotCompatibility` are deliberately NOT enabled** in `SignalCli.csproj`. Both flags warn about transitive dependencies that lack `IsTrimmable`/`IsAotCompatible` metadata (Microsoft *Prepare .NET libraries for trimming*). Our two non-trivial transitive dependencies — `System.Reactive` (not `IsTrimmable`-annotated as of 6.0.1) and `JetBrains.Annotations` (build-time only, PrivateAssets="all") — would flood the build with warnings without aiding correctness. If a future minor of `System.Reactive` ships `IsTrimmable`, opt in.
+
+#### Regression guards (reflection-based defensive tests)
+
+These tests pin CLAUDE.md-declared invariants at build time. Each is small (~50-100 LOC), reflection-based, and runs in the unit test suite. **When you introduce a new "do not regress" rule in CLAUDE.md, prefer adding a matching reflection-based guard over relying on narrative discipline.**
+
+- **`JsonContextRegistrationTests`** (shipped in `post-modernize-tuning` §6.12) — every `*Parameters` / `*Response` DTO in `Models/Signal/*` MUST be registered in `SignalJsonContext`. Otherwise the source-gen-only JSON path throws `NotSupportedException` at runtime.
+- **`ObsoleteMessageConsistencyTests`** (lands in `audit-followup-2026` capability `regression-guards`) — every `[Obsolete("...; will be removed in N.0")]` message has N strictly greater than the current package major. Drift is the M-1 audit finding made impossible going forward.
+- **`EventIdBlockTests`** (lands in `audit-followup-2026`) — every `[LoggerMessage(EventId = X)]` lies inside the block reserved for its `*Log.cs` class per the "Logging" table above. A new `[LoggerMessage(EventId = 250)]` on `JsonRpcClientLog` (whose block is 300-399) fails the build.
+- **`PublicApiSurfaceTests`** (lands in `audit-followup-2026`) — baseline-diff of every public type/member of `SignalCli.dll`. Intentional public-API changes update the baseline in the same PR; accidental ones are caught immediately.
+
+Privacy-guard tests (`PrivacyLoggingTests`, `ObservabilityPrivacyTests` with `MeterTagValues_AreOnlyKnownEnumLiterals`) are part of this family too — they pin Critical rule #1.
 
 #### Mass-edit safety
 
@@ -150,12 +234,25 @@ The patterns below are not aspirational. They were rolled out across the codebas
 
 ### Backward compatibility convention
 
-When we deprecate API, the rule is **one major version of `[Obsolete]` shim** before removal. Already removed in **3.0** (see `CHANGELOG.md [3.0.0]`): `Version()`, `AddSignalCli(Action<Config>?)`-shim arg/property removal-shims, `*Options.CancellationToken`+`WithCancellationToken`. Currently in flight (will be removed in **4.0**):
+When we deprecate API, the rule is **one major version of `[Obsolete]` shim** before removal.
 
-- `AddSignalCli(Action<Config>?)` — Config itself stays as `[Obsolete]` shim because Integration E2E tests still depend on `Config.CreateDefault()`-auto-resolve of bundled-JRE. Tests use `#pragma CS0618 disable` around the call site. Real production consumers should migrate to `AddSignalCli(Action<SignalCliOptions>?)` or `AddSignalCli(IConfiguration)`.
-- `ISignalCliClient.InvokeMethodAsync<TResponse, TRequest>` (old generic-param order) — replaced by `<TRequest, TResponse>` per JsonSerializer.Deserialize<TValue>-convention; **no shim possible** for generic-arity-but-same-signature reorders (C# overload resolution can't disambiguate).
+**Already removed in 3.0** (see `CHANGELOG.md [3.0.0]`):
+- `*Options.CancellationToken` field + `WithCancellationToken` builder method on `TextMessageOptions`/`AttachmentMessageOptions`/`StickerMessageOptions` (round 9 §4.7).
+- `ISignalMessage.{SendText,SendAttachment,SendSticker}MessageAsync` returning `Task<List<SendMessageResponse>>` (now `Task<SendMessageResponse>`, round 9 §4.23-§4.24).
+- `InvokeMethodAsync<TResponse, TRequest>` old generic-param order (round 9 §4.27) — no shim possible (C# overload resolution can't disambiguate generic-arity reorders).
+- `FinishLinkResponse.number`/`SubscribeReceiveResponse.id` lowercase wire shape — replaced with PascalCase properties + `[JsonPropertyName]`.
 
-When adding a new deprecation, mirror this shape: real new API + `[Obsolete("Use Y; will be removed in 4.0")]` shim that delegates, plus a `CHANGELOG.md` entry under "Інше". Internal call sites are migrated immediately; external call sites get one major release of grace. **Exception:** when the shim is technically impossible (generic-order, ctor-overload-ambiguity per `JsonRpcException` §4.22, etc.), do the pure removal and document the impossibility in the CHANGELOG migration note.
+**Currently in flight (will be removed in 4.0):**
+- `ISignalCliClient.Version()` — DIM shim delegating to `VersionAsync()`. Still present in [`ISignalCliClient.cs:54-57`](src/SignalCli/Interfaces/SignalCli/ISignalCliClient.cs).
+- `ServiceCollectionExtensions.AddSignalCli(Action<Config>?)` — legacy overload. Still present in [`ServiceCollectionExtensions.cs:123-139`](src/SignalCli/Extensions/ServiceCollectionExtensions.cs). Integration E2E tests still depend on `Config.CreateDefault()`-auto-resolve of bundled-JRE; tests use `#pragma CS0618 disable` around the call site. Real production consumers should migrate to `AddSignalCli(Action<SignalCliOptions>?)` or `AddSignalCli(IConfiguration)`.
+- `SignalCli.Models.Config` itself — `[Obsolete]` class. Stays as long as the `Action<Config>?` overload + the `Config.ToOptions` / `SignalCliOptionsExtensions.ToOptions(Config)` / `ServiceCollectionExtensions.CopyFrom` triplet stay (see "Three-site duplication trap" below).
+- `ISignalAccounts.ListAccounts` / `SyncAccount` / `ISignalDevices.StartLink` / `FinishLink` / `ISignalGroups.ListGroups` — Async-suffix-less shim methods, kept as `[Obsolete]` DIMs per round 9 §4.x.
+
+**Doc-sync invariant.** Every `[Obsolete("...; will be removed in N.0")]` attribute message — N MUST be strictly greater than the current package major version. The same applies to Ukrainian XML doc / inline comments announcing "буде видалений у N.0" / "зникне у N.0" / "removed in N.0". Drift here lies to consumers and trains AI agents to disbelieve `[Obsolete]` lifetime claims. The `2026-05-24` audit found 6 sites still saying "3.0" in 3.0.0 source — `audit-followup-2026` capability `obsolete-doc-sync` corrects them and lands `ObsoleteMessageConsistencyTests` so drift becomes a build failure.
+
+**Three-site duplication trap (in flight to 4.0).** Adding a new property to `SignalCliOptions` today requires updating three near-mirror field-copiers — `Config.ToOptions()`, `SignalCliOptionsExtensions.ToOptions(Config)`, and `ServiceCollectionExtensions.CopyFrom`. Collapsing them into one mapper now is throwaway work because all three disappear with `Config` in 4.0. Until then, when you add a property, update all three. There is intentionally no reflective drift-guard for this — the risk is bounded by the 4.0 cleanup horizon.
+
+When adding a new deprecation, mirror this shape: real new API + `[Obsolete("Use Y; will be removed in N.0")]` shim that delegates, plus a `CHANGELOG.md` entry under "Інше". Internal call sites are migrated immediately; external call sites get one major release of grace. **Exception:** when the shim is technically impossible (generic-order, ctor-overload-ambiguity per `JsonRpcException` §4.22, etc.), do the pure removal and document the impossibility in the CHANGELOG migration note.
 
 ## Critical rules (do not regress — these are audit findings + post-2.1.0 invariants)
 
@@ -176,6 +273,24 @@ When adding a new deprecation, mirror this shape: real new API + `[Obsolete("Use
 15. **AOT-safe JsonSerializer overloads only in production.** `<IsAotCompatible>true</IsAotCompatible>` is enabled on `src/SignalCli/SignalCli.csproj`. Every `JsonSerializer.Serialize`/`Deserialize`/`SerializeToElement` call in `src/SignalCli/**` MUST use the `JsonTypeInfo<T>`-taking overload, NOT the generic `<T>(_, options)` overload (which is reflection-based and trips IL2026/IL3050). `ISignalCliClient.InvokeMethodAsync<TRequest, TResponse>` requires `JsonTypeInfo<TRequest>` + `JsonTypeInfo<TResponse>` as explicit parameters — consumers pass them from `SignalJsonContext.Default.*`. The only production exception is `AddSignalCli(IConfiguration)` (annotated `[RequiresUnreferencedCode]`+`[RequiresDynamicCode]` because `Bind` uses reflection — AOT-targeting consumers must use `AddSignalCli(Action<SignalCliOptions>?)` instead).
 16. **Integration E2E tests use legacy `Action<Config>` overload.** `Tests/SignalCli.Tests.Integration/SignalCliE2EVersionTests.cs` calls `services.AddSignalCli((Config cfg) => …)` inside `#pragma warning disable CS0618` because the legacy flow runs `Config.CreateDefault()` first — which auto-resolves the bundled-JRE path on Windows/macOS (`Config.ResolveBundledJava`) AND sets `LibDirectory = "SignalCli/lib"` (default) which satisfies `[Required(AllowEmptyStrings = false)]` on `SignalCliOptions`. The `Action<SignalCliOptions>?` overload skips both, so the test would fail with `OptionsValidationException`. **Do not "modernize" the Integration test off the legacy overload** until either (a) Config-shim is fully removed in 4.0, or (b) auto-resolve logic is migrated into the SignalCliOptions-overload path.
 17. **`InternalsVisibleTo` is the seam for source-gen context in tests.** `SignalJsonContext` is `internal` to keep the source-gen layer hidden from consumers (they pass `JsonTypeInfo<T>` from their own contexts if they need custom). Both `Tests/SignalCli.Tests` and `Tests/SignalCli.Tests.Integration` have `InternalsVisibleTo` to access `SignalJsonContext.Default.*` for AOT-safe `InvokeMethodAsync` calls. **Do not make `SignalJsonContext` public** as a workaround for new test access — add the test project to `InternalsVisibleTo` in `src/SignalCli/SignalCli.csproj`.
+18. **JSON deserialization hardening.** `SignalJson.Options` SHALL set `AllowDuplicateProperties = false` (new .NET 10 `JsonSerializerOptions` flag; lands in `audit-followup-2026` capability `json-hardening`). A signal-cli response with duplicate keys is a protocol violation per JSON-RPC 2.0 and MUST fail loudly with `JsonException`, never silently follow last-wins semantics. We deliberately do NOT enable `JsonSerializerOptions.Strict`-preset because it implies `JsonUnmappedMemberHandling.Disallow`, which is incompatible with signal-cli's habit of adding new envelope fields between versions (forward-compat).
+
+## Future development guardrails (audit categories)
+
+This list captures CLAUDE.md-declared invariants that DO NOT yet have an executable regression-guard test. PRs that touch the relevant code SHOULD add the matching test (rather than waiting for an audit pass to discover the gap). When `audit-followup-2026` is archived, the entries marked `(in audit-followup-2026 §X)` move to "shipped" and stop being a TODO.
+
+- **JSON-RPC standard error codes** (`-32601` Method not found, `-32700` Parse error, `error.data` payload preservation): `JsonRpcErrorTests` (in `audit-followup-2026` §6.a).
+- **Attachment filename edge cases:** NUL byte, U+202E (RIGHT-TO-LEFT OVERRIDE), exact boundary at `MaxInlineEncodedAttachmentBytes` (= 15 000 000), `SaveToTempFile` re-entry — `AttachmentEntryTests` (in `audit-followup-2026` §6.b).
+- **`AtomicCounter` int32 wrap-around:** explicit assertion that `int.MaxValue → int.MinValue` is `unchecked` (no `OverflowException`) — `UtilityEdgeCaseTests` (in `audit-followup-2026` §6.c).
+- **Observability counters fire on real events:** `signalcli.events.dropped` increments by exact overflow count, `signalcli.rpc.duration` records `> 0` on happy path, `signalcli.process.restarts{trigger=force|crash|health}` ticks per trigger — `ObservabilityCounterTests` (in `audit-followup-2026` §6.d). Today `ObservabilityPrivacyTests` only assert *absence* of PII, not counter increment.
+- **State-machine no-op paths:** `ForceRestartAsync` skipped in `Stopping`/`Stopped`/`NotStarted` states (in `audit-followup-2026` §6.f).
+- **Channel-capacity boundary:** `NotificationChannelCapacity = 1` (minimum) still FIFO-delivers (in `audit-followup-2026` §6.g).
+- **DI registration idempotency:** repeated `AddSignalCli` does NOT override the first call's options nor add duplicate descriptors (in `audit-followup-2026` §6.h).
+- **`EnvironmentVariables` snapshot semantics:** post-start external-map mutation does NOT leak into running process (in `audit-followup-2026` §6.h).
+- **`JsonRpcResponse` defensiveness:** when both `result` AND `error` are present (a protocol violation), error wins → `JsonRpcException` (in `audit-followup-2026` §6.i).
+- **Subscription leader cancellation propagation:** when leader `SubscribeAsync(account, ct)` cancels mid-RPC, the documented follower outcome is pinned (in `audit-followup-2026` §6.e).
+
+**Rule for new PRs:** when you find an invariant CLAUDE.md declares but no test pins, choose ONE — (a) write the test in your PR, (b) add the gap to this catalog, (c) explicitly justify why testing is impractical (and add an `// CLAUDE.md guardrails: untested invariant` source comment at the relevant site).
 
 ## Planning (OpenSpec)
 
@@ -195,7 +310,35 @@ This repo uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for change pla
   - `async-stream-events`: each event kind on `ISignalEventService` has a paired `IAsyncEnumerable<T>` method (`TextMessagesAsync(ct)`, …) on top of bounded `Channel<T>` (1024, DropOldest, single-reader).
 - `post-modernize-tuning` (**3.0.0**, archived 2026-05-24) — 14 capabilities including AOT readiness (`<IsAotCompatible>true</IsAotCompatible>` with `JsonTypeInfo<T>`-based `InvokeMethodAsync` redesign), observability (`ActivitySource`/`Meter` `"SignalCli.NET"` + optional `SignalCli.NET.HealthChecks` package), RPC back-pressure (bounded notification channel with `FullMode=Wait`), state-machine thread-safety (snapshot-then-emit, no reentrant deadlock), subscription race-safety (reservation TCS pattern; idempotent `SubscribeAsync`), hosting modernization (`IHostedLifecycleService` + `IAsyncDisposable` on `SignalCliHostedService` with 2s drain), options-validation tightening (`IConfiguration`-overload), supply-chain hardening (`actions/*` SHA-pinned, csproj-anchored versions), v3.0 breaking-API wave (PascalCase responses, single `SendMessageResponse` return, generic-param reversal, `*Options.CancellationToken` removed, wrapper records for `ListAccountsResponse`/`ListGroupsResponse`, `JsonRpcException` canonical code -32603). 215 unit tests + Linux runtime-smoke CI workflow.
 
-**Pending changes:** _(none)_ — `openspec/changes/` has only the `archive/` subdirectory; start a new change to add work.
+**Pending changes:**
+- `audit-followup-2026` — post-3.0.0 follow-up after the 2026-05-24 .NET 10 / agent-friendly audit. **7 capabilities, lands as v3.0.1:**
+  - `obsolete-doc-sync` — 6 stale `[Obsolete("...; will be removed in 3.0")]` strings (codebase already IS 3.0.0) → "4.0" + CLAUDE.md "Backward compatibility convention" reconcile (this section).
+  - `json-hardening` — `JsonSerializerOptions.AllowDuplicateProperties = false` (new .NET 10 flag).
+  - `configuration-binder-aot` — `<EnableConfigurationBindingGenerator>true</…>` removes `[RequiresUnreferencedCode]`/`[RequiresDynamicCode]` from `AddSignalCli(IConfiguration)`.
+  - `regression-guards` — three reflection-based tests (`ObsoleteMessageConsistencyTests`, `EventIdBlockTests`, `PublicApiSurfaceTests`) that pin CLAUDE.md invariants at build.
+  - `integration-tests-expansion` — 5 new E2E tests (start/stop/restart cycle, external-kill auto-recovery, health-monitor cadence over real time, mid-flight DisposeAsync orphan check, `AddSignalCli(IConfiguration)` end-to-end).
+  - `edge-case-coverage` — 12 unit tests covering JSON-RPC error codes, attachment filename edge cases, AtomicCounter wrap, counter firing, state-machine no-op paths, channel-cap minimum, DI idempotency, EnvironmentVariables snapshot, `JsonRpcResponse` both-result-and-error defensiveness.
+  - `low-priority-polish` — remove misleading `(Action<SignalCliOptions>)` cast in `Example/SignalCli.Example/Program.cs`; add .NET 10 `BackgroundService.ExecuteAsync` behavior note to "Background loops + time".
+  - `addsignalcli-idempotency-fix` *(added 2026-05-24 during landing — bug discovered when `AddSignalCli_CalledTwice_SecondCallIsNoOp` test failed)* — `ServiceCollectionExtensions.AddSignalCli` guard `services.Any(d => d.ServiceType == typeof(IOptions<SignalCliOptions>))` never matches because `IOptions<T>` is registered open-generic, not concrete. Repeated `AddSignalCli` calls (a) re-run the configure delegate (second-wins on options), (b) add 3 duplicate `IHostedService` descriptors. `CHANGELOG.md [3.0.0]` idempotency claim was over-broad. Fix: private sentinel-type `SignalCliRegistrationMarker` registered on first call, checked by guard on subsequent calls. 3 new tests pin the contract.
+  - `badge-url-fix` *(added 2026-05-24 after user noticed broken `http://.github/badges/branches.svg` URL)* — coverage badges in `README.md:2` use relative paths `.github/badges/lines.svg` that work only on github.com's own markdown renderer; other renderers (NuGet.org, IDE markdown previewers, third-party gallery sites) interpret `.github` as a hostname → produce `http://.github/badges/<name>.svg`. Three coordinated fixes in a single commit: (1) absolute `https://raw.githubusercontent.com/07artem132/SignalCli.NET/main/.github/badges/...` URLs in `README.md`, (2) same in 4 emission sites of `.github/workflows/dotnet-desktop.yml` (otherwise auto-commit hook reverts the README fix on next CI run), (3) `<PackageReadmeFile>README.md</PackageReadmeFile>` + `<None Include="..\..\README.md" Pack="true" PackagePath="\" />` in `SignalCli.csproj` to ship README in NuGet pack (currently the build warns *"package is missing a readme"*).
+- Plan: `openspec/changes/audit-followup-2026/`. Validated `--strict`. Expected test count after merge: **238** (215 today + ~20 new + 3 idempotency + 0 badge-url-fix is doc/CI only).
+
+- `deprecated-shim-removal` — **4.0 cleanup** (lands after `audit-followup-2026`). Executes the removals promised "in flight to 4.0" in the "Backward compatibility convention" section above. **5 capabilities, lands as v4.0.0 (breaking — per SemVer, removal of public API ⇒ major bump):**
+  - `config-auto-resolve-migration` *(prerequisite — must land first within the change)* — new `JavaPathResolver` internal class + new public `services.AddSignalCliWithBundledRuntimeDefaults(opts => …)` extension. Integration E2E tests migrate off `Action<Config>` overload; all `#pragma warning disable CS0618` blocks disappear from `Tests/SignalCli.Tests.Integration/`.
+  - `remove-version-dim` — delete `ISignalCliClient.Version()` DIM shim.
+  - `remove-async-suffix-shims` — delete `ListAccounts` / `SyncAccount` / `StartLink` / `FinishLink` / `ListGroups` shim DIMs on `ISignalAccounts` / `ISignalDevices` / `ISignalGroups`.
+  - `remove-legacy-addsignalcli-overload` — delete `AddSignalCli(Action<Config>?)` overload + `ToOptions(Config)` / `ToIOptions(Config)` adapters + `CopyFrom` helper.
+  - `remove-config-type` — delete `SignalCli.Models.Config` entirely; `ToProcessConfig` becomes self-contained on `SignalCliOptionsExtensions`. The "three-site duplication trap" documented above is eliminated. `ConfigTests` migrates to `SignalCliOptionsExtensionsTests` + `JavaPathResolverTests` with assertions verbatim — protocol-level behavior pinning preserved.
+- Plan: `openspec/changes/deprecated-shim-removal/`. Validated `--strict`. **Dependency:** `audit-followup-2026` MUST land first (this change updates the `PublicApiSurfaceTests` baseline that `audit-followup-2026` creates).
+- **SemVer note.** The user's working name for this change is *«умовний 3.1»*; the design.md and tasks.md document explicitly that this is **v4.0.0** per SemVer. The release-label decision happens at archive time.
+
+- `signal-cli-protocol-alignment` — **upstream protocol audit findings** (independent of other in-flight work). Found during the 2026-05-24 investigation of `https://github.com/AsamK/signal-cli` cloned at commit `bda4e7f` outside our repo. **5 capabilities, two release tracks:**
+  - `graceful-shutdown-fix` *(v3.0.2 patch — own PR)* — **correctness bug.** `SignalCliHostedService.StopProcessInternalAsyncNoLock` writes literal `"exit"` to stdin expecting graceful shutdown; signal-cli has no `exit` JSON-RPC method and parses every stdin line as JSON, so `"exit"` produces a `-32700 Parse error` and the process keeps running until our `StopTimeoutSeconds` timeout falls through to `Kill(entireProcessTree: true)`. Fix: close stdin instead — signal-cli's reader-loop terminates on EOF and the JVM shuts down cleanly. Has been shipping since 1.0.
+  - `typed-rpc-errors` *(v3.1.0)* — signal-cli emits 6 custom JSON-RPC codes (`-1` UserError, `-3` IoError, `-4` UntrustedIdentity, `-5` RateLimit, `-6` CaptchaRejected) per `SignalJsonRpcCommandHandler.java:35-280`. New public enum `JsonRpcErrorCode` + `JsonRpcException.KnownCode` property + 2 derived exceptions (`RateLimitException`, `UntrustedIdentityException`) for the high-leverage codes consumers want to catch by type.
+  - `field-barrier-hardening` *(v3.1.0)* — `JsonRpcClientHostedService._client` → `volatile` (race-smell on ARM64); `SignalCliHostedService.Dispose()` sync path takes `_operationLock.Wait(50ms)` before reading `_currentProcess` (race-smell vs concurrent `CleanupProcess`).
+  - `signal-cli-quirks-doc` *(v3.1.0)* — new H2 section in this CLAUDE.md *"signal-cli protocol behavior we depend on"* documenting 7 facts about upstream signal-cli (stdin EOF graceful, stdout pure-JSON line-flushed, virtual-thread parallel dispatch, `subscribeReceive` non-idempotent, Jackson `maxStringLength = 20M`, custom error codes, Java 25), each with a source-file citation so a future maintainer can re-verify on the next signal-cli bump.
+  - `attachment-threshold-margin` *(v3.1.0 defensive)* — `MaxInlineEncodedAttachmentBytes` drops from `15_000_000` to `12_000_000`. 12M raw × 4/3 = 16M encoded, leaving 4M of margin under Jackson's 20M per-string-token cap for surrounding `send` JSON. The old 15M value gave zero margin.
+- Plan: `openspec/changes/signal-cli-protocol-alignment/`. Validated `--strict`. Release strategy: `graceful-shutdown-fix` ships first as **v3.0.2 patch** PR (don't wait on the rest); remaining four ship together as **v3.1.0 minor** PR.
 
 When you start a new material piece of work, create a new `openspec/changes/<change-name>/` directory with `proposal.md` / `design.md` / `tasks.md` / `specs/<capability>/spec.md`, mirror the structure of an archived change (e.g. `archive/2026-05-24-agent-friendly-modernization/`), and run `openspec validate <change> --strict` before implementing.
 
@@ -235,6 +378,11 @@ These are conventions we landed during the 2.1.0 work. They aren't strict — bu
 - **PR webhook auto-handling: skip purely informational bot comments.** `github-actions[bot]` posts coverage badges (`marocchino/sticky-pull-request-comment`) and `Test Results 0/0` after every CI run; these are NOT review comments and require NO action. Address only real CI failures and human-author comments. CI-failure response loop: read `gh api repos/<owner>/<repo>/actions/jobs/<id>/logs` (individual job log, more reliable than `gh run view`), find root cause, fix, push. Most failures during this PR cluster batched into single fix-commits per CI-cycle.
 - **`git pull --rebase` before every push to `main`.** Automated coverage-badge bot (`stefanzweifel/git-auto-commit-action`) commits to main after every successful CI run with `[skip ci]` — your local main lags within minutes of any merge. Force-pushes are forbidden (CLAUDE.md "Git" section); rebase is the only safe path.
 - **Verify-then-tick is the bookkeeping rule for OpenSpec tasks.** Don't mass-`sed 's/\[ \]/[x]/'` without first confirming each unchecked task is actually shipped. Round-16 audit found `agent-friendly-modernization` with 55 unchecked tasks but CLAUDE.md confirmed "shipped as 2.1.0" — safe to bulk-tick. Generalize: cross-reference CLAUDE.md "Implemented and merged" before sweeping ticks; if status ambiguous, leave for explicit review.
+- **Cross-check CLAUDE.md "Implemented, merged, archived" against live source before claiming a deprecation is "already removed".** The 2026-05-24 audit found CLAUDE.md said `Version()` and `AddSignalCli(Action<Config>?)` were "Already removed in 3.0" while both still existed in source. The check is one `grep` (`grep -rn '\[Obsolete' src/`) — do it before editing the "Backward compatibility convention" section. Drift here trains agents to disbelieve the doc; the `ObsoleteMessageConsistencyTests` regression-guard (in `audit-followup-2026`) automates this.
+- **When the audit lists a HIGH / MEDIUM finding, file an OpenSpec change before fixing — even tiny doc-sync fixes.** The regression-guard test that prevents recurrence is the durable artifact, not the fix itself. The fix without the guard is one less file showing the right text; the fix with the guard is a permanent invariant. `audit-followup-2026` shape: each capability has its own spec; one commit per capability; final test-count post-merge documented in the proposal.
+- **Validate the agent instructions periodically.** Microsoft's *Custom instructions for AI agents* guide recommends: "Test your custom instructions by asking the AI to write a representative task; if the AI still produces the wrong pattern, add a more explicit rule." Apply this to CLAUDE.md — when you notice an agent (Claude, Copilot, etc.) repeatedly violating a rule we thought was written, the rule is too implicit. Make it explicit, with a code-anchored example, in the relevant "Established patterns" subsection.
+- **GitHub Copilot reads `.github/copilot-instructions.md`, not `CLAUDE.md`.** Our repo currently has only `CLAUDE.md`. If a contributor uses Copilot/Cursor/Windsurf on this repo and needs the same patterns to apply, a tiny `.github/copilot-instructions.md` containing a single line ("This project's authoritative agent guidance lives in `CLAUDE.md`. Read it first.") is sufficient — multiplying the patterns into multiple files would create a drift-vector. Not added today; mentioned as the cheap escape valve if Copilot users complain.
+- **The `awesome-copilot` `CSharpExpert.agent.md` is a complementary reference**, not a replacement for CLAUDE.md. CLAUDE.md describes *this* project's invariants; `CSharpExpert` describes general modern-C# conventions. Both can apply; do not duplicate.
 
 ## Git
 
