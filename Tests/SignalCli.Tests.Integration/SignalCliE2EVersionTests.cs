@@ -31,10 +31,15 @@ public class SignalCliE2EVersionTests
 
         var hostBuilder = Host.CreateDefaultBuilder().ConfigureServices(services =>
         {
-            // Explicit Action<SignalCliOptions> — після §4.6/§4.7 у репі є два overload'и
-            // AddSignalCli (Action<SignalCliOptions> + [Obsolete] Action<Config>), і lambda
-            // з `cfg.AppHome = ...` ambiguous між ними.
-            services.AddSignalCli((SignalCli.Models.SignalCliOptions cfg) =>
+            // Свідомо `Action<Config>` legacy overload — він запускає `Config.CreateDefault()`,
+            // що (а) auto-resolve'ить bundled JRE-шлях на Windows/macOS, і (б) ставить дефолтний
+            // `LibDirectory = "SignalCli/lib"`, що задовольняє `[Required(AllowEmptyStrings=false)]`
+            // у `SignalCliOptions` (через `ToOptions()`+CopyFrom-перетворення). Без CreateDefault
+            // (Action<SignalCliOptions>-overload) macOS-test впав би на cross-field валідаторі
+            // "JavaExecutable АБО SignalCliExecutable", а Linux native-test — на `LibDirectory required`.
+            // [Obsolete]-shim прибереться у 4.0; до того integration test використовує legacy-flow.
+#pragma warning disable CS0618
+            services.AddSignalCli((SignalCli.Models.Config cfg) =>
             {
                 cfg.AppHome = baseDir;
 
@@ -43,30 +48,24 @@ public class SignalCliE2EVersionTests
                     // Native (GraalVM) бінарник — Java НЕ потрібна.
                     var nativePath = Path.Combine(baseDir, "signal-cli-native", "signal-cli");
                     cfg.SignalCliExecutable = nativePath;
-                    // LibDirectory у native-режимі не використовується, але `required` мусить мати значення.
-                    cfg.LibDirectory = string.Empty;
+                    // LibDirectory лишаємо дефолтним ("SignalCli/lib" із CreateDefault) — native runtime
+                    // його не читає, а `[Required(AllowEmptyStrings=false)]` потребує non-empty.
                     cfg.JavaExecutable = string.Empty;
                 }
                 else
                 {
-                    // Win/macOS: бандл JRE+jars. JavaExecutable порожній — буде авто-резолвлено
-                    // через Config.ResolveBundledJava(<baseDir>/jre/bin/java[.exe]).
+                    // Win/macOS: бандл JRE+jars. JavaExecutable вже auto-resolved через
+                    // Config.CreateDefault() → Config.ResolveBundledJava(baseDir/jre/bin/java[.exe]).
                     cfg.LibDirectory = "signal-cli/lib";
-                    // Залишаємо порожнім, щоб лишився шлях, який автоматично знаходиться:
-                    // Config.CreateDefault() уже резолвить, але AddSignalCli тут переписує
-                    // конфіг; CreateDefault викликається ДО configure-делегата (див.
-                    // ServiceCollectionExtensions). Тож JavaExecutable уже встановлений
-                    // у resolved-шлях ще на стадії CreateDefault.
                 }
 
                 // Швидкі таймаути — щоб тест не висів понад розумне.
                 cfg.RequestTimeoutSeconds = 30;
                 cfg.StopTimeoutSeconds = 3;
                 cfg.MaxRestartAttempts = 0; // у тесті авто-рестарт не потрібен
-                // UseManualReceiveMode — init-only; CreateDefault уже встановив у true (дефолт),
-                // тому пропускаємо явне присвоєння й покладаємось на дефолт.
                 cfg.StoragePathCli = Path.Combine(Path.GetTempPath(), "SignalCliE2E-" + Guid.NewGuid());
             });
+#pragma warning restore CS0618
         });
 
         var host = hostBuilder.Build();
