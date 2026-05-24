@@ -24,9 +24,10 @@
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <Authors>07artem132</Authors>
         <PackageId>SignalCli.NET</PackageId>
-        <!-- post-modernize-tuning §4.16 (audit D): semver-major для breaking-API хвилі —
-             див. CHANGELOG.md секцію [3.0.0] для повного переліку breaking changes. -->
-        <Version>3.0.0</Version>
+        <!-- v4.0.0 (2026-05-24): deprecated-shim-removal landed BREAKING — Config + Version()
+             + 5 Async-suffix-less DIMs + AddSignalCli(Action<Config>?) overload + adapters
+             усі видалені. Migration table у CHANGELOG.md [4.0.0]. -->
+        <Version>4.0.0</Version>
         <PackageProjectUrl>https://github.com/07artem132/SignalCli.NET</PackageProjectUrl>
         <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
         <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
@@ -39,8 +40,8 @@
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-        <AssemblyVersion>3.0.0</AssemblyVersion>
-        <FileVersion>3.0.0</FileVersion>
+        <AssemblyVersion>4.0.0</AssemblyVersion>
+        <FileVersion>4.0.0</FileVersion>
     </PropertyGroup>
     <ItemGroup>
         <!-- audit-followup-2026 (badge-url-fix): pack repo-root README у NuGet. -->
