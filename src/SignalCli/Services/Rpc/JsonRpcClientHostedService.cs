@@ -12,7 +12,7 @@ namespace SignalCli.Services.Rpc;
 /// HostedService, який чекає готовності потоків (IStreamPairProvider)
 /// і створює IJsonRpcClient, щоб потім інші сервіси могли ним користуватися.
 /// </summary>
-internal sealed class JsonRpcClientHostedService : IHostedService, IJsonRpcClientProvider, IAsyncDisposable
+internal sealed class JsonRpcClientHostedService : IHostedLifecycleService, IJsonRpcClientProvider, IAsyncDisposable
 {
     private readonly ILogger<JsonRpcClientHostedService> _logger;
     private readonly IJsonRpcClientFactory _factory;
@@ -44,6 +44,18 @@ internal sealed class JsonRpcClientHostedService : IHostedService, IJsonRpcClien
     /// <exception cref="InvalidOperationException">Виникає, якщо клієнт ще не ініціалізовано.</exception>
     public IJsonRpcClient Client => _client
                                     ?? throw new InvalidOperationException("JsonRpcClient ще не ініціалізовано.");
+
+    // post-modernize-tuning §8a.2 (audit B3): opt-in у IHostedLifecycleService для
+    // explicit-ordering startup/shutdown phases. No-op реалізації — поточна поведінка
+    // (StartAsync = WaitForReady + Create client + ping version) лишається без змін.
+    /// <summary>Викликається ПЕРЕД <see cref="StartAsync"/> у всіх хостованих сервісах.</summary>
+    public Task StartingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    /// <summary>Викликається ПІСЛЯ <see cref="StartAsync"/> у всіх хостованих сервісах.</summary>
+    public Task StartedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    /// <summary>Викликається ПЕРЕД <see cref="StopAsync"/> у всіх хостованих сервісах.</summary>
+    public Task StoppingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    /// <summary>Викликається ПІСЛЯ <see cref="StopAsync"/> у всіх хостованих сервісах.</summary>
+    public Task StoppedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <summary>
     /// Запускає хостований сервіс.

@@ -21,7 +21,7 @@ namespace SignalCli.Services.SignalCli;
 /// </summary>
 // post-modernize-tuning §4.8 (audit D5): sealed — inheriting from hosted-services
 // is not a supported extension point; configuration via SignalCliOptions only.
-public sealed class SignalCliHostedService : IHostedService, IStreamPairProvider, IDisposable
+public sealed class SignalCliHostedService : IHostedLifecycleService, IStreamPairProvider, IAsyncDisposable, IDisposable
 {
     private readonly ILogger<SignalCliHostedService> _logger;
     private readonly IProcessRunner _processRunner;
@@ -91,6 +91,23 @@ public sealed class SignalCliHostedService : IHostedService, IStreamPairProvider
         _options = options.Value;
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
+
+    #region IHostedLifecycleService phases
+
+    // post-modernize-tuning §8a.2 (audit B3): opt-in у IHostedLifecycleService для
+    // explicit-ordering startup/shutdown phases. No-op реалізації — поточна поведінка
+    // лишається у StartAsync/StopAsync; phase-методи доступні для майбутніх refinement'ів
+    // (наприклад StartedAsync для warm-up-ping після всіх Start'ів).
+    /// <summary>Викликається ПЕРЕД <see cref="StartAsync"/> у всіх хостованих сервісах.</summary>
+    public Task StartingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    /// <summary>Викликається ПІСЛЯ <see cref="StartAsync"/> у всіх хостованих сервісах.</summary>
+    public Task StartedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    /// <summary>Викликається ПЕРЕД <see cref="StopAsync"/> у всіх хостованих сервісах.</summary>
+    public Task StoppingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    /// <summary>Викликається ПІСЛЯ <see cref="StopAsync"/> у всіх хостованих сервісах.</summary>
+    public Task StoppedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    #endregion
 
     #region IHostedService
 
@@ -595,16 +612,69 @@ public sealed class SignalCliHostedService : IHostedService, IStreamPairProvider
 
     #endregion
 
-    #region IDisposable
+    #region Disposal
 
     /// <summary>
     /// Звільняє ресурси, пов'язані з об'єктом.
     /// </summary>
+    /// <remarks>
+    /// Sync-path: best-effort kill без drain'у in-flight operations. DI-контейнер при ASP.NET-/
+    /// generic-host-shutdown'і викличе <see cref="DisposeAsync"/> (preferred), якщо instance
+    /// зареєстрований як <see cref="IAsyncDisposable"/>. Цей метод лишається для explicit
+    /// `using`-блоків і legacy-кода. CLAUDE.md rule #9: НЕ sync-over-async — звідси нема
+    /// `DisposeAsync().AsTask().GetResult()`; обидва шляхи поділяють <see cref="DisposeCore"/>.
+    /// </remarks>
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposedFlag, 1) != 0) return;
         GC.SuppressFinalize(this);
+        DisposeCore();
+    }
 
+    /// <summary>
+    /// post-modernize-tuning §8a.3 (audit C1): async-disposal — DI-контейнер preferр'ить його
+    /// при scope-tear-down. Перед sync-cleanup'ом дренує <c>_operationLock</c> із коротким
+    /// fallback-timeout'ом — щоб in-flight <c>StartAsync</c>/<c>StopAsync</c>/<c>ForceRestartAsync</c>
+    /// мали шанс завершитися cleanly, перш ніж ми силою вб'ємо процес.
+    /// </summary>
+    /// <remarks>
+    /// CLAUDE.md rule #9: НЕ sync-over-async. Цей метод чисто async, sync-Dispose() — чисто
+    /// sync, спільне ядро — <see cref="DisposeCore"/>. Drain-timeout навмисно короткий (2с) —
+    /// dispose не повинен висіти невизначено довго.
+    /// </remarks>
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposedFlag, 1) != 0) return;
+        GC.SuppressFinalize(this);
+
+        // Drain in-flight operations cleanly: чекаємо до 2с щоб поточна Start/Stop/Restart
+        // завершилася. Якщо не встигла — переходимо до sync-kill (best-effort).
+        try
+        {
+            using var drainCts = new CancellationTokenSource(TimeSpan.FromSeconds(2), _timeProvider);
+            await _operationLock.WaitAsync(drainCts.Token).ConfigureAwait(false);
+            try { /* lock acquired — in-flight ops drained */ }
+            finally { _operationLock.Release(); }
+        }
+        catch (OperationCanceledException)
+        {
+            // 2с drain-window закінчилось — продовжуємо sync-cleanup без drain'у.
+            SignalCliHostedServiceLog.DisposeAsyncDrainTimeout(_logger);
+        }
+        catch (ObjectDisposedException)
+        {
+            // SemaphoreSlim уже dispose'нутий — теж OK.
+        }
+
+        DisposeCore();
+    }
+
+    /// <summary>
+    /// Спільне ядро для sync- і async-disposal. Викликається РІВНО ОДИН РАЗ — guard
+    /// через <c>_disposedFlag</c> у callers.
+    /// </summary>
+    private void DisposeCore()
+    {
         SignalCliHostedServiceLog.Disposing(_logger);
 
         try

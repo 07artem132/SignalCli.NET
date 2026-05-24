@@ -5083,6 +5083,18 @@
             </summary>
             <exception cref="T:System.InvalidOperationException">Виникає, якщо клієнт ще не ініціалізовано.</exception>
         </member>
+        <member name="M:SignalCli.Services.Rpc.JsonRpcClientHostedService.StartingAsync(System.Threading.CancellationToken)">
+            <summary>Викликається ПЕРЕД <see cref="M:SignalCli.Services.Rpc.JsonRpcClientHostedService.StartAsync(System.Threading.CancellationToken)"/> у всіх хостованих сервісах.</summary>
+        </member>
+        <member name="M:SignalCli.Services.Rpc.JsonRpcClientHostedService.StartedAsync(System.Threading.CancellationToken)">
+            <summary>Викликається ПІСЛЯ <see cref="M:SignalCli.Services.Rpc.JsonRpcClientHostedService.StartAsync(System.Threading.CancellationToken)"/> у всіх хостованих сервісах.</summary>
+        </member>
+        <member name="M:SignalCli.Services.Rpc.JsonRpcClientHostedService.StoppingAsync(System.Threading.CancellationToken)">
+            <summary>Викликається ПЕРЕД <see cref="M:SignalCli.Services.Rpc.JsonRpcClientHostedService.StopAsync(System.Threading.CancellationToken)"/> у всіх хостованих сервісах.</summary>
+        </member>
+        <member name="M:SignalCli.Services.Rpc.JsonRpcClientHostedService.StoppedAsync(System.Threading.CancellationToken)">
+            <summary>Викликається ПІСЛЯ <see cref="M:SignalCli.Services.Rpc.JsonRpcClientHostedService.StopAsync(System.Threading.CancellationToken)"/> у всіх хостованих сервісах.</summary>
+        </member>
         <member name="M:SignalCli.Services.Rpc.JsonRpcClientHostedService.StartAsync(System.Threading.CancellationToken)">
             <summary>
             Запускає хостований сервіс.
@@ -5257,6 +5269,18 @@
             у тестах підставляється <c>FakeTimeProvider</c>, щоб обнулення лічильника не вимагало wall-clock.
             </param>
         </member>
+        <member name="M:SignalCli.Services.SignalCli.SignalCliHostedService.StartingAsync(System.Threading.CancellationToken)">
+            <summary>Викликається ПЕРЕД <see cref="M:SignalCli.Services.SignalCli.SignalCliHostedService.StartAsync(System.Threading.CancellationToken)"/> у всіх хостованих сервісах.</summary>
+        </member>
+        <member name="M:SignalCli.Services.SignalCli.SignalCliHostedService.StartedAsync(System.Threading.CancellationToken)">
+            <summary>Викликається ПІСЛЯ <see cref="M:SignalCli.Services.SignalCli.SignalCliHostedService.StartAsync(System.Threading.CancellationToken)"/> у всіх хостованих сервісах.</summary>
+        </member>
+        <member name="M:SignalCli.Services.SignalCli.SignalCliHostedService.StoppingAsync(System.Threading.CancellationToken)">
+            <summary>Викликається ПЕРЕД <see cref="M:SignalCli.Services.SignalCli.SignalCliHostedService.StopAsync(System.Threading.CancellationToken)"/> у всіх хостованих сервісах.</summary>
+        </member>
+        <member name="M:SignalCli.Services.SignalCli.SignalCliHostedService.StoppedAsync(System.Threading.CancellationToken)">
+            <summary>Викликається ПІСЛЯ <see cref="M:SignalCli.Services.SignalCli.SignalCliHostedService.StopAsync(System.Threading.CancellationToken)"/> у всіх хостованих сервісах.</summary>
+        </member>
         <member name="M:SignalCli.Services.SignalCli.SignalCliHostedService.StartAsync(System.Threading.CancellationToken)">
             <summary>
             Запускає хостований сервіс.
@@ -5362,6 +5386,32 @@
         <member name="M:SignalCli.Services.SignalCli.SignalCliHostedService.Dispose">
             <summary>
             Звільняє ресурси, пов'язані з об'єктом.
+            </summary>
+            <remarks>
+            Sync-path: best-effort kill без drain'у in-flight operations. DI-контейнер при ASP.NET-/
+            generic-host-shutdown'і викличе <see cref="M:SignalCli.Services.SignalCli.SignalCliHostedService.DisposeAsync"/> (preferred), якщо instance
+            зареєстрований як <see cref="T:System.IAsyncDisposable"/>. Цей метод лишається для explicit
+            `using`-блоків і legacy-кода. CLAUDE.md rule #9: НЕ sync-over-async — звідси нема
+            `DisposeAsync().AsTask().GetResult()`; обидва шляхи поділяють <see cref="M:SignalCli.Services.SignalCli.SignalCliHostedService.DisposeCore"/>.
+            </remarks>
+        </member>
+        <member name="M:SignalCli.Services.SignalCli.SignalCliHostedService.DisposeAsync">
+            <summary>
+            post-modernize-tuning §8a.3 (audit C1): async-disposal — DI-контейнер preferр'ить його
+            при scope-tear-down. Перед sync-cleanup'ом дренує <c>_operationLock</c> із коротким
+            fallback-timeout'ом — щоб in-flight <c>StartAsync</c>/<c>StopAsync</c>/<c>ForceRestartAsync</c>
+            мали шанс завершитися cleanly, перш ніж ми силою вб'ємо процес.
+            </summary>
+            <remarks>
+            CLAUDE.md rule #9: НЕ sync-over-async. Цей метод чисто async, sync-Dispose() — чисто
+            sync, спільне ядро — <see cref="M:SignalCli.Services.SignalCli.SignalCliHostedService.DisposeCore"/>. Drain-timeout навмисно короткий (2с) —
+            dispose не повинен висіти невизначено довго.
+            </remarks>
+        </member>
+        <member name="M:SignalCli.Services.SignalCli.SignalCliHostedService.DisposeCore">
+            <summary>
+            Спільне ядро для sync- і async-disposal. Викликається РІВНО ОДИН РАЗ — guard
+            через <c>_disposedFlag</c> у callers.
             </summary>
         </member>
         <member name="T:SignalCli.Services.Signal.SignalEventService">

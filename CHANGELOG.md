@@ -98,7 +98,16 @@
 - **(round 15 §8a.6)** `BackgroundServiceLifecycleTests.StopAsync_BlocksUntilExecuteAsync_ObservesCancellation`: FakeTimeProvider-driven tick → ping observed → StopAsync → ExecuteTask.IsCompleted upto 5s real-time. Доказує що base.StopAsync блокує до завершення ExecuteAsync.
 - **(round 15 §8a.8)** `StopProcessTimeoutVirtualizationTests.StopAsync_WhenWaitForExitTimesOut_KillsProcess_OnVirtualClock`: mock-process'у `WaitForExitAsync` блокує на CancellationToken.Register; `fakeTime.Advance(StopTimeoutSeconds + 1)` тригерить kill-branch. Сертифікує §1.7/§8a.7 TimeProvider-CTS wire-up на StopProcessInternalAsync.
 
-Tests: **210/210 ✅** (baseline 180 → 210). Усі originally-deferred тести з 2026-05-23 audit виконано.
+#### Hosting modernization + CI smoke (round 16) — закриває останні 4 пункти
+
+- **(round 16 §8a.2)** `SignalCliHostedService` і `JsonRpcClientHostedService` тепер `IHostedLifecycleService` (extends `IHostedService` із 4 додатковими phase-методами: `StartingAsync`/`StartedAsync`/`StoppingAsync`/`StoppedAsync`). Реалізації — no-op (поточна поведінка не зміняється); generic-host автоматично детектить interface і викликає phase'и у визначеному order'і. Foundation для майбутніх ordering-refinement'ів (warm-up ping після всіх start'ів тощо).
+- **(round 16 §8a.3)** `SignalCliHostedService` тепер реалізує **обидва** `IAsyncDisposable` + `IDisposable`. `DisposeAsync` дренує `_operationLock.WaitAsync` із 2с-fallback-timeout (in-flight `Start/Stop/Restart` має шанс завершитися cleanly перед kill'ом); потім — спільний `DisposeCore` із sync-cleanup'ом. `Dispose()` — sync-only, без drain'у. **CLAUDE.md rule #9** (no sync-over-async in disposal) дотримано: обидва шляхи мають незалежні реалізації, спільне ядро. DI-контейнер preferр'ить `DisposeAsync` при scope-tear-down. Новий log-event `DisposeAsyncDrainTimeout` (EventId 132). 5 нових тестів у `AsyncDisposalLifecycleTests`.
+- **(round 16 §8d.13/§8d.14)** Новий GitHub Actions workflow `.github/workflows/runtime-smoke.yml` із двома Linux-job'ами:
+  - `native-runtime-delivery` — повна `dotnet build SignalCli.sln`; assertion: `signal-cli-native/signal-cli` дойшов у consumer TargetDir і має executable-bit. Захист від forward-/back-slash-регресії у MSBuild `Include`/`PackagePath` (closes audit N1 §8d.1).
+  - `jre-guard-corruption` — build jre-runtime, delete `bin/java*`, re-build expected to fail із actionable message. Захист від видалення/деградації §8d.10 post-extract `<Error Condition>`-guard.
+  - Path-filtered (`src/SignalCli.runtime*`, `src/build/`), `workflow_dispatch` для manual-run. `actions/*` pinned до commit-SHA per §8d.9 supply-chain.
+
+Tests: **215/215 ✅** (baseline 180 → 215). Окрім тестів у workflow'ах — всі OpenSpec-таски виконано.
 
 ## [2.1.0] — неопубліковано
 

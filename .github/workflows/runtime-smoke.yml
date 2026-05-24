@@ -1,0 +1,159 @@
+name: Runtime packages smoke (Linux)
+
+# post-modernize-tuning §8d.13 / §8d.14: Linux-only smoke-job — повна збірка
+# SignalCli.sln на ubuntu-latest, перевірка що:
+#   §8d.13: signal-cli-native binary дійсно делівериться у consumer TargetDir
+#           (захист від форвард-/бек-слеш-розбіжностей у MSBuild Include/PackagePath).
+#   §8d.14: corrupt-JRE post-extract guard (з §8d.10) спрацьовує із задокументованим
+#           повідомленням, коли jre/bin/java[.exe] видалено.
+#
+# Окремий job (не злито в існуючий dotnet-desktop) — runtime-пакети тягнуть signal-cli
+# (~30 МБ) і Eclipse Temurin JRE (~80 МБ); запускаємо рідше, тільки на main/PR із
+# runtime-changes (path-filtered).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/SignalCli.runtime/**'
+      - 'src/SignalCli.runtime.native/**'
+      - 'src/SignalCli.runtime.jre.*/**'
+      - 'src/build/**'
+      - '.github/workflows/runtime-smoke.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/SignalCli.runtime/**'
+      - 'src/SignalCli.runtime.native/**'
+      - 'src/SignalCli.runtime.jre.*/**'
+      - 'src/build/**'
+      - '.github/workflows/runtime-smoke.yml'
+  workflow_dispatch: # manual run from Actions UI
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  native-runtime-delivery:
+    # §8d.13: повна `dotnet build SignalCli.sln` на Linux має покласти бінарник
+    # `signal-cli-native/signal-cli` у consumer TargetDir.
+    name: native runtime delivery (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e1148722baadcadb1cd56eb022d2eaa78ae8a3 # v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore (nuget.org only — github feed needs auth)
+        run: dotnet restore SignalCli.sln --source https://api.nuget.org/v3/index.json -p:NuGetAudit=false
+
+      - name: Build SignalCli.sln (Release) — pulls signal-cli + JRE archives
+        run: dotnet build SignalCli.sln --configuration Release --no-restore
+
+      - name: Find delivered signal-cli-native binary (consumer-Example)
+        id: find_binary
+        run: |
+          set -e
+          # Example app references SignalCli.Runtime.Native via project-ref; native binary
+          # should land at <output>/signal-cli-native/signal-cli (per §8d.1 forward-slash fix).
+          candidates=$(find Example -path '*/signal-cli-native/signal-cli' -type f 2>/dev/null || true)
+          if [ -z "$candidates" ]; then
+            echo "::error::signal-cli-native binary NOT delivered to consumer TargetDir."
+            echo "::error::This is the regression §8d.1 (audit N1) was fixed for —"
+            echo "::error::forward-slash separators in .targets/.csproj Include/PackagePath."
+            find Example -name 'signal-cli*' -type f 2>/dev/null | head -20 || true
+            exit 1
+          fi
+          echo "Found delivered binary(ies):"
+          echo "$candidates"
+          echo "first_path=$(echo "$candidates" | head -1)" >> "$GITHUB_OUTPUT"
+
+      - name: Confirm binary is executable
+        run: |
+          set -e
+          test -x "${{ steps.find_binary.outputs.first_path }}" \
+            && echo "OK: executable bit set" \
+            || (echo "::error::binary present but not executable" && exit 1)
+
+  jre-guard-corruption:
+    # §8d.14: пошкоджений obj/jre (видалити bin/java) тригерить post-extract guard
+    # із задокументованим повідомленням (з §8d.10).
+    name: corrupted JRE guard message (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e1148722baadcadb1cd56eb022d2eaa78ae8a3 # v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore + initial build (populates obj/jre via .targets <Unzip>)
+        run: |
+          dotnet restore SignalCli.sln --source https://api.nuget.org/v3/index.json -p:NuGetAudit=false
+          dotnet build src/SignalCli.runtime.jre.win-x64/SignalCli.runtime.jre.win-x64.csproj --configuration Release --no-restore
+
+      - name: Locate extracted JRE (obj/jre/bin/java*)
+        id: locate_jre
+        run: |
+          set -e
+          jre_root=$(find src/SignalCli.runtime.jre.win-x64 -type d -name 'jre' 2>/dev/null | head -1)
+          if [ -z "$jre_root" ]; then
+            echo "::error::JRE not extracted in expected location — §8d.10 guard cannot be tested."
+            exit 1
+          fi
+          echo "JRE root: $jre_root"
+          echo "jre_root=$jre_root" >> "$GITHUB_OUTPUT"
+
+      - name: Corrupt the JRE (delete bin/java*)
+        run: |
+          set -e
+          java_files=$(find "${{ steps.locate_jre.outputs.jre_root }}/bin" -name 'java*' -type f 2>/dev/null || true)
+          if [ -z "$java_files" ]; then
+            echo "::error::No java executable to delete — JRE layout unexpected."
+            exit 1
+          fi
+          rm -f $java_files
+          echo "Deleted: $java_files"
+
+      - name: Re-build — expect post-extract guard to fail with documented message
+        id: rebuild
+        continue-on-error: true
+        run: |
+          # Очікуємо що <Error Condition="!Exists('$(TargetDir)jre/bin/java[.exe]')"> з §8d.10
+          # спрацює і зупинить build з actionable message. Невдалий exit-code = ОК для нас.
+          output=$(dotnet build src/SignalCli.runtime.jre.win-x64/SignalCli.runtime.jre.win-x64.csproj \
+            --configuration Release --no-restore 2>&1) && rc=0 || rc=$?
+          echo "$output"
+          echo "rebuild_output<<__EOF__" >> "$GITHUB_OUTPUT"
+          echo "$output" >> "$GITHUB_OUTPUT"
+          echo "__EOF__" >> "$GITHUB_OUTPUT"
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+
+      - name: Assert documented guard fired
+        run: |
+          set -e
+          rc='${{ steps.rebuild.outputs.rc }}'
+          if [ "$rc" = "0" ]; then
+            echo "::error::Build SUCCEEDED with corrupted JRE — post-extract guard (§8d.10) is BROKEN."
+            exit 1
+          fi
+          # Substring із §8d.10 повідомлення (українською). Якщо хтось перепише message —
+          # тест має оновитися, але регресія "guard's missing" буде помічена.
+          if ! echo '${{ steps.rebuild.outputs.rebuild_output }}' | grep -q 'java'; then
+            echo "::error::Guard fired, but error message did not mention 'java' — message regressed."
+            exit 1
+          fi
+          echo "OK: post-extract guard fired with actionable message after JRE corruption."

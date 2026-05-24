@@ -115,4 +115,10 @@ internal static partial class SignalCliHostedServiceLog
 
     [LoggerMessage(EventId = 131, Level = LogLevel.Error, Message = "Помилка при disposing SignalCliHostedService")]
     public static partial void DisposeFailed(ILogger logger, Exception ex);
+
+    // post-modernize-tuning §8a.3 (audit C1): DisposeAsync не зміг dren'ити _operationLock
+    // за 2с — переходимо до sync-cleanup'у без drain'у.
+    [LoggerMessage(EventId = 132, Level = LogLevel.Warning,
+        Message = "DisposeAsync: 2с-drain-window закінчилось, in-flight operation не завершилась — продовжуємо sync-cleanup.")]
+    public static partial void DisposeAsyncDrainTimeout(ILogger logger);
 }
