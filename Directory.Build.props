@@ -8,6 +8,12 @@
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <!-- Поки що попередження НЕ робимо помилками (спершу розгребти борг) -->
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+
+    <!-- nf003 (healthchecks-version-sync, audit v2.1): єдине джерело істини для версії
+         обох пакетів. SignalCli.NET.HealthChecks використовує [InternalsVisibleTo] і
+         бінарно прив'язаний до main lib — версії МУСЯТЬ збігатися. Enforced:
+         VersionLockstepTests.MainLibAndHealthChecksAdapter_ShareExactSameAssemblyVersion. -->
+    <SignalCliPackageVersion>4.0.1</SignalCliPackageVersion>
   </PropertyGroup>
 
 </Project>
