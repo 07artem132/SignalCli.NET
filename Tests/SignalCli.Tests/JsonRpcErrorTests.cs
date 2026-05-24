@@ -102,4 +102,66 @@ public class JsonRpcErrorTests
         Assert.Equal(42, data.GetProperty("foo").GetInt32());
         Assert.Equal("baz", data.GetProperty("bar").GetString());
     }
+
+    // ---- audit v2.1 T01 (NF-001 / G9): both result AND error present → error wins ----
+
+    /// <summary>
+    /// T01 — захисний тест для G9 інваріанти (CLAUDE.md "Future development guardrails"):
+    /// якщо (порушуючи JSON-RPC 2.0 spec) відповідь несе ОДНОЧАСНО <c>result</c> і
+    /// <c>error</c> поля — JsonRpcClient.InvokeMethodAsync МУСИТЬ kine'нути
+    /// <see cref="SignalCli.Exceptions.JsonRpcException"/>, а Result значення НІКОЛИ
+    /// не повинно потрапити до deserializer'а. Архітектурно це гарантовано
+    /// порядком перевірок у JsonRpcClient.cs:494 (<c>if (response.Error != null)
+    /// throw</c> ДО <c>response.Result.Deserialize</c>); цей тест перетворює
+    /// implicit invariant у explicit regression guard.
+    /// </summary>
+    [Fact]
+    public async Task InvokeMethodAsync_WhenBothResultAndErrorPresent_ErrorWins()
+    {
+        var logger = new Moq.Mock<Microsoft.Extensions.Logging.ILogger<SignalCli.Services.Rpc.JsonRpcClient>>();
+        logger.Setup(l => l.IsEnabled(Moq.It.IsAny<Microsoft.Extensions.Logging.LogLevel>())).Returns(true);
+
+        var streamProvider = new Moq.Mock<SignalCli.Interfaces.SignalCli.IStreamPairProvider>();
+        var subject = new System.Reactive.Subjects.Subject<SignalCli.Models.SignalCli.StreamPair?>();
+        SignalCli.Models.SignalCli.StreamPair? current = null;
+        streamProvider.SetupGet(sp => sp.CurrentStreamPair).Returns(() => current);
+        streamProvider.SetupGet(sp => sp.StreamPairChanged).Returns(subject);
+
+        var options = new SignalCli.Models.SignalCliOptions
+        {
+            AppHome = Path.GetTempPath(),
+            JavaExecutable = string.Empty,
+            LibDirectory = string.Empty,
+            RequestTimeoutSeconds = 60,
+        };
+        await using var client = new SignalCli.Services.Rpc.JsonRpcClient(
+            logger.Object, streamProvider.Object, options, null);
+
+        current = new SignalCli.Models.SignalCli.StreamPair(
+            new StreamWriter(new MemoryStream()),
+            new StreamReader(new MemoryStream()),
+            new StreamReader(new MemoryStream()));
+        subject.OnNext(current);
+
+        var invokeTask = client.InvokeMethodAsync(
+            "ambiguous",
+            new TestProbeRequest(),
+            TestSerializationContext.Default.TestProbeRequest,
+            TestSerializationContext.Default.TestProbeResponse);
+
+        // Patологічна dual-field відповідь. Реальний signal-cli ніколи такого не ємітить
+        // (Jackson сам блокує дублікати у serialize-side), але як defense-in-depth ми
+        // мусимо обрати помилку, а не "X".
+        const string dualJson =
+            """{"id":"1","result":{"foo":"X"},"error":{"code":-32603,"message":"E"}}""";
+        var mi = typeof(SignalCli.Services.Rpc.JsonRpcClient).GetMethod(
+            "ProcessMessageAsync",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        await (Task)mi!.Invoke(client, [dualJson, CancellationToken.None])!;
+
+        // Error wins; "X" ніколи не потрапляє у TResponse.
+        var ex = await Assert.ThrowsAsync<JsonRpcException>(() => invokeTask);
+        Assert.Equal("E", ex.Message);
+        Assert.Equal(-32603, ex.Error.Code);
+    }
 }

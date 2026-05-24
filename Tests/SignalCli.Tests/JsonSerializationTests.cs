@@ -185,4 +185,48 @@ public class JsonSerializationTests
         Assert.StartsWith("[", roundtripped);
         Assert.DoesNotContain("Items", roundtripped);
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // audit v2.1 T03 / RG05 — positive guard для CLAUDE.md rule #18
+    // (AllowDuplicateProperties = false). Підтверджено через MS Learn:
+    // https://learn.microsoft.com/dotnet/api/system.text.json.jsonserializeroptions.allowduplicateproperties
+    // default = true; при set=false STJ кидає JsonException на duplicate-key
+    // (для reflection-based або source-gen Metadata mode).
+    //
+    // КАВЕAT: source-gen Default fast-path (наш <see cref="SignalJsonContext"/> з
+    // GenerationMode = Default) ГЕНЕРУЄ свій reader і НЕ читає runtime-flag
+    // AllowDuplicateProperties із options. Щоб увімкнути захист і для source-gen,
+    // треба ще додатково виставити флаг у <c>[JsonSourceGenerationOptions(
+    // AllowDuplicateProperties = false)]</c> на контексті. Поки що цей рівень захисту
+    // НЕ ввімкнено — це окрема знахідка post-v2.1 worth proposed as a future capability.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// RG05 (частина 1) — пінує що <see cref="SignalJson.Options.AllowDuplicateProperties"/>
+    /// = false, як цього вимагає CLAUDE.md rule #18 (JSON-RPC 2.0 spec violation →
+    /// fail-loud). Без цього guard'а майбутній "options cleanup"-PR міг би видалити
+    /// flag тихо. Це АКТУАЛЬНА invariant — навіть якщо source-gen Default fast-path
+    /// її не консумує, флаг застосовується для будь-якого reflection-based call-site
+    /// (наприклад, <see cref="SignalJson.OptionsForTests"/>).
+    /// </summary>
+    [Fact]
+    public void SignalJsonOptions_AllowDuplicateProperties_IsFalse()
+    {
+        Assert.False(SignalJson.Options.AllowDuplicateProperties);
+    }
+
+    /// <summary>
+    /// RG05 (частина 2) — підтверджує що .NET 10 underlying API дійсно throw'ить
+    /// <see cref="JsonException"/> на duplicate-key через
+    /// <see cref="JsonDocumentOptions.AllowDuplicateProperties"/>. Це проксі-тест для
+    /// CLAUDE.md rule #18 на найнижчому рівні STJ — якщо MS видалить flag або змінить
+    /// поведінку у наступних версіях, ми побачимо одразу.
+    /// </summary>
+    [Fact]
+    public void JsonDocumentOptions_AllowDuplicateProperties_False_ThrowsOnDuplicateKey()
+    {
+        const string duplicateKey = """{"id":"1","id":"2","jsonrpc":"2.0"}""";
+        var opts = new JsonDocumentOptions { AllowDuplicateProperties = false };
+        Assert.Throws<JsonException>(() => JsonDocument.Parse(duplicateKey, opts));
+    }
 }
