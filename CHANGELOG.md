@@ -25,6 +25,10 @@ Patch: завершує **усі чотири "Pending follow-up"** позиці
 ### 🛡️ Захист від регресій
 
 - **`AttachmentEntryTests` розширено з 3 → 12 тестів** (×4): NUL byte у середині, U+202E RLO стрипінг, кожен з 9 bidi/control-символів (Theory), повністю-небезпечне ім'я, `SaveToTempFile` re-entry (`InvalidOperationException`), heap-buffer-path при іменах > 256 chars.
+- **`EdgeCaseFollowupTests` (3 файли тестів, 6 нових assertions)** — закриває останні три untested invariants з CLAUDE.md "Future development guardrails" (вони лежали поза першим проходом 4.0.1, виявлено в audit-fraction-check):
+  - `ForceRestartAsync_OnNonRestartableState_IsNoOp` (Theory × 4: NotStarted/Starting/Stopping/Stopped) — пінує що ForceRestart не змінює стан і не стартує новий процес коли він у нерестартабельному state.
+  - `NotificationChannel_CapacityOne_DeliversInFifoOrder` — `NotificationChannelCapacity=1` (мінімум) усе ще FIFO-доставляє всі 50 нотифікацій по одній (FullMode=Wait блокує producer'а доки consumer відчитає).
+  - `SubscribeAsync_LeaderCancellation_FollowerReceivesSameException` — коли leader's `CancellationToken` скасовується mid-RPC, follower отримує **той самий** `OperationCanceledException` через TCS rollback path (SignalEventService.cs:270-279).
 - **`ObservabilityCounterTests` (3 нових)** — раніше privacy-guards перевіряли лише *відсутність* PII у тагах, а *factual increment* counter'ів був untested invariant у CLAUDE.md "Future development guardrails". Тепер закрите:
   - `RpcDuration_OnSuccessRoundTrip_RecordsPositiveDurationAndOkStatus` — happy-path round-trip через `JsonRpcClient` фіксує `signalcli.rpc.duration` + `signalcli.rpc.requests{status=ok}` через MeterListener.
   - `EventsDropped_OnChannelOverflow_IncrementsWithCorrectEventType` — прокидає 1100 typing-нотифікацій (capacity=1024, no consumer) → асертить `signalcli.events.dropped{event_type=typing}` тікнув exactly 76 разів.
@@ -40,7 +44,7 @@ Patch: завершує **усі чотири "Pending follow-up"** позиці
 ### 🛠 Інше
 
 - `<EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>` нарешті у [`SignalCli.csproj`](src/SignalCli/SignalCli.csproj) — фікс root-cause проблеми з 4.0.0.
-- Test count: unit 254 → 273 (+19); integration 2 → 7 (+5 skip-gated E2E).
+- Test count: unit 254 → 279 (+25); integration 2 → 7 (+5 skip-gated E2E).
 
 ### Pending follow-up
 
