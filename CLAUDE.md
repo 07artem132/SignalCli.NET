@@ -337,6 +337,22 @@ _(empty as of audit v2.1 — all previously-declared invariants now have tests; 
 
 `SignalCli.NET` і `SignalCli.NET.HealthChecks` ЗАВЖДИ мають однакову версію. Адаптер бінарно прив'язаний до main lib через `[InternalsVisibleTo("SignalCli.HealthChecks")]` — divergent versions = `MissingMethodException` на першому health-check-probe в продакшені. Єдине місце де версія визначається: `Directory.Build.props → <SignalCliPackageVersion>`. Enforced: `VersionLockstepTests.MainLibAndHealthChecksAdapter_ShareExactSameAssemblyVersion`.
 
+### Version-CHANGELOG lockstep
+
+**Кожен bump `<SignalCliPackageVersion>` у `Directory.Build.props` МУСИТЬ супроводжуватись відповідною `## [X.Y.Z] — YYYY-MM-DD` секцією у `CHANGELOG.md` — у **тому самому коміті**.** Без винятків. Включно з patch-bumps (4.0.1 → 4.0.2), включно з test-only fix-релізами, включно з doc-sync-патчами. Якщо тобі нема що написати — релізу не повинно бути; не bump'ай version "про запас".
+
+Структура секції CHANGELOG — Keep-a-Changelog шаблон з цього файлу:
+- `## [X.Y.Z] — YYYY-MM-DD` header + 1-2 речення опису-релізу (motivation + scope).
+- Підсекції з emoji-prefix: `### 🐛 Виправлено`, `### ✨ Додано`, `### 🛡️ Захист від регресій`, `### 🛠 Інше`, `### Pending follow-up`.
+- При capability-batches: вкладений `#### Capability \`name\`` — точне ім'я OpenSpec-capability'ї (з `openspec/changes/<change>/proposal.md`).
+- Bold leading clause + пояснювальний текст з посиланнями на file:line / spec / MS Learn — щоб майбутній агент (включно зі мною) міг reconstruct *чому*, не лише *що*.
+
+Кожен попередній реліз у `CHANGELOG.md` (4.0.0, 4.0.1, 4.0.2, 3.0.0, 2.1.0…) має таку секцію — це консистентна історична convention. Silent version bumps тренують споживачів ігнорувати CHANGELOG і ламають NuGet release notes (nuget.org підтягує `<PackageReleaseNotes>` саме з CHANGELOG entries — порожня секція = порожні release notes на nuget.org).
+
+Перевірка при PR: `git diff <base>..HEAD -- Directory.Build.props CHANGELOG.md` — якщо одне змінилось без іншого, перевір чому. Якщо CI бачить version bump без CHANGELOG diff'у — review SHOULD flag перед merge. (Reflection-based regression guard для цього неможливий — CHANGELOG.md не доступний з runtime-assembly; це enforce'ується процесом review, не build-failure.)
+
+Rationale-приклад чому це matter: під час audit v2.1 знайшли що "CHANGELOG [4.0.1] навіть стверджував що `JsonRpcResponse` з обома полями покрито — `grep` показав що ні" (CLAUDE.md "How we discovered → Test gap при рефакторингу"). Якщо CHANGELOG бреше, агенти не довіряють йому й роблять зайвий audit-pass. Правда у CHANGELOG = менше audit-роботи.
+
 ## How we discovered these issues — prevention checklist
 
 Всі знахідки з аудиту v2.0/v2.1 потрапили в кодову базу через один з цих сценаріїв. При кожному PR перевір що ти не повторюєш той самий паттерн:

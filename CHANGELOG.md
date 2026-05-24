@@ -3,6 +3,69 @@
 Формат заснований на [Keep a Changelog](https://keepachangelog.com/),
 проєкт дотримується [семантичного версіонування](https://semver.org/lang/uk/).
 
+## [4.0.2] — 2026-05-24
+
+Patch: **post-audit-remediation** на основі `audit_supplement v2.0` + `v2.1` (read-only audit
+пост-4.0.1 на агент-friendliness / .NET 10 best practices / test coverage). Шість гнучко-послідовних
+комітів — version lockstep двох NuGet-пакетів, шість regression-захисних тестів, hygiene на test-csproj,
+**закриття реальної знахідки rule #18** (source-gen Default fast-path обходив runtime-flag
+`AllowDuplicateProperties=false`), нова паралельна-RPC-correlation E2E. Нульові breaking changes.
+
+### 🐛 Виправлено
+
+#### Capability `healthchecks-version-sync` (NF-003)
+
+- **`SignalCli.NET.HealthChecks` версія більше НЕ хардкодиться — централізована в `Directory.Build.props`.** До 4.0.2 main lib був `4.0.1`, а adapter csproj мав хардкод `<Version>3.0.0</Version>` — divergent versions = `MissingMethodException` на першому health-check-probe у консумерах (adapter читає internal'и main lib через `[InternalsVisibleTo("SignalCli.HealthChecks")]`). Тепер обидва csproj читають `$(SignalCliPackageVersion)` з `Directory.Build.props` — bump у одному місці = lockstep автоматично. Бonus: adapter csproj отримав `<PackageReadmeFile>README.md</PackageReadmeFile>` — закриває NuGet `dotnet pack` warning "missing a readme" що йшов з кожного build'у.
+
+#### Capability `json-hardening-source-gen-attribute` (rule #18 reality-check)
+
+- **CLAUDE.md rule #18 (`AllowDuplicateProperties = false`) тепер дійсно діє на production-шляху.** До 4.0.2 флаг був виставлений лише на runtime `SignalJson.Options`, але production деserializ'ить через `SignalJsonContext.Default.JsonRpcResponse` тощо — source-gen `GenerationMode = Default` fast-path генерує власний `Utf8JsonReader`-loop і НЕ консумує runtime-flag. Net effect: malformed `{"id":"1","id":"2",...}` від broken-signal-cli (або MITM на stdio) тихо застосовував last-wins — exactly те що rule #18 був написаний попередити. Знайдено під час audit v2.1 RG05 implementation коли третій тест (`SignalJsonContext_AllowDuplicateProperties_ThrowsOnDuplicateKey`) спершу був RED. Fix: додано `AllowDuplicateProperties = false` у `[JsonSourceGenerationOptions(...)]` на `SignalJsonContext` (per [MS Learn .NET 10 docs](https://learn.microsoft.com/dotnet/api/system.text.json.serialization.jsonsourcegenerationoptionsattribute.allowduplicateproperties)). CLAUDE.md rule #18 переписано на dual-site contract: runtime flag + source-gen attribute, обидва обов'язкові.
+
+### 🛡️ Захист від регресій
+
+#### Capability `defensive-test-guards` (audit v2.1 T01–T05 + RG05–RG07)
+
+- **`InvokeMethodAsync_WhenBothResultAndErrorPresent_ErrorWins` (T01 / G9)** — пінує архітектурний інваріант `JsonRpcClient.cs:494`: коли (malformed-but-possible) відповідь несе ОДНОЧАСНО `result` AND `error` — `error` виграє, `result` ніколи не потрапляє у typed deserializer. CHANGELOG [4.0.1] стверджував покриття, `grep` показав що ні; тепер дійсно покрито.
+- **`EventApiSymmetryTests` (RG06 / NF-002)** — reflection-based guard на `ISignalEventService`: кожна `IObservable<T>`-властивість МУСИТЬ мати парний `IAsyncEnumerable<T>` метод з тим самим `TEventArgs` + `CancellationToken = default`. До цього "Established patterns → Event streams: two surfaces" enforcъ'вся соціально; додати 11-й event без парного методу скомпілилось би. Тепер — build-failure-detectable.
+- **`SignalJsonOptions_AllowDuplicateProperties_IsFalse` + `JsonDocumentOptions_…_ThrowsOnDuplicateKey` + `SignalJsonContext_…_ThrowsOnDuplicateKey` (RG05 ×3 facts / G12)** — тришарова перевірка rule #18: runtime-options-flag + .NET 10 framework-API behavior + source-gen attribute. Видалення будь-якого з трьох рівнів surface'иться як failed regression test.
+- **`Meter_ProcessRestarts_WhenProcessCrashes_IncrementsWithCrashTrigger` (T04 / G4 crash subcase)** — пінує `signalcli.process.restarts{trigger="crash"}` тикає при OnProcessExited (anchor: SignalCliHostedService.cs:602). Pattern mirror'ить `OnProcessExited_WhenUnexpected_ShouldAutoRestart` через `processMock.Raise(p.Exited)` + `SpinWait.SpinUntil`.
+- **`Meter_ProcessRestarts_WhenHealthCheckFails_IncrementsWithHealthTrigger` (T05 / G4 health subcase)** — пінує `signalcli.process.restarts{trigger="health"}` тикає при failed health-check (anchor: SignalCliHealthMonitor.cs:130). `FakeTimeProvider.Advance` через `HealthCheckIntervalSeconds` — no wall-clock per rule #11.
+- **`VersionLockstepTests` (RG07 / NF-003)** — reflection-based guard: `typeof(SignalCliOptions).Assembly.Version` == `typeof(SignalCliHealthCheck).Assembly.Version`. Ловить regression "контрибутор хардкоднув `<Version>` у будь-якому з двох csproj".
+- **`Process_ParallelVersionCalls_AllResolveToCorrectResponseById` (E2E)** — пінує CLAUDE.md "signal-cli protocol behavior we depend on" §3 (*"Parallel request processing → match by id, not by order"*) проти **реального** signal-cli virtual-thread dispatcher'а (`JsonRpcReader.java:58`). 10 паралельних `version`-викликів через bundled JRE; всі 10 повертають ту саму version-string'у. Раніше correlation покривалась лише `Subject<T>`-моком на unit-рівні — рефакторинг до `Queue<TaskCompletionSource>` "бо order збережений" пройшов би unit-tests і впав би тільки під real concurrent load. Тепер ловиться build-time.
+
+### 🛠 Інше
+
+#### Capability `version-centralization`
+
+- **Новий `<SignalCliPackageVersion>` property в `Directory.Build.props`** — single source of truth для версії обох пакетів. `SignalCli.csproj` + `SignalCli.HealthChecks.csproj` обидва читають `$(SignalCliPackageVersion)`. Bumping version = single-file edit (`Directory.Build.props`).
+- **`<PackageReadmeFile>README.md</PackageReadmeFile>` додано в HealthChecks csproj** — закриває NuGet warning "missing a readme"; пакет тепер ship'ить корневий README.
+
+#### Capability `test-hygiene` (NF-004, NF-005)
+
+- **`TreatWarningsAsErrors=true` тепер і на `Tests/SignalCli.Tests.csproj`** — main lib давно warning-clean, але test-csproj тихо акумулював 3 xUnit1031 violations у `SyncDisposeDuringCleanupTests.cs` (рядки 89, 144, 145: `service.StartAsync(...).GetAwaiter().GetResult()`). Виправлено: метод-сигнатури `public void` → `public async Task` + `await`; `service.Dispose()` залишається SYNC бо саме його тести й вимірюють. Без warnings будь-який майбутній xUnit-violation fail'не build одразу.
+- **`Microsoft.Extensions.TimeProvider.Testing` + `Microsoft.Extensions.Diagnostics.Testing` bumped 9.0.0 → 10.0.0** — закриває last mismatched-major у dependency graph тестового проєкту. Решта Microsoft.Extensions.* уже на 10.0.0. Підтверджено через [MS Learn TimeProvider.Testing docs](https://learn.microsoft.com/dotnet/core/extensions/timeprovider-testing) — public-surface unchanged між 9.x і 10.x.
+
+#### Capability `claude-md-baseline-codification`
+
+- **Нова секція CLAUDE.md "Audit baseline — invariants that MUST NOT regress"** — мінімальна планка якості зафіксована після audit v2.1: unit ≥ 287, E2E ≥ 2, обидва проєкти з `TreatWarningsAsErrors=true`, таблиця 7 regression guards (R01–RG07), архітектурні інваріанти, версійна синхронізація.
+- **Нова секція CLAUDE.md "How we discovered these issues — prevention checklist"** — п'ять failure-mode-сценаріїв (package version drift, silent warnings, test gap при рефакторингу, doc/code constant drift, missing regression guard) з PR-time перевірками для кожного.
+- **CLAUDE.md "Future development guardrails" реструктуризовано** — більшість untested invariants з audit-followup-2026 era тепер shipped (мають тести); катаlog розділено на "Already shipped" + "Currently open (empty)". Виправлено константа `MaxInlineEncodedAttachmentBytes`: 15 000 000 → **12 000 000** (відповідає signal-cli-protocol-alignment §5 src/SignalMessage.cs:38; CLAUDE.md drifted).
+- **CLAUDE.md rule #18 переписано на dual-site contract** — runtime flag AND source-gen attribute обов'язкові разом; видалення будь-якого silently weakens defense-in-depth.
+- **Нова субсекція CLAUDE.md "Version-CHANGELOG lockstep"** — bump `<SignalCliPackageVersion>` у `Directory.Build.props` МУСИТЬ ідти в одному коміті з відповідною `## [X.Y.Z] — YYYY-MM-DD` секцією у CHANGELOG.md. Цей самий patch — перший застосунок правила.
+
+### Тестова statistika
+
+- **Unit tests:** 279 → **287** (+8: T01, T02/RG06, T03/RG05×3, T04, T05, VersionLockstepTests/RG07).
+- **Integration tests:** 7 → **8** (+1: SignalCliE2EParallelRpcCorrelationTests).
+- **Build:** 0 warnings, 0 errors на обох проєктах (`src/SignalCli` + `Tests/SignalCli.Tests`).
+- **OpenSpec changes:** 2 active (`json-hardening-source-gen-attribute`, `e2e-coverage-expansion`) — будуть архівовані після PR merge per CLAUDE.md "Post-merge archive workflow".
+
+### Pending follow-up
+
+_(нічого — usі audit v2.1 findings закриті; усі 6 OpenSpec subtasks landed)_
+
+---
+
 ## [4.0.1] — 2026-05-24
 
 Patch: завершує **усі чотири "Pending follow-up"** позиції з [4.0.0] — включаючи 4 з 5 integration-tests-expansion E2E, які раніше вважалися non-feasible без CI runtime. Нульові breaking changes — лише hardening, observability test-coverage, реальна активація AOT-friendly configuration-binding, і skip-gated E2E повного set'у.

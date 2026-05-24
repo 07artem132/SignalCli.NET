@@ -12,8 +12,10 @@
     <!-- nf003 (healthchecks-version-sync, audit v2.1): єдине джерело істини для версії
          обох пакетів. SignalCli.NET.HealthChecks використовує [InternalsVisibleTo] і
          бінарно прив'язаний до main lib — версії МУСЯТЬ збігатися. Enforced:
-         VersionLockstepTests.MainLibAndHealthChecksAdapter_ShareExactSameAssemblyVersion. -->
-    <SignalCliPackageVersion>4.0.1</SignalCliPackageVersion>
+         VersionLockstepTests.MainLibAndHealthChecksAdapter_ShareExactSameAssemblyVersion.
+         CLAUDE.md "Version-CHANGELOG lockstep" — bump цього property у тому ж коміті
+         що й нова `## [X.Y.Z] — YYYY-MM-DD` секція у CHANGELOG.md. -->
+    <SignalCliPackageVersion>4.0.2</SignalCliPackageVersion>
   </PropertyGroup>
 
 </Project>
