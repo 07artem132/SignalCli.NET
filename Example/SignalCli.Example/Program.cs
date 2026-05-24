@@ -29,7 +29,13 @@ namespace SignalCli.Example
                 .ConfigureServices(services =>
                 {
                     // ✨ 2.1.0: типована конфігурація через SignalCliOptions + ValidateOnStart.
-                    services.AddSignalCli((Action<SignalCliOptions>)(o =>
+                    // audit-followup-2026 (low-priority-polish): typed lambda parameter
+                    // (SignalCliOptions o) замість cast (Action<SignalCliOptions>) — і однозначно
+                    // disambiguate'ить overload resolution між AddSignalCli(Action<SignalCliOptions>?)
+                    // і AddSignalCli(Action<Config>?) (Config має ті ж AppHome/LibDirectory props,
+                    // тому без явного типу C# не може обрати overload), і читабельніше за cast.
+                    // Cast прибереться повністю у 4.0 (deprecated-shim-removal видаляє Config-overload).
+                    services.AddSignalCli((SignalCliOptions o) =>
                     {
                         o.AppHome = AppDomain.CurrentDomain.BaseDirectory;
                         o.LibDirectory = "signal-cli/lib";
@@ -38,7 +44,7 @@ namespace SignalCli.Example
                         o.MaxRestartAttempts = 3;
                         o.HealthCheckIntervalSeconds = 40;
                         o.HealthCheckTimeoutSeconds = 10;
-                    }));
+                    });
                     services.AddSignalEvents();
 
                     // post-modernize-tuning §11 (audit N1/N2): підключення OpenTelemetry —
