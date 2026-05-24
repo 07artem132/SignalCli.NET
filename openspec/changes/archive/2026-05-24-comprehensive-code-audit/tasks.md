@@ -75,5 +75,5 @@
 
 - [x] 11.1 Verify every High/Critical by reading cited lines (F1,F2,F3,F4,F5,F8 verified in-source)
 - [x] 11.2 Write `AUDIT-FINDINGS.md` with Microsoft-Learn citations
-- [ ] 11.3 Mirror accepted findings as a follow-up remediation change skeleton (`address-audit-findings-2`)
+- [x] 11.3 Mirror accepted findings as a follow-up remediation change skeleton (`address-audit-findings-2`)
 - [x] 11.4 `openspec validate comprehensive-code-audit --strict` passes

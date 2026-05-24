@@ -156,7 +156,7 @@ When adding a new deprecation, mirror this shape: real new API + `[Obsolete("Use
 
 This repo uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for change planning under `openspec/changes/`. For non-trivial work, create/extend a change (proposal → design → specs → tasks) and run `npx -y @fission-ai/openspec@latest validate <change> --strict` before implementing.
 
-**Implemented and merged** (historical reference, do not re-open):
+**Implemented, merged, archived** (historical reference, do not re-open — all in `openspec/changes/archive/2026-05-24-*/`):
 - `address-audit-findings` — privacy/security/correctness audit round 1.
 - `modernize-architecture` — `net9.0` → `net10.0`, `Newtonsoft.Json` → `System.Text.Json` (+ source-gen `JsonSerializerContext`), single-source-of-truth process state via `ProcessStateManager`.
 - `agent-ready-conventions` — `.editorconfig`, analyzers (`AnalysisLevel=latest-recommended`, `EnforceCodeStyleInBuild`), narrowed broad `catch`-es, this `CLAUDE.md`.
@@ -168,11 +168,11 @@ This repo uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for change pla
   - `source-generated-logging`: all ~109 `ILogger` callsites moved to `[LoggerMessage]` `partial` methods in `Logging/*Log.cs`; EventId blocks reserved per service; `BeginScope` for subscription-bound work.
   - `options-pattern`: `SignalCliOptions` + `IOptions<>` with `ValidateDataAnnotations` + custom `.Validate(...)` + `[OptionsValidator]` source-gen; legacy `Config` is `[Obsolete]` shim. **All internal services take `IOptions<SignalCliOptions>` now.**
   - `async-stream-events`: each event kind on `ISignalEventService` has a paired `IAsyncEnumerable<T>` method (`TextMessagesAsync(ct)`, …) on top of bounded `Channel<T>` (1024, DropOldest, single-reader).
+- `post-modernize-tuning` (**3.0.0**, archived 2026-05-24) — 14 capabilities including AOT readiness (`<IsAotCompatible>true</IsAotCompatible>` with `JsonTypeInfo<T>`-based `InvokeMethodAsync` redesign), observability (`ActivitySource`/`Meter` `"SignalCli.NET"` + optional `SignalCli.NET.HealthChecks` package), RPC back-pressure (bounded notification channel with `FullMode=Wait`), state-machine thread-safety (snapshot-then-emit, no reentrant deadlock), subscription race-safety (reservation TCS pattern; idempotent `SubscribeAsync`), hosting modernization (`IHostedLifecycleService` + `IAsyncDisposable` on `SignalCliHostedService` with 2s drain), options-validation tightening (`IConfiguration`-overload), supply-chain hardening (`actions/*` SHA-pinned, csproj-anchored versions), v3.0 breaking-API wave (PascalCase responses, single `SendMessageResponse` return, generic-param reversal, `*Options.CancellationToken` removed, wrapper records for `ListAccountsResponse`/`ListGroupsResponse`, `JsonRpcException` canonical code -32603). 215 unit tests + Linux runtime-smoke CI workflow.
 
-**Pending changes:**
-- `post-modernize-tuning` — broad follow-up wave covering RPC back-pressure, state-machine thread safety, subscription race safety, hosting modernization (`IHostedLifecycleService`, `IAsyncDisposable` on `SignalCliHostedService`), options validation tightening, AOT readiness (`<IsAotCompatible>true</IsAotCompatible>` + reflection-free JSON), high-perf logging extensions, test virtualization (xUnit v3 + MTP, more `FakeTimeProvider`), supply-chain hardening, **observability** (`ActivitySource` + `Meter` + optional `SignalCli.NET.HealthChecks` package — from the 2026-05-23 agent-friendly audit), and the v3.0 breaking-API wave (`agent-friendly-api`). Cloud-development sub-capability is already drafted and merged. See `openspec/changes/post-modernize-tuning/{proposal,tasks}.md`.
+**Pending changes:** _(none)_ — `openspec/changes/` has only the `archive/` subdirectory; start a new change to add work.
 
-When you start a new material piece of work outside this scope, create a new `openspec/changes/<change-name>/` directory with `proposal.md` / `design.md` / `tasks.md` / `specs/<capability>/spec.md`, mirror the structure of `agent-friendly-modernization`, and run `openspec validate <change> --strict` before implementing.
+When you start a new material piece of work, create a new `openspec/changes/<change-name>/` directory with `proposal.md` / `design.md` / `tasks.md` / `specs/<capability>/spec.md`, mirror the structure of an archived change (e.g. `archive/2026-05-24-agent-friendly-modernization/`), and run `openspec validate <change> --strict` before implementing.
 
 ## Working style (how Claude and the user collaborate on this repo)
 
