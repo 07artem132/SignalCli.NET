@@ -25,14 +25,17 @@ namespace SignalCli.Services.Signal
         //      спільної файлової системи);
         //   2) шлях до файлу — демон читає файл із диска (JSON лишається малим).
         //
-        // ЧОМУ ВИБІР: signal-cli парсить вхідний JSON через Jackson, у якого
-        // StreamReadConstraints.maxStringLength за замовчуванням = 20 000 000 символів.
-        // base64 роздуває дані на 4/3 (X байт -> (X/3)*4 символів), тож великий інлайн
-        // перевищить цей ліміт і запит впаде (StreamConstraintsException).
-        // Поріг 15 000 000 закодованих символів тримає інлайн-варіант нижче 20M
-        // із запасом на решту полів JSON; вкладення більші за поріг ідуть через temp-файл.
-        // (Клієнт додатково перевіряє довжину всього рядка запиту проти 20 000 000.)
-        private const long MaxInlineEncodedAttachmentBytes = 15_000_000;
+        // signal-cli-protocol-alignment §5 (attachment-threshold-margin): signal-cli парсить
+        // вхідний JSON через Jackson 2.20.2 (`gradle/libs.versions.toml:10` @ bda4e7f), у якого
+        // StreamReadConstraints.maxStringLength = 20_000_000 символів ПЕР STRING TOKEN.
+        // base64-кодування інфлейтить байти на 4/3 (X raw → (X*4/3) chars), тож:
+        //   12M raw × 4/3 = 16M encoded — 4M margin'у на решту `send` JSON envelope
+        //   (recipient, message body, mentions[], quote*, sticker, etc.) під Jackson cap'ом.
+        // Попереднє значення 15M давало 20M encoded — точно на cap'і з нульовим запасом,
+        // що інколи призводило до StreamConstraintsException при вкладеннях близьких до межі.
+        // Більші вкладення йдуть через temp-файл; клієнт додатково перевіряє довжину всього
+        // рядка запиту проти 20M (per-line check, окремий від Jackson per-token).
+        private const long MaxInlineEncodedAttachmentBytes = 12_000_000;
 
         // post-modernize-tuning §8c.6 (audit C7): уніфікований DTO замість 23 окремих
         // параметрів. Public-обгортки нижче (SendTextMessageAsync/SendAttachmentAsync/

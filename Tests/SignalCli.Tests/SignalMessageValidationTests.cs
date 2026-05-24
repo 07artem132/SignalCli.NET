@@ -75,6 +75,36 @@ public class SignalMessageValidationTests
         Assert.Equal("pack:3", captured()!.Sticker);
     }
 
+    // audit-followup-2026 §6.b (edge-case-coverage): attachment boundary sharp при
+    // (raw * 4/3) ≈ MaxInlineEncodedAttachmentBytes. Після signal-cli-protocol-alignment
+    // §5 threshold = 12_000_000. Один байт через межу encoded-розміру → temp-file path,
+    // не inline data URI.
+    [Fact]
+    public async Task EncodedSize_OverBoundary_UsesTempFile()
+    {
+        var (sut, captured) = CreateSut();
+        // 12M encoded ≈ 9M raw (12M * 3/4). +1024 байт щоб впевнено перейти межу.
+        var rawSize = (12_000_000L * 3 / 4) + 1024L;
+        var bigData = new byte[rawSize];
+        var entry = new AttachmentEntry("big.bin", bigData);
+        try
+        {
+            var options = new AttachmentMessageOptions.Builder(
+                "+1", [new UserRecipient("+2")], [entry]).Build();
+            await sut.SendAttachmentAsync(options);
+
+            var att = captured()!.Attachments!.ToList();
+            Assert.Single(att);
+            // Над-межовий attachment проходить через temp-file → шлях, не data: URI.
+            Assert.DoesNotContain("data:", att[0]);
+            Assert.True(File.Exists(att[0]) || att[0].EndsWith("big.bin", StringComparison.Ordinal));
+        }
+        finally
+        {
+            entry.DeleteTempFile();
+        }
+    }
+
     // D.8 (F8): «1 група + N користувачів» — раніше проходило валідацію через
     // недосяжну гілку; тепер відкидається ArgumentException.
     [Fact]
