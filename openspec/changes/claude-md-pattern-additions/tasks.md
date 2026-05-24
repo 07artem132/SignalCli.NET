@@ -11,14 +11,16 @@
 - [ ] 1.1 **Addition 1 — "DI registration" new subsection.** Insert before `#### Background loops + time` subsection (currently around line 167). Content per `design.md` § Addition 1 (~10 lines: 3 bullets with `SignalCliHostedService` registration example + NF-003 cross-reference for sentinel-marker rationale).
 - [ ] 1.2 **Addition 2 — "Conventions" section additions.** Insert at end of existing `## Conventions (match the existing code)` section, before `### Established patterns` heading. Content per `design.md` § Addition 2 (~10 lines: 4 bullets covering namespace hierarchy, DTO naming, event-args records, test-class naming).
 - [ ] 1.3 **Addition 3 — "Other established patterns" exception-derivation bullet.** Insert as final bullet of existing `#### Other established patterns` subsection (currently around line 187-190). Content per `design.md` § Addition 3 (~3 lines: heuristic with two current derived-types as examples).
-- [ ] 1.4 `wc -l CLAUDE.md` — confirm grew from 556 to ~578 (delta ~22 lines).
-- [ ] 1.5 `dotnet build SignalCli.sln && dotnet test Tests/SignalCli.Tests/SignalCli.Tests.csproj --no-build` — 287 tests still green (no code change).
-- [ ] 1.6 Manual cross-reference check: each addition cites an existing test or capability slug. Verify:
+- [ ] 1.4 **Addition 4 — "README voice + drift rules" new subsection.** Insert after existing `### CHANGELOG voice template` subsection (currently around line 419, end of "Audit baseline → Version-CHANGELOG lockstep" block). Content per `design.md` § Addition 4 (~13 lines: 5 bullets covering audience contract, internal-ID prohibition, quick-start-compile invariant, PR-time triggers, badges + NuGet-pack pairing).
+- [ ] 1.5 `wc -l CLAUDE.md` — confirm grew from 556 to ~591 (delta ~35 lines for all 4 additions).
+- [ ] 1.6 `dotnet build SignalCli.sln && dotnet test Tests/SignalCli.Tests/SignalCli.Tests.csproj --no-build` — 287 tests still green (no code change).
+- [ ] 1.7 Manual cross-reference check: each addition cites an existing test or capability slug. Verify:
   - "NF-003 addsignalcli-idempotency-fix" — exists at `openspec/changes/archive/2026-05-24-audit-followup-2026/specs/addsignalcli-idempotency-fix/spec.md` ✓
   - "`JsonContextRegistrationTests`" — exists at `Tests/SignalCli.Tests/JsonContextRegistrationTests.cs` ✓
   - "`EventApiSymmetryTests` RG06" — exists at `Tests/SignalCli.Tests/RegressionGuards/EventApiSymmetryTests.cs` ✓
-  - "Critical rule #13" — verify still numbered #13 in current CLAUDE.md (could have renumbered)
-- [ ] 1.7 Commit: `"docs(CLAUDE.md): document DI registration + naming conventions + exception derivation (3 audit-v2.1 gap-fills)"`. Suggested body cites `claude-md-pattern-additions` capability slug + acknowledges co-existence with `claude-md-rules-restructure` (plan-only, will move these additions into topic files if executed after).
+  - "Critical rule #13" — verify still numbered #13 in current CLAUDE.md (could have renumbered).
+  - Addition 4 cites "csproj/MSBuild conventions in Established patterns" (added in commit `a95985d`) — verify subsection still exists at expected location.
+- [ ] 1.8 Commit: `"docs(CLAUDE.md): document DI registration + naming + exception derivation + README voice (4 audit-v2.1 gap-fills)"`. Suggested body cites `claude-md-pattern-additions` capability slug + acknowledges co-existence with `claude-md-rules-restructure` (plan-only, will move these additions into topic files if executed after — DI + exceptions → `patterns.md`, naming → `conventions.md`, README voice → `openspec-workflow.md` alongside CHANGELOG-voice template).
 
 ## 2. Verify + push
 
@@ -36,11 +38,11 @@
 
 ## Estimated time
 
-- Phase 1 (3 text additions + verification): ~45min
+- Phase 1 (4 text additions + verification): ~1h
 - Phase 2 (push + PR + merge): ~15min (mechanical)
 - Phase 3 (archive + CLAUDE.md update): ~15min after merge
 
-**Total: ~1h agent-time.** Tiny change.
+**Total: ~1.5h agent-time.** Small change — 4 additions ~35 lines.
 
 ## Co-existence with `claude-md-rules-restructure`
 

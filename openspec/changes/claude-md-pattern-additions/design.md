@@ -2,7 +2,7 @@
 
 ## Method
 
-Three text-additions to existing CLAUDE.md sections. No structural reorganization, no rule deletions, no cross-reference rewrites. Pure-additive doc PR. Total ~22 lines across 3 insertion points.
+Four text-additions to existing CLAUDE.md sections. No structural reorganization, no rule deletions, no cross-reference rewrites. Pure-additive doc PR. Total ~35 lines across 4 insertion points.
 
 Co-existence strategy with `claude-md-rules-restructure` (plan-only, separate change):
 
@@ -56,6 +56,30 @@ Co-existence strategy with `claude-md-rules-restructure` (plan-only, separate ch
 
 ```markdown
 - **Derive a typed exception only for "consumer-actionable, high-frequency" RPC error codes.** Current derived types: `RateLimitException` (signal-cli code `-5`, consumers retry with backoff) and `UntrustedIdentityException` (`-4`, consumers verify safety-number then resend). Other signal-cli codes (`-1` UserError, `-3` IoError, `-6` CaptchaRejected) stay base `JsonRpcException` because consumers typically just log + surface — no actionable typed-catch is expected. Heuristic when adding a new derived type: "Would `catch (XxxException)` lead to materially different consumer code than `catch (JsonRpcException) when (ex.KnownCode == JsonRpcErrorCode.Xxx)`?" If yes, derive. If no, don't — the base + `KnownCode` enum is sufficient and avoids exception-hierarchy bloat.
+```
+
+### Addition 4 — "README voice + drift rules" new subsection
+
+**Location**: insert after existing `### CHANGELOG voice template` subsection (currently around line 419, end of "Audit baseline → Version-CHANGELOG lockstep" block). Sibling placement makes both outward-facing doc-rules co-located and discoverable as a pair.
+
+**Text** (~13 lines):
+
+```markdown
+### README voice + drift rules
+
+- **README is consumer-facing; CLAUDE.md is contributor-facing.** Different audience, different voice. README answers "what is this, do I want it, how do I use it?" — first 200 chars must hook (NuGet.org renders this as package teaser via `<PackageReadmeFile>`). CLAUDE.md answers "I'm editing the code, what must I not break?" — verbosity acceptable, internal IDs acceptable.
+
+- **No internal IDs in README body** — `NF-003`, `RG05`, capability-slug references, audit-version mentions belong in CHANGELOG / OpenSpec / CLAUDE.md, NOT in README prose. **One exception**: the 4.0 migration `<details>` collapsible can reference capability slugs as historical migration anchors (consumer who's upgrading from 3.x benefits from "this is what we called the cleanup").
+
+- **Quick-start must compile against current API verbatim.** Single copy-paste-working block, ≤30 lines, no deleted-type references (`Config`, `*Async`-suffix-less methods, `(Action<X>)` casts that existed only for disambiguation against removed overloads). Drift discovered during audit v2.1 cleanup: README had 16 broken API sites that survived three releases (3.0.0 → 4.0.0 → 4.0.1) because no regression-guard pins README content. A future RG for code-block compilation against current surface was considered + rejected (AST infrastructure cost > value; see proposal's "Out of scope"); PR-time review is the enforcement.
+
+- **README-update PR-time triggers.** Re-check README and refresh examples when ANY of the following lands:
+  - Change to public surface of `ISignalCliClient` / `ISignal*` / `ISignalEventService` interfaces → re-verify API-example signatures compile.
+  - Change to `AddSignalCli*` extensions (new overload, removed overload, signature change) → re-verify DI setup snippets.
+  - New top-level pattern shipped (event-kind, derived exception type, options field, new optional package like `SignalCli.NET.HealthChecks`) → consider "API capabilities" table addition + Quick-start / Extended-example mention.
+  - `<SignalCliPackageVersion>` bump → re-check README's version mentions, migration tables, "TestBaseline ≥ N" claims.
+
+- **Badges + NuGet pack pairing.** Badges MUST use absolute `https://raw.githubusercontent.com/<owner>/<repo>/main/.github/badges/*.svg` URLs — relative paths (`.github/badges/...`) render correctly on github.com but break on nuget.org / IDE previewers / third-party gallery sites (interpreted as hostname → broken `http://.github/...`). README ships in NuGet pack via `<PackageReadmeFile>README.md</PackageReadmeFile>` + `<None Include="..\..\README.md" Pack="true" PackagePath="\" />` on each packable csproj (`SignalCli.csproj` + `SignalCli.HealthChecks.csproj` — see csproj/MSBuild conventions in "Established patterns").
 ```
 
 ## Risk analysis
