@@ -6,14 +6,14 @@ Guidance for AI coding agents (Claude Code, Copilot, etc.) working in this repos
 
 **SignalCli.NET** — a .NET wrapper around [`signal-cli`](https://github.com/AsamK/signal-cli) (a Java app) that exposes a typed API for the Signal messenger. The library launches and supervises `signal-cli` in JSON-RPC mode over stdin/stdout, correlates requests/responses, and surfaces incoming events through **two parallel surfaces**: `IObservable<T>` (Rx, for fan-out/broadcast) and `IAsyncEnumerable<T>` (Channels, default for `await foreach`).
 
-- Target framework: **net10.0 (LTS)**, language **C# 14**. Package version **2.1.0**.
+- Target framework: **net10.0 (LTS)**, language **C# 14**. Package version **3.0.0**.
 - Requires **JDK 25+** (signal-cli 0.14.3's `Main` is class-file version 69.0 = Java 25) and **signal-cli 0.14.3** (downloaded by the `SignalCli.Runtime` package at build time). Java is **not** required with the native package (`SignalCli.Runtime.Native`, Linux x64) or the bundled-JRE packages (`SignalCli.Runtime.Jre.win-x64`, `SignalCli.Runtime.Jre.osx-arm64`).
 
 ## Build & test
 
 ```bash
 dotnet build SignalCli.sln                                  # build all
-dotnet test Tests/SignalCli.Tests/SignalCli.Tests.csproj    # run tests (180 tests)
+dotnet test Tests/SignalCli.Tests/SignalCli.Tests.csproj    # run tests (215 tests)
 dotnet test Tests/SignalCli.Tests/SignalCli.Tests.csproj --collect:"XPlat Code Coverage"  # coverage
 ```
 
@@ -224,7 +224,7 @@ These are conventions we landed during the 2.1.0 work. They aren't strict — bu
 
 - **Plan first, then implement.** Non-trivial work goes through OpenSpec (proposal → design → tasks → spec.md per capability). The plan should be small enough to validate (`openspec validate --strict`) and explicit enough that any subset is independently shippable.
 - **One commit per capability/cluster.** When implementing a multi-cluster OpenSpec change, each capability lands as its own commit with a clear message. Cluster A → cluster B → … is easier to review and bisect than a single mega-commit. Final batch (docs, version bump, leftover items) goes in one trailing commit.
-- **`dotnet build` + `dotnet test --no-build` after every cluster.** If the test count drops or a new flake appears, stop and diagnose before moving on. The suite is 180/180 stable — drift is the early-warning sign.
+- **`dotnet build` + `dotnet test --no-build` after every cluster.** If the test count drops or a new flake appears, stop and diagnose before moving on. The suite is 215/215 stable — drift is the early-warning sign.
 - **Don't claim a flaky test is "pre-existing" without a baseline check.** If a test fails under your changes, `git stash`, rebuild + retest at HEAD, compare. We diagnosed real flake (the `ForceRestart*Delay*` family) this way and migrated it to `FakeTimeProvider` rather than living with it.
 - **Subagents (`Explore`, etc.) for parallel research, not for write tasks.** Most of the implementation work in 2.1.0 was direct edits in the main agent; subagents are useful for "find me all callsites of X" or "check whether Y exists in the test suite" but not for "implement cluster D for me."
 - **Comments and log messages stay in Ukrainian.** Match the codebase's voice when you edit. The CHANGELOG, README, and PR/commit titles can be Ukrainian or English — mirror the surrounding style.
