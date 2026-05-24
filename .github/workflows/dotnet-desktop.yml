@@ -33,19 +33,19 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       with:
         fetch-depth: 0
 
     # Встановлення .NET 9.0
     - name: Install .NET
-      uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+      uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
       with:
         dotnet-version: 10.0.x
         
     # Кешування пакетів NuGet
     - name: Cache NuGet packages
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ${{ env.NUGET_PACKAGES }}
         key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
@@ -68,7 +68,7 @@ jobs:
     # Публікація результатів тестів
     - name: Publish Test Results
       if: always()
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
       with:
         name: Test Results (${{ matrix.os }}-${{ matrix.configuration }})
         path: "**/TestResults/*.trx"
@@ -215,7 +215,7 @@ jobs:
     # Публікація звіту про покриття коду
     - name: Upload coverage report
       if: matrix.configuration == 'Debug' && matrix.os == 'ubuntu-latest'
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
       with:
         name: Coverage Report
         path: coverage-report
@@ -228,7 +228,7 @@ jobs:
     # Завантаження артефактів збірки
     - name: Upload build artifacts
       if: matrix.configuration == 'Release' && matrix.os == 'ubuntu-latest'
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
       with:
         name: NuGet Package
         path: nupkgs
