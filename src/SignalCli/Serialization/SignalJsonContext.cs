@@ -20,7 +20,16 @@ namespace SignalCli.Serialization;
 // серіалізацію — згенерований код може писати JSON напряму через Utf8JsonWriter без обходу
 // JsonTypeInfo, що дає помітний перфоманс-приріст для гарячих write-шляхів (Microsoft
 // "Reflection vs source generation" — Default is faster than Metadata-only).
-[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Default)]
+//
+// json-hardening-source-gen-attribute (audit v2.1 follow-up): AllowDuplicateProperties = false
+// — генератор вшиває duplicate-key check у згенерований Utf8JsonReader-loop. CLAUDE.md
+// rule #18 раніше виставляв цей флаг тільки на runtime-options (SignalJson.Options), але
+// production-шлях через SignalJsonContext.Default.X обходив його (fast-path читає JSON напряму).
+// Тепер захист fail-loud діє на ОБОХ шляхах — runtime + source-gen. Pinned RG05 ×3 facts у
+// JsonSerializationTests.cs.
+[JsonSourceGenerationOptions(
+    GenerationMode = JsonSourceGenerationMode.Default,
+    AllowDuplicateProperties = false)]
 // JSON-RPC
 [JsonSerializable(typeof(JsonRpcRequest))]
 [JsonSerializable(typeof(JsonRpcResponse))]

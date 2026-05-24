@@ -96,12 +96,26 @@ public sealed class PublicApiSurfaceTests
     private static string FormatTypeName(Type type)
     {
         if (type.IsGenericParameter) return type.Name;
-        if (!type.IsGenericType) return type.FullName ?? type.Name;
+        if (!type.IsGenericType) return StripAssemblyMetadata(type.FullName ?? type.Name);
         var genericName = type.GetGenericTypeDefinition().FullName ?? type.Name;
         var stripped = genericName.Contains('`') ? genericName[..genericName.IndexOf('`')] : genericName;
         var args = string.Join(",", type.GetGenericArguments().Select(FormatTypeName));
         return $"{stripped}<{args}>";
     }
+
+    /// <summary>
+    /// version-CHANGELOG-lockstep fix (audit v2.1 +1 follow-up): для by-ref/array/pointer типів,
+    /// які проходять через <c>type.FullName</c>-гілку, FullName для byref-to-generic повертає
+    /// assembly-qualified inner з вшитим <c>Version=X.Y.Z</c>. Кожен bump <c>&lt;SignalCliPackageVersion&gt;</c>
+    /// форсував би регенерацію baseline'у — exactly the friction that <c>Directory.Build.props</c>
+    /// version-centralization мала усунути. Регулярка стрипає тільки assembly-metadata
+    /// (Version/Culture/PublicKeyToken); решта структури типу збережена.
+    /// </summary>
+    private static string StripAssemblyMetadata(string typeName) =>
+        System.Text.RegularExpressions.Regex.Replace(
+            typeName,
+            @", Version=\d+\.\d+\.\d+\.\d+, Culture=[^,\]]+, PublicKeyToken=[^,\]]+",
+            string.Empty);
 
     private static string FormatMethodName(MethodBase method)
     {

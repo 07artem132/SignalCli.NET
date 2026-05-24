@@ -11,16 +11,27 @@
 
         <Authors>07artem132</Authors>
         <PackageId>SignalCli.NET.HealthChecks</PackageId>
-        <Version>3.0.0</Version>
-        <AssemblyVersion>3.0.0</AssemblyVersion>
-        <FileVersion>3.0.0</FileVersion>
+        <!-- nf003 (audit v2.1): версія читається з Directory.Build.props
+             $(SignalCliPackageVersion) — main lib і adapter ЗАВЖДИ in lockstep.
+             Enforced: VersionLockstepTests.MainLibAndHealthChecksAdapter_ShareExactSameAssemblyVersion. -->
+        <Version>$(SignalCliPackageVersion)</Version>
+        <AssemblyVersion>$(SignalCliPackageVersion)</AssemblyVersion>
+        <FileVersion>$(SignalCliPackageVersion)</FileVersion>
         <PackageProjectUrl>https://github.com/07artem132/SignalCli.NET</PackageProjectUrl>
         <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
         <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
         <RepositoryUrl>https://github.com/07artem132/SignalCli.NET</RepositoryUrl>
         <Description>IHealthCheck adapter for SignalCli.NET — exposes signal-cli process state to ASP.NET Core / generic-host /healthz endpoints via Microsoft.Extensions.Diagnostics.HealthChecks.</Description>
         <PackageTags>signal;signal-cli;healthcheck;observability;asp-net-core</PackageTags>
+        <!-- nf003 (audit v2.1): дзеркалимо main-lib pattern — pack repo-root README у NuGet.
+             Без цього `dotnet pack` warning'ить "missing a readme" (best-practice violation). -->
+        <PackageReadmeFile>README.md</PackageReadmeFile>
     </PropertyGroup>
+
+    <ItemGroup>
+        <!-- nf003 (audit v2.1): дзеркалимо main-lib pack-pattern. -->
+        <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
 
     <ItemGroup>
         <!-- post-modernize-tuning §11.C (audit N3): SignalCli.NET.HealthChecks
