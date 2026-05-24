@@ -74,7 +74,8 @@ public class SignalCliE2EVersionTests
         // Перед запуском перевіряємо наявність потрібних рантайм-файлів — якщо їх немає
         // (наприклад, незнайома платформа або CI ще не виконав download-таргет),
         // повертаємо null + skipReason замість того, щоб дозволити процесу впасти.
-        var cfg2 = host.Services.GetRequiredService<Config>();
+        // §8b.1: DI реєструє лише IOptions<SignalCliOptions>; Config напряму не доступний.
+        var cfg2 = host.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<SignalCli.Models.SignalCliOptions>>().Value;
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
             if (!File.Exists(cfg2.SignalCliExecutable))
