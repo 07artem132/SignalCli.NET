@@ -19,7 +19,7 @@ public sealed class BackgroundServiceLifecycleTests : SignalCliHealthMonitorTest
     {
         // Arrange — fakeTime гарантує, що PeriodicTimer-tick не спрацьовує сам по собі.
         var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
-        ServiceConfig.HealthCheckIntervalSeconds = 1; // 1с-interval; tick'и керовані через fakeTime.Advance.
+        ServiceOptions.HealthCheckIntervalSeconds = 1; // 1с-interval; tick'и керовані через fakeTime.Advance.
 
         // Ping-callback фіксує що ExecuteAsync дійсно крутився.
         var inLoopSeen = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -43,7 +43,7 @@ public sealed class BackgroundServiceLifecycleTests : SignalCliHealthMonitorTest
         // Маленька real-time пауза, щоб ExecuteAsync встиг увійти в `WaitForNextTickAsync`
         // і зареєструвати PeriodicTimer на віртуальному годиннику; інакше Advance "у порожнечу".
         await Task.Delay(50);
-        fakeTime.Advance(TimeSpan.FromSeconds(ServiceConfig.HealthCheckIntervalSeconds));
+        fakeTime.Advance(TimeSpan.FromSeconds(ServiceOptions.HealthCheckIntervalSeconds));
         await inLoopSeen.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         // Тепер запитуємо StopAsync — він має:

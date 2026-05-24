@@ -44,18 +44,18 @@ public class JsonRpcClientTests
     /// </summary>
     private JsonRpcClient CreateClient(int requestTimeoutSeconds = 60, TimeProvider? timeProvider = null)
     {
-        var config = new Config
+        // deprecated-shim-removal §5: SignalCliOptions напряму, без Config-shim.
+        var options = new SignalCliOptions
         {
             AppHome = Path.GetTempPath(),
             JavaExecutable = string.Empty,
             LibDirectory = string.Empty,
             RequestTimeoutSeconds = requestTimeoutSeconds
         };
-        // D.4: JsonRpcClient тепер приймає SignalCliOptions; конвертуємо legacy Config.
         return new JsonRpcClient(
             _loggerMock.Object,
             _streamProviderMock.Object,
-            config.ToOptions(),
+            options,
             timeProvider
         );
     }

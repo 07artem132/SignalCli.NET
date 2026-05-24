@@ -11,6 +11,7 @@ using SignalCli.Models;
 using SignalCli.Services.Rpc;
 using SignalCli.Services.Signal;
 using SignalCli.Services.SignalCli;
+using SignalCli.Utilities;
 
 namespace SignalCli.Extensions;
 
@@ -20,6 +21,15 @@ namespace SignalCli.Extensions;
 [PublicAPI]
 public static class ServiceCollectionExtensions
 {
+    // audit-followup-2026 (addsignalcli-idempotency-fix): sentinel-type marker для guard'у.
+    // Тип private nested щоб consumer'и не могли випадково зарегати/перевірити його.
+    // Попередній guard `services.Any(d => d.ServiceType == typeof(IOptions<SignalCliOptions>))`
+    // НЕ fire'ив бо IOptions<T> зареєстровано open-generic; повторні AddSignalCli виклики
+    // (a) re-run'или configure delegate (second-wins), (b) додавали 3 duplicate IHostedService
+    // descriptor'и → подвійний startup. Тепер: реєструємо marker на першому виклику, перевіряємо
+    // на наступних.
+    private sealed class SignalCliRegistrationMarker { }
+
     // C# 14 extension block: усі члени розширюють один отримувач (IServiceCollection services).
     extension(IServiceCollection services)
     {
@@ -46,9 +56,10 @@ public static class ServiceCollectionExtensions
         /// </remarks>
         public IServiceCollection AddSignalCli(Action<SignalCliOptions>? configureOptions)
         {
-            if (services.Any(d => d.ServiceType == typeof(IOptions<SignalCliOptions>)
-                                  || d.ServiceType == typeof(SignalCliOptions)))
+            // audit-followup-2026 (addsignalcli-idempotency-fix): sentinel-marker guard.
+            if (services.Any(d => d.ServiceType == typeof(SignalCliRegistrationMarker)))
                 return services;
+            services.AddSingleton<SignalCliRegistrationMarker>();
 
             ConfigureOptions(services, configureOptions);
             RegisterCoreServices(services);
@@ -79,63 +90,60 @@ public static class ServiceCollectionExtensions
         /// </example>
         /// <para>Реєстрація ідемпотентна — повторні виклики не дублюють хост-сервіси.</para>
         /// <para>
-        /// <b>AOT-warning:</b> `OptionsBuilder.Bind&lt;TOptions&gt;(IConfiguration)` тягне
-        /// <c>Microsoft.Extensions.Configuration.Binder</c>, що використовує reflection. Для
-        /// AOT-deploy'у користуйтеся `AddSignalCli(Action&lt;SignalCliOptions&gt;)`-overload'ом
-        /// (повністю reflection-free).
+        /// <b>AOT-warning:</b> `OptionsBuilder.Bind&lt;TOptions&gt;(IConfiguration)` annotated
+        /// <c>[RequiresUnreferencedCode]/[RequiresDynamicCode]</c> у фреймворку, тож цей overload
+        /// SHALL bear ті ж самі attributes. Configuration source-gen (увімкнений у csproj через
+        /// <c>EnableConfigurationBindingGenerator=true</c>) допомагає іншим call-site'ам, але
+        /// сам <c>OptionsBuilder.Bind</c> досі несе attribute. Для AOT-deploy'у користуйтеся
+        /// <c>AddSignalCli(Action&lt;SignalCliOptions&gt;)</c>-overload'ом (повністю reflection-free).
         /// </para>
         /// </remarks>
-        [RequiresUnreferencedCode("Calls Microsoft.Extensions.Configuration.Binder which uses reflection on SignalCliOptions members. Use AddSignalCli(Action<SignalCliOptions>) for AOT scenarios.")]
-        [RequiresDynamicCode("Calls Microsoft.Extensions.Configuration.Binder which may generate dynamic code at runtime. Use AddSignalCli(Action<SignalCliOptions>) for AOT scenarios.")]
+        [RequiresUnreferencedCode("Calls OptionsBuilder.Bind which is annotated [RequiresUnreferencedCode]. Use AddSignalCli(Action<SignalCliOptions>) for AOT scenarios.")]
+        [RequiresDynamicCode("Calls OptionsBuilder.Bind which is annotated [RequiresDynamicCode]. Use AddSignalCli(Action<SignalCliOptions>) for AOT scenarios.")]
         public IServiceCollection AddSignalCli(IConfiguration configurationSection)
         {
             ArgumentNullException.ThrowIfNull(configurationSection);
 
-            if (services.Any(d => d.ServiceType == typeof(IOptions<SignalCliOptions>)
-                                  || d.ServiceType == typeof(SignalCliOptions)))
+            // audit-followup-2026 (addsignalcli-idempotency-fix): sentinel-marker guard.
+            if (services.Any(d => d.ServiceType == typeof(SignalCliRegistrationMarker)))
                 return services;
+            services.AddSingleton<SignalCliRegistrationMarker>();
 
             ConfigureOptionsFromConfiguration(services, configurationSection);
             RegisterCoreServices(services);
             return services;
         }
 
-        /// <summary>
-        /// Додає всі необхідні сервіси для роботи з Signal CLI до контейнера DI (legacy-overload).
-        /// </summary>
-        /// <param name="configure">
-        /// Делегат для налаштування <see cref="Config"/>. Може бути <c>null</c> — тоді
-        /// використовується <see cref="Config.CreateDefault"/> без подальших змін.
-        /// </param>
-        /// <returns>Колекція сервісів з доданими сервісами Signal CLI.</returns>
-        /// <remarks>
-        /// <para>
-        /// D.3: legacy-overload. Внутрішньо адаптує <see cref="Config"/> у
-        /// <see cref="SignalCliOptions"/> — усі решта сервісів працюють з <c>IOptions</c>-моделлю.
-        /// </para>
-        /// <para>
-        /// Рекомендується новий overload із <see cref="SignalCliOptions"/>, що дає
-        /// явну типізовану валідацію (DataAnnotations + ValidateOnStart). Цей метод
-        /// буде видалений у 3.0.
-        /// </para>
-        /// </remarks>
-        [Obsolete("Use AddSignalCli(Action<SignalCliOptions>?) — has DataAnnotations validation + ValidateOnStart. Will be removed in 3.0.")]
-        public IServiceCollection AddSignalCli(Action<Config>? configure)
-        {
-            if (services.Any(d => d.ServiceType == typeof(IOptions<SignalCliOptions>)
-                                  || d.ServiceType == typeof(SignalCliOptions)))
-                return services;
+        // deprecated-shim-removal §4 (remove-legacy-addsignalcli-overload): легасі-overload
+        // `AddSignalCli(Action<Config>?)` видалено. Replacement:
+        //   • bundled-runtime defaults → AddSignalCliWithBundledRuntimeDefaults(opts => ...)
+        //   • без defaults → AddSignalCli(Action<SignalCliOptions>?)
+        //   • з appsettings.json → AddSignalCli(IConfiguration)
 
-            // Legacy шлях: будуємо Config через CreateDefault, конвертуємо у SignalCliOptions.
-            ConfigureOptions(services, o =>
+        /// <summary>
+        /// deprecated-shim-removal §1 (config-auto-resolve-migration): додає SignalCli з
+        /// preset'ом bundled-runtime defaults — <c>AppHome = AppContext.BaseDirectory</c>,
+        /// <c>LibDirectory = "SignalCli/lib"</c>, <c>JavaExecutable</c> auto-resolved через
+        /// <see cref="JavaPathResolver"/> (bundled JRE → JAVA_HOME → Windows Oracle → PATH).
+        /// Споживач у <paramref name="configure"/> може override'нути будь-яке поле — наприклад
+        /// на Linux native-режимі задає <c>SignalCliExecutable</c> і нулить <c>JavaExecutable</c>.
+        /// </summary>
+        /// <param name="configure">Опціональний делегат для override'у defaults.</param>
+        /// <remarks>
+        /// Цей extension — replacement для legacy <c>AddSignalCli(Action&lt;Config&gt;?)</c>,
+        /// що ра ніше робив той самий auto-resolve через <c>Config.CreateDefault()</c>. Призначений
+        /// для consumer'ів пакетів <c>SignalCli.Runtime.Jre.{win-x64,osx-arm64}</c>. Consumer'и
+        /// без bundled-runtime використовують <c>AddSignalCli(Action&lt;SignalCliOptions&gt;)</c> напряму.
+        /// </remarks>
+        public IServiceCollection AddSignalCliWithBundledRuntimeDefaults(Action<SignalCliOptions>? configure = null)
+        {
+            return services.AddSignalCli(opts =>
             {
-                var legacy = Config.CreateDefault();
-                configure?.Invoke(legacy);
-                var snapshot = legacy.ToOptions();
-                CopyFrom(snapshot, o);
+                opts.AppHome = AppContext.BaseDirectory;
+                opts.LibDirectory = "SignalCli/lib";
+                opts.JavaExecutable = JavaPathResolver.TryResolveJavaPath(opts.AppHome);
+                configure?.Invoke(opts);
             });
-            RegisterCoreServices(services);
-            return services;
         }
 
         /// <summary>
@@ -182,8 +190,14 @@ public static class ServiceCollectionExtensions
     /// post-modernize-tuning §8b.3: інший шлях конфігурації — Bind із <see cref="IConfiguration"/>-секції.
     /// Усі решта валідаційних правил такі самі (cross-field + source-gen).
     /// </summary>
-    [RequiresUnreferencedCode("Bind uses reflection.")]
-    [RequiresDynamicCode("Bind may generate dynamic code.")]
+    // audit-followup-2026 (configuration-binder-aot): EnableConfigurationBindingGenerator=true
+    // флаг увімкнений у csproj — допомагає там, де source-gen перехоплює call-site. АЛЕ:
+    // OptionsBuilder.Bind<TOptions>(IConfiguration) annotated [RequiresUnreferencedCode]/
+    // [RequiresDynamicCode] у фреймворку (Microsoft.Extensions.Options.ConfigurationExtensions),
+    // тож source-gen НЕ замінює цей call-site. Залишаємо attributes на public overload'і;
+    // консумерам, що цілять AOT — використовувати Action<SignalCliOptions>-overload.
+    [RequiresUnreferencedCode("OptionsBuilder.Bind is annotated [RequiresUnreferencedCode].")]
+    [RequiresDynamicCode("OptionsBuilder.Bind is annotated [RequiresDynamicCode].")]
     private static void ConfigureOptionsFromConfiguration(IServiceCollection services, IConfiguration section)
     {
         var builder = services.AddOptions<SignalCliOptions>().Bind(section);
@@ -213,26 +227,8 @@ public static class ServiceCollectionExtensions
             ServiceDescriptor.Singleton<IValidateOptions<SignalCliOptions>, SignalCliOptionsValidator>());
     }
 
-    /// <summary>Поле-в-поле копіювання SignalCliOptions snapshot → інстанс із Options-фреймворку.</summary>
-    private static void CopyFrom(SignalCliOptions src, SignalCliOptions dst)
-    {
-        dst.AppHome = src.AppHome;
-        dst.LibDirectory = src.LibDirectory;
-        dst.JavaExecutable = src.JavaExecutable;
-        dst.SignalCliExecutable = src.SignalCliExecutable;
-        dst.CliLogLevelCli = src.CliLogLevelCli;
-        dst.LogFileCli = src.LogFileCli;
-        dst.StoragePathCli = src.StoragePathCli;
-        dst.UseManualReceiveMode = src.UseManualReceiveMode;
-        dst.MaxRestartAttempts = src.MaxRestartAttempts;
-        dst.HealthCheckIntervalSeconds = src.HealthCheckIntervalSeconds;
-        dst.HealthCheckTimeoutSeconds = src.HealthCheckTimeoutSeconds;
-        dst.RestartDelaySeconds = src.RestartDelaySeconds;
-        dst.StopTimeoutSeconds = src.StopTimeoutSeconds;
-        dst.RequestTimeoutSeconds = src.RequestTimeoutSeconds;
-        dst.RestartWindowSeconds = src.RestartWindowSeconds;
-        dst.EnvironmentVariables = src.EnvironmentVariables;
-    }
+    // deprecated-shim-removal §4: CopyFrom helper видалено — використовувалося лише
+    // легасі `AddSignalCli(Action<Config>?)` overload'ом, що теж зник.
 
     /// <summary>
     /// Спільна реєстрація сервісів для обох overload-ів <c>AddSignalCli</c>.

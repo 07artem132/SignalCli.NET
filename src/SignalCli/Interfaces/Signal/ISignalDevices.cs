@@ -24,13 +24,8 @@ public interface ISignalDevices
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>Застаріле: використовуйте <see cref="StartLinkAsync"/>.</summary>
-    /// <param name="cancellationToken">Токен скасування операції.</param>
-    /// <returns>Інформація для зв'язування, включаючи URI для QR-коду.</returns>
-    [Obsolete("Use StartLinkAsync; will be removed in 4.0")]
-    Task<StartLinkResponse> StartLink(CancellationToken cancellationToken = default)
-        => StartLinkAsync(cancellationToken);
-    
+    // deprecated-shim-removal §3: `StartLink` Async-suffix-less shim видалено.
+
     /// <summary>
     /// Завершує процес зв'язування нового пристрою з обліковим записом.
     /// </summary>
@@ -63,12 +58,5 @@ public interface ISignalDevices
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>Застаріле: використовуйте <see cref="FinishLinkAsync"/>.</summary>
-    /// <param name="deviceLinkUri">URI для зв'язування, отриманий під час сканування QR-коду.</param>
-    /// <param name="deviceName">Назва нового пристрою.</param>
-    /// <param name="cancellationToken">Токен скасування операції.</param>
-    /// <returns>Результат зв'язування з номером пристрою.</returns>
-    [Obsolete("Use FinishLinkAsync; will be removed in 4.0")]
-    Task<FinishLinkResponse> FinishLink(string deviceLinkUri, string deviceName, CancellationToken cancellationToken = default)
-        => FinishLinkAsync(deviceLinkUri, deviceName, cancellationToken);
+    // deprecated-shim-removal §3: `FinishLink` Async-suffix-less shim видалено.
 }

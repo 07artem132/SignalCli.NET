@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
 using SignalCli.Interfaces.SignalCli;
 using SignalCli.Models;
@@ -15,7 +16,8 @@ public abstract class SignalCliHostedServiceTestsBase : IDisposable
     protected readonly Mock<ILogger<Services.SignalCli.SignalCliHostedService>> LoggerMock;
     protected readonly Mock<IProcessRunner> ProcessRunnerMock;
     protected readonly ProcessStateManager StateManager;
-    protected readonly Config Config;
+    // deprecated-shim-removal §5: Config-shim видалено; працюємо напряму з SignalCliOptions.
+    protected readonly SignalCliOptions Options;
     protected readonly string TempDir;
     protected int ProcessStartCallCount;
 
@@ -40,7 +42,7 @@ public abstract class SignalCliHostedServiceTestsBase : IDisposable
         Directory.CreateDirectory(TempDir);
         
         // Базовая конфигурация
-        Config = CreateTestConfig();
+        Options = CreateTestOptions();
         
         // Подготовка тестового окружения
         SetupTestEnvironment();
@@ -73,9 +75,9 @@ public abstract class SignalCliHostedServiceTestsBase : IDisposable
             });
     }
 
-    private Config CreateTestConfig()
+    private SignalCliOptions CreateTestOptions()
     {
-        return new Config
+        return new SignalCliOptions
         {
             AppHome = TempDir,
             LibDirectory = "lib",
@@ -97,14 +99,13 @@ public abstract class SignalCliHostedServiceTestsBase : IDisposable
 
     protected Services.SignalCli.SignalCliHostedService CreateService(TimeProvider? timeProvider = null)
     {
-        // B.5/B.6: дозволяє тесту підставити FakeTimeProvider для віртуального часу
-        // (Task.Delay у ForceRestartAsync та timer вікна стабільності — обидва через _timeProvider).
-        // D.4: legacy Config обгортаємо в IOptions<SignalCliOptions> через internal helper.
+        // B.5/B.6: дозволяє тесту підставити FakeTimeProvider для віртуального часу.
+        // deprecated-shim-removal §5: Options.Create() напряму на SignalCliOptions.
         return new Services.SignalCli.SignalCliHostedService(
             LoggerMock.Object,
             ProcessRunnerMock.Object,
             StateManager,
-            Config.ToIOptions(),
+            Microsoft.Extensions.Options.Options.Create(Options),
             timeProvider
         );
     }

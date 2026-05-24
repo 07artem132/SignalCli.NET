@@ -28,7 +28,7 @@ public class SignalCliHealthMonitorEdgeCaseTests : SignalCliHealthMonitorTestBas
     public async Task PingCliAsync_WhenTimeout_ShouldReturnFalse()
     {
         // Arrange
-        ServiceConfig.HealthCheckTimeoutSeconds = 1;
+        ServiceOptions.HealthCheckTimeoutSeconds = 1;
         var service = CreateHostedService();
         await service.StartAsync(CancellationToken.None);
 
@@ -48,7 +48,7 @@ public class SignalCliHealthMonitorEdgeCaseTests : SignalCliHealthMonitorTestBas
         await monitor.StartAsync(CancellationToken.None);
         
         // Чекаємо, доки не побачимо Warning у логах або не вичерпається таймаут
-        var timeout = DateTime.UtcNow.AddSeconds(ServiceConfig.HealthCheckTimeoutSeconds*3);
+        var timeout = DateTime.UtcNow.AddSeconds(ServiceOptions.HealthCheckTimeoutSeconds*3);
         while (DateTime.UtcNow < timeout)
         {
             try

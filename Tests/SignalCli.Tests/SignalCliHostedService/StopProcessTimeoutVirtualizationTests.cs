@@ -18,7 +18,7 @@ public sealed class StopProcessTimeoutVirtualizationTests : SignalCliHostedServi
     public async Task StopAsync_WhenWaitForExitTimesOut_KillsProcess_OnVirtualClock()
     {
         // Arrange
-        Config.StopTimeoutSeconds = 5;
+        Options.StopTimeoutSeconds = 5;
         var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
         var killCalled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -69,7 +69,7 @@ public sealed class StopProcessTimeoutVirtualizationTests : SignalCliHostedServi
         await Task.Delay(50); // дозволяємо WaitForExitAsync-mock'у запустись
 
         // Провертаємо віртуальний годинник за StopTimeoutSeconds.
-        fakeTime.Advance(TimeSpan.FromSeconds(Config.StopTimeoutSeconds + 1));
+        fakeTime.Advance(TimeSpan.FromSeconds(Options.StopTimeoutSeconds + 1));
 
         // Assert: Kill викликано до 5с real-time (швидко після Advance).
         await killCalled.Task.WaitAsync(TimeSpan.FromSeconds(5));

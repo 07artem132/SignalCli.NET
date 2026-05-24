@@ -105,13 +105,13 @@ public class SignalCliHostedServiceStateTests : SignalCliHostedServiceTestsBase
     public async Task ProcessRunner_ShouldReceiveCorrectEnvironmentVariables()
     {
         // Arrange
-        // post-modernize-tuning §4.10: EnvironmentVariables — IReadOnlyDictionary;
-        // мутація через WithEnvironment (defensive copy), а не Add() на shared посиланні.
-        Config.WithEnvironment(new Dictionary<string, string>
+        // post-modernize-tuning §4.10 + deprecated-shim-removal §5: Options.EnvironmentVariables
+        // напряму призначається на SignalCliOptions (legacy Config.WithEnvironment видалено).
+        Options.EnvironmentVariables = new Dictionary<string, string>
         {
             ["JAVA_HOME"] = "",
             ["PATH"] = "",
-        });
+        };
         var service = CreateService();
 
         ProcessConfig? capturedConfig = null;
@@ -145,7 +145,7 @@ public class SignalCliHostedServiceStateTests : SignalCliHostedServiceTestsBase
         // Arrange
         // B.6: Task.Delay у ForceRestartAsync тепер через TimeProvider — крутимо віртуальний час
         // FakeTimeProvider замість wall-clock-Stopwatch (раніше тест був flaky через ±1мс).
-        Config.RestartDelaySeconds = delaySeconds;
+        Options.RestartDelaySeconds = delaySeconds;
         var fakeTime = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(DateTimeOffset.UtcNow);
         var service = CreateService(fakeTime);
         await service.StartAsync(CancellationToken.None);
@@ -170,7 +170,7 @@ public class SignalCliHostedServiceStateTests : SignalCliHostedServiceTestsBase
     public async Task OnProcessExit_ShouldRespectMaxRestartAttempts(int maxAttempts)
     {
         // Arrange
-        Config.MaxRestartAttempts = maxAttempts;
+        Options.MaxRestartAttempts = maxAttempts;
 
         var processStartedTcs = new TaskCompletionSource<bool>();
         var allRestartsFinishedTcs = new TaskCompletionSource<bool>();

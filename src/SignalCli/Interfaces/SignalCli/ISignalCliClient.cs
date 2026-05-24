@@ -46,13 +46,6 @@ public interface ISignalCliClient
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Застаріле: використовуйте <see cref="VersionAsync"/>.
-    /// </summary>
-    /// <param name="cancellationToken">Токен скасування для переривання операції.</param>
-    /// <returns>Об'єкт з інформацією про версію Signal CLI.</returns>
-    [Obsolete("Use VersionAsync; will be removed in 3.0")]
-    public Task<VersionResponse> Version(
-        CancellationToken cancellationToken = default
-    ) => VersionAsync(cancellationToken);
+    // deprecated-shim-removal §2 (remove-version-dim): `Version()` DIM shim видалено.
+    // Усі consumer'и → `VersionAsync()`. sed-friendly migration: s/\.Version(/\.VersionAsync(/g.
 }

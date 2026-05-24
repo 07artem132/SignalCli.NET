@@ -31,7 +31,7 @@ public sealed class ScopeCaptureTests
         streamProviderMock.Setup(p => p.CurrentStreamPair).Returns(pair);
         streamProviderMock.Setup(p => p.StreamPairChanged).Returns(streamPairSubject);
 
-        var config = new Config
+        var options = new SignalCliOptions
         {
             AppHome = Path.GetTempPath(),
             JavaExecutable = string.Empty,
@@ -42,7 +42,7 @@ public sealed class ScopeCaptureTests
         await using var client = new JsonRpcClient(
             fakeLogger,
             streamProviderMock.Object,
-            config.ToOptions());
+            options);
 
         // Act — запит без відповіді, дочекаємось timeout'у (швидкий — 2с).
         var invokeTask = client.InvokeMethodAsync(

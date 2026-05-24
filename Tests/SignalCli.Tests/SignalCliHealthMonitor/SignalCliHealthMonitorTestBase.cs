@@ -19,7 +19,8 @@ public abstract class SignalCliHealthMonitorTestBase : IDisposable
     private readonly Mock<ILogger<Services.SignalCli.SignalCliHostedService>> _loggerServiceMock;
     protected readonly Mock<IProcessRunner> ProcessRunnerMock;
     protected readonly ProcessStateManager StateManager;
-    protected readonly Config ServiceConfig;
+    // deprecated-shim-removal §5: Config-shim видалено; SignalCliOptions напряму.
+    protected readonly SignalCliOptions ServiceOptions;
 
     //todo:
     //❌ Тест Dispose (зокрема повторний виклик)
@@ -79,14 +80,14 @@ public abstract class SignalCliHealthMonitorTestBase : IDisposable
         var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir);
 
-        ServiceConfig = new Config
+        ServiceOptions = new SignalCliOptions
         {
             AppHome = tempDir,
             LibDirectory = "lib",
             JavaExecutable = "java",
             MaxRestartAttempts = 2,
             RestartDelaySeconds = 0, // Прискорюємо тести
-            HealthCheckIntervalSeconds = 0,
+            HealthCheckIntervalSeconds = 1, // [Range(1,…)] на SignalCliOptions
             HealthCheckTimeoutSeconds = 1
         };
 
@@ -104,7 +105,7 @@ public abstract class SignalCliHealthMonitorTestBase : IDisposable
             _loggerServiceMock.Object,
             ProcessRunnerMock.Object,
             StateManager,
-            ServiceConfig.ToIOptions()
+            Microsoft.Extensions.Options.Options.Create(ServiceOptions)
         );
     }
 
@@ -118,7 +119,7 @@ public abstract class SignalCliHealthMonitorTestBase : IDisposable
             LoggerMonitorMock.Object,
             _clientProviderMock.Object,
             hostedService,
-            ServiceConfig.ToIOptions(),
+            Microsoft.Extensions.Options.Options.Create(ServiceOptions),
             timeProvider
         );
     }
@@ -171,9 +172,9 @@ public abstract class SignalCliHealthMonitorTestBase : IDisposable
         try
         {
             // Очищаем временную директорию
-            if (Directory.Exists(ServiceConfig.AppHome))
+            if (Directory.Exists(ServiceOptions.AppHome))
             {
-                Directory.Delete(ServiceConfig.AppHome, recursive: true);
+                Directory.Delete(ServiceOptions.AppHome, recursive: true);
             }
         }
         catch

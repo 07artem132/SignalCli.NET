@@ -19,8 +19,8 @@ public class SignalCliHostedServiceAuditTests : SignalCliHostedServiceTestsBase
         // B.3 (F2): свідома StopAsync, поки одночасно випадає Exited — має бути рівно одна
         // зупинка, без авто-перезапуску після intentional-stop. Лічимо кількість запусків
         // процесу (ProcessRunner.StartProcessWithHandle) — після Stop стартів бути не повинно.
-        Config.MaxRestartAttempts = 3;
-        Config.RestartWindowSeconds = 60;
+        Options.MaxRestartAttempts = 3;
+        Options.RestartWindowSeconds = 60;
         var service = CreateService();
 
         await service.StartAsync(CancellationToken.None);
@@ -51,9 +51,9 @@ public class SignalCliHostedServiceAuditTests : SignalCliHostedServiceTestsBase
         // B.6 (F3): процес, що "переживає" RestartWindow у Running, має мати лічильник
         // рестартів скинутий — тож наступний крах знову триггерить рестарт, навіть якщо
         // раніше "бюджет" був витрачений. Перевіряємо це на короткому вікні 1с.
-        Config.MaxRestartAttempts = 1;
-        Config.RestartWindowSeconds = 1;
-        Config.RestartDelaySeconds = 0;
+        Options.MaxRestartAttempts = 1;
+        Options.RestartWindowSeconds = 1;
+        Options.RestartDelaySeconds = 0;
 
         var service = CreateService();
         await service.StartAsync(CancellationToken.None);
@@ -62,7 +62,7 @@ public class SignalCliHostedServiceAuditTests : SignalCliHostedServiceTestsBase
         Mock.Get(first!).Raise(p => p.Exited += null, EventArgs.Empty);
 
         // Чекаємо стабілізації нового процесу понад RestartWindow — лічильник скинеться.
-        await Task.Delay(TimeSpan.FromSeconds(Config.RestartWindowSeconds + 1));
+        await Task.Delay(TimeSpan.FromSeconds(Options.RestartWindowSeconds + 1));
 
         // Другий крах — за старою (лінійною) логікою цей рестарт уже був би заборонений
         // (бюджет вичерпано). Із віконним скиданням рестарт має відбутися.

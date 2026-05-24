@@ -180,7 +180,7 @@ public class SignalCliHealthMonitorLoopTests : SignalCliHealthMonitorTestBase
             })
             .ReturnsAsync(new VersionResponse("test-version"));
 
-        ServiceConfig.HealthCheckIntervalSeconds = 1;
+        ServiceOptions.HealthCheckIntervalSeconds = 1;
 
         var hostedService = CreateHostedService();
         await hostedService.StartAsync(CancellationToken.None);

@@ -33,12 +33,7 @@ public interface ISignalAccounts
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>Застаріле: використовуйте <see cref="ListAccountsAsync"/>.</summary>
-    /// <param name="cancellationToken">Токен скасування операції.</param>
-    /// <returns>Список зареєстрованих акаунтів.</returns>
-    [Obsolete("Use ListAccountsAsync; will be removed in 4.0")]
-    Task<ListAccountsResponse> ListAccounts(CancellationToken cancellationToken = default)
-        => ListAccountsAsync(cancellationToken);
+    // deprecated-shim-removal §3: `ListAccounts` Async-suffix-less shim видалено.
     /// <summary>
     /// Надішліть повідомлення із запитом на синхронізацію на основний пристрій (для груп, контактів, ...).
     /// Основний пристрій відповість повідомленням синхронізації з повним списком контактів і груп.
@@ -52,10 +47,5 @@ public interface ISignalAccounts
 
     Task<SyncAccountsResponse> SyncAccountAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Застаріле: використовуйте <see cref="SyncAccountAsync"/>.</summary>
-    /// <param name="cancellationToken">Токен скасування операції.</param>
-    /// <returns>Пустий об'єкт.</returns>
-    [Obsolete("Use SyncAccountAsync; will be removed in 4.0")]
-    Task<SyncAccountsResponse> SyncAccount(CancellationToken cancellationToken = default)
-        => SyncAccountAsync(cancellationToken);
+    // deprecated-shim-removal §3: `SyncAccount` Async-suffix-less shim видалено.
 }

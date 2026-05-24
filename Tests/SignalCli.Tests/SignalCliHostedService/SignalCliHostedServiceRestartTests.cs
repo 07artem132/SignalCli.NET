@@ -47,7 +47,7 @@ public class SignalCliHostedServiceRestartTests : SignalCliHostedServiceTestsBas
     public async Task ForceRestartAsync_WhenExceedingMaxAttempts_ShouldNotRestart()
     {
         // Arrange
-        Config.MaxRestartAttempts = 1;
+        Options.MaxRestartAttempts = 1;
         var service = CreateService();
         await service.StartAsync(CancellationToken.None);
         var initialProcessId = service.CurrentProcessForTests?.Id;
@@ -67,7 +67,7 @@ public class SignalCliHostedServiceRestartTests : SignalCliHostedServiceTestsBas
         Assert.Equal(firstRestartProcessId, secondRestartProcessId); // Второй перезапуск не произошел
         Assert.Equal(0, ProcessStartCallCount);
         // B.5: текст логу тепер містить ще й розмір вікна стабільності.
-        VerifyLog(LogLevel.Error, $"ForceRestartAsync: перевищено MaxRestartAttempts ({Config.MaxRestartAttempts})");
+        VerifyLog(LogLevel.Error, $"ForceRestartAsync: перевищено MaxRestartAttempts ({Options.MaxRestartAttempts})");
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public class SignalCliHostedServiceRestartTests : SignalCliHostedServiceTestsBas
     public async Task OnProcessExited_WhenAutoRestartDisabled_ShouldRemainFailed()
     {
         // Arrange
-        Config.MaxRestartAttempts = 0;
+        Options.MaxRestartAttempts = 0;
         var service = CreateService();
         await service.StartAsync(CancellationToken.None);
         var process = service.CurrentProcessForTests;
@@ -165,7 +165,7 @@ public class SignalCliHostedServiceRestartTests : SignalCliHostedServiceTestsBas
         // Arrange
         // B.6: Task.Delay у ForceRestartAsync — через TimeProvider. Тест перевіряє, що рестарт
         // НЕ завершиться, поки віртуальний час не зрушено на RestartDelaySeconds (а потім — завершиться).
-        Config.RestartDelaySeconds = 1;
+        Options.RestartDelaySeconds = 1;
         var fakeTime = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(DateTimeOffset.UtcNow);
         var service = CreateService(fakeTime);
         await service.StartAsync(CancellationToken.None);
@@ -208,7 +208,7 @@ public class SignalCliHostedServiceRestartTests : SignalCliHostedServiceTestsBas
     public async Task OnProcessExited_ShouldResetRestartCountOnSuccessfulStart()
     {
         // Arrange
-        Config.MaxRestartAttempts = 2;
+        Options.MaxRestartAttempts = 2;
         var service = CreateService();
         await service.StartAsync(CancellationToken.None);
         

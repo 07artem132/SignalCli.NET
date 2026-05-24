@@ -36,19 +36,18 @@ public sealed class TimeoutVirtualizationTests
         streamProviderMock.Setup(p => p.CurrentStreamPair).Returns(pair);
         streamProviderMock.Setup(p => p.StreamPairChanged).Returns(streamPairSubject);
 
-        var config = new Config
+        var options = new SignalCliOptions
         {
             AppHome = Path.GetTempPath(),
             JavaExecutable = string.Empty,
             LibDirectory = string.Empty,
-            // Великий wall-clock-таймаут; справжній trigger — FakeTimeProvider.Advance.
             RequestTimeoutSeconds = 60
         };
         var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
         await using var client = new JsonRpcClient(
             loggerMock.Object,
             streamProviderMock.Object,
-            config.ToOptions(),
+            options,
             fakeTime);
 
         // Act: запит, який ніколи не отримає відповідь (signal-cli мовчить — output stream порожній).
@@ -90,7 +89,7 @@ public sealed class TimeoutVirtualizationTests
         streamProviderMock.Setup(p => p.CurrentStreamPair).Returns(pair);
         streamProviderMock.Setup(p => p.StreamPairChanged).Returns(streamPairSubject);
 
-        var config = new Config
+        var options = new SignalCliOptions
         {
             AppHome = Path.GetTempPath(),
             JavaExecutable = string.Empty,
@@ -101,7 +100,7 @@ public sealed class TimeoutVirtualizationTests
         await using var client = new JsonRpcClient(
             loggerMock.Object,
             streamProviderMock.Object,
-            config.ToOptions(),
+            options,
             fakeTime);
 
         using var cts = new CancellationTokenSource();

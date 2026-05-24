@@ -50,16 +50,15 @@ public sealed class BackPressureTests
         streamProviderMock.Setup(p => p.CurrentStreamPair).Returns((StreamPair?)null);
         streamProviderMock.Setup(p => p.StreamPairChanged).Returns(streamPairSubject);
 
-        var config = new Config
+        // deprecated-shim-removal §5: пряма SignalCliOptions, без Config-shim.
+        var options = new SignalCliOptions
         {
             AppHome = Path.GetTempPath(),
             JavaExecutable = string.Empty,
             LibDirectory = string.Empty,
+            // Малий канал — щоб гарантовано спостерігати back-pressure ефект на BurstSize > capacity.
+            NotificationChannelCapacity = 8,
         };
-        var options = config.ToOptions();
-        // Малий канал — щоб гарантовано спостерігати back-pressure ефект на BurstSize > capacity.
-        // NotificationChannelCapacity — лише на SignalCliOptions, тож мутуємо після .ToOptions().
-        options.NotificationChannelCapacity = 8;
         await using var client = new JsonRpcClient(
             loggerMock.Object,
             streamProviderMock.Object,
