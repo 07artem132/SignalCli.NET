@@ -5,7 +5,7 @@
 
 ## [4.0.1] — 2026-05-24
 
-Patch: завершує **усі чотири "Pending follow-up"** позиції з [4.0.0]. Нульові breaking changes — лише hardening, observability test-coverage та реальна активація AOT-friendly configuration-binding.
+Patch: завершує **усі чотири "Pending follow-up"** позиції з [4.0.0] — включаючи 4 з 5 integration-tests-expansion E2E, які раніше вважалися non-feasible без CI runtime. Нульові breaking changes — лише hardening, observability test-coverage, реальна активація AOT-friendly configuration-binding, і skip-gated E2E повного set'у.
 
 ### 🐛 Виправлено
 
@@ -30,15 +30,21 @@ Patch: завершує **усі чотири "Pending follow-up"** позиці
   - `EventsDropped_OnChannelOverflow_IncrementsWithCorrectEventType` — прокидає 1100 typing-нотифікацій (capacity=1024, no consumer) → асертить `signalcli.events.dropped{event_type=typing}` тікнув exactly 76 разів.
   - `ProcessRestarts_OnForceRestart_IncrementsWithForceTrigger` — викликає `ForceRestartAsync()` → асертить `signalcli.process.restarts{trigger=force}` тікнув ≥1.
 - **`SyncDisposeDuringCleanupTests` (2 нових)** — пінує `field-barrier-hardening` invariant з [4.0.0]: `SignalCliHostedService.Dispose()` sync-path дренує `_operationLock` із 50ms fallback'ом і не дедлокає навіть з held-lock. Перший тест тримає семафор через reflection і викликає `Dispose()` синхронно; другий — happy-path lock-free assertion.
+- **`SignalCliE2EAdditionalTests` (5 нових E2E, skip-gated)** — закриває останній follow-up з [4.0.0] ("4 з 5 integration-tests-expansion E2E require real signal-cli runtime"). Той самий runtime-availability gate що `SignalCliE2EVersionTests` / `SignalCliE2EGracefulShutdownTests` — без bundled JRE / native бінарника тести return early з `[SKIP] …` маркером у Console.Error; інакше виконують повний E2E:
+  - `Process_StartStopRestart_TransitionsObservedCorrectly` — повний цикл Start → ForceRestart → Stop, асерти `ProcessStateManager.CurrentState` transitions + unique PID між циклами.
+  - `Process_KilledExternally_AutoRestartReclaimsProcess` — `Process.Kill()` real signal-cli, чекаємо до 60с watchdog tick, асертимо новий PID + новий процес відповідає на `version`.
+  - `HealthMonitor_OverInterval_LastPingResultUpdates` — `HealthCheckIntervalSeconds=2`, ждемо 6с, асертимо `LastPingResult.Ok==true` + timestamp fresh (<10s old).
+  - `DisposeAsync_MidFlight_LeavesNoOrphanProcess` — fire `VersionAsync` паралельно з `host.DisposeAsync()`, чекаємо до 5с race-window, асертимо `Process.GetProcessById(pid).HasExited`.
+  - `Configuration_FromIConfiguration_StartsRealCli` — validates `configuration-binder-aot-completion` end-to-end: `AddSignalCli(IConfiguration)` overload + `InMemoryCollection`-bound options → real signal-cli start → `version` returns "0.14.x".
 
 ### 🛠 Інше
 
 - `<EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>` нарешті у [`SignalCli.csproj`](src/SignalCli/SignalCli.csproj) — фікс root-cause проблеми з 4.0.0.
-- Test count: 254 (post-4.0.0) → 273 (+19 нових assertions).
+- Test count: unit 254 → 273 (+19); integration 2 → 7 (+5 skip-gated E2E).
 
 ### Pending follow-up
 
-_(нічого — всі чотири follow-up'и з [4.0.0] закриті у цьому релізі)_
+_(нічого — всі чотири follow-up'и з [4.0.0] повністю закриті)_
 
 ---
 
@@ -121,10 +127,10 @@ _(нічого — всі чотири follow-up'и з [4.0.0] закриті у
 
 ### Pending follow-up
 
-_(усі чотири позиції закриті у [4.0.1] — див. вище)_
+_(усі чотири позиції повністю закриті у [4.0.1] — див. вище)_
 
 - ✅ Configuration-binder full AOT fix → `configuration-binder-aot-completion` (4.0.1).
-- ⏳ 4 з 5 integration-tests-expansion E2E — require real signal-cli runtime + CI infrastructure; залишаються відкладеними бо потребують зовнішньої інфраструктури (Java JDK 25 + signal-cli runtime у CI runner).
+- ✅ 4 з 5 integration-tests-expansion E2E → `SignalCliE2EAdditionalTests` (5 skip-gated tests, 4.0.1).
 - ✅ 6 з 12 edge-case-coverage tests → `safe-filename-hardening` + `observability-counter-assertions` (4.0.1).
 - ✅ 1 з 2 race-prober tests → `SyncDisposeDuringCleanupTests` (4.0.1).
 
