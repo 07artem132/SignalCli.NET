@@ -6,365 +6,181 @@
 [![Java](https://img.shields.io/badge/JDK-25+-007396)](https://www.oracle.com/java/technologies/javase-downloads.html)
 [![Build Status](https://github.com/07artem132/SignalCli.NET/actions/workflows/dotnet-desktop.yml/badge.svg)](https://github.com/07artem132/SignalCli.NET/actions/workflows/dotnet-desktop.yml)
 
-**Обгортка для signal-cli на базі .NET з підтримкою реактивного програмування**
+**Інтеграція Signal-месенджера у .NET-застосунки через типізовану обгортку над [signal-cli](https://github.com/AsamK/signal-cli).** Бібліотека сама запускає signal-cli, моніторить його, перезапускає при збоях, і дає вам типізований async-API + Rx/IAsyncEnumerable-стріми подій. Ви пишете бізнес-логіку, не procces-management.
 
 ## 📖 Зміст
 
-- [Про проект](#-про-проект)
-- [Особливості](#-особливості)
-- [Вимоги](#-вимоги)
+- [Чому SignalCli.NET](#-чому-signalclinet)
 - [Встановлення](#-встановлення)
-- [Швидкий старт](#-швидкий-старт)
-- [Функціональність API](#%EF%B8%8F-функціональність-api)
+- [Швидкий старт за 30 рядків](#-швидкий-старт-за-30-рядків)
+- [Конфігурація — три шляхи](#%EF%B8%8F-конфігурація--три-шляхи)
+- [API-можливості](#%EF%B8%8F-api-можливості)
 - [Інтерфейси бібліотеки](#-інтерфейси-бібліотеки)
-- [Розширені приклади](#-розширені-приклади)
-- [Часті запитання](#-часті-запитання-faq)
+- [Події — `IObservable<T>` vs `IAsyncEnumerable<T>`](#-події--iobservablet-vs-iasyncenumerablet)
+- [Health-checks (опціональний пакет)](#-health-checks-опціональний-пакет)
+- [OpenTelemetry observability](#-opentelemetry-observability)
+- [Розширений приклад — worker з авто-відповіддю](#-розширений-приклад--worker-з-авто-відповіддю)
+- [Міграція з 3.x → 4.0](#-міграція-з-3x--40)
+- [FAQ](#-faq)
 - [Залежності](#-залежності)
-- [Участь у розробці](#-участь-у-розробці)
-- [Ліцензія](#-ліцензія)
-- [Подяки](#-подяки)
+- [Участь у розробці · Ліцензія · Подяки](#-участь-у-розробці)
 
 ---
 
-## 📱 Про проект
+## 🚀 Чому SignalCli.NET
 
-**SignalCli.NET** — .NET-обгортка для [signal-cli](https://github.com/AsamK/signal-cli), яка забезпечує зручний та зрозумілий API для інтеграції месенджера [Signal](https://signal.org/) у ваші .NET-застосунки.
+- **Zero process-management code.** Ми самі стартуємо signal-cli, тримаємо stdout/stdin pipe, моніторимо health, рестартуємо при crash'і. Ви отримуєте `ISignalMessage` / `ISignalEventService` у DI і викликаєте методи.
+- **Типізований async-API.** `SendTextMessageAsync(opts, ct)`, `ListAccountsAsync()`, `SubscribeAsync(account)` — все `Task`/`ValueTask`, з `CancellationToken`, з типізованими винятками (`RateLimitException`, `UntrustedIdentityException`).
+- **Дві поверхні подій — обирай під свій сценарій.** `IObservable<T>` (Rx, fan-out broadcast) **AND** `IAsyncEnumerable<T>` (Channels, `await foreach` з back-pressure). Кожен event-kind має обидві поверхні; парність enforced reflection-тестом.
+- **`Microsoft.Extensions.Hosting` first-class.** Бібліотека — це набір `IHostedService`-ів; всі патерни (`IOptions<T>`, `ILogger<T>`, `IHealthCheck`, `TimeProvider`, `ActivitySource`, `Meter`) — нативні.
+- **AOT-ready** (`<IsAotCompatible>true</IsAotCompatible>` на core lib). Можна `dotnet publish /p:PublishAot=true` без warning'ів — JSON-серіалізація source-gen-only.
+- **Кросплатформність.** Linux 🐧, Windows 🪟, macOS 🍎. На Linux можна без Java (native GraalVM білд signal-cli), на Windows/macOS — bundled-JRE пакет без системної Java.
 
-
-## 🚀 Особливості
-- 💻 **Кросплатформність**: підтримка Windows 🪟, Linux 🐧 та macOS 🍎*
-- ⚙️ **Автоматичне управління процесом** `signal-cli`: запуск, моніторинг, перезапуск при збоях
-- 📡 **Реактивна обробка подій**: повідомлення, вкладення, реакції, індикатор набору тексту, все це через `System.Reactive` (Rx)
-- ✍️ **Форматування повідомлень**: підтримка *курсиву*, **жирного**, `моноширинного` тексту
-- 📎 **Підтримка вкладень**: зображення, документи, стікери
-- 🧩 **Інтеграція з DI-контейнером**: підтримка `Microsoft.Extensions.DependencyInjection` для гнучкої конфігурації
-
-> \* *Linux і macOS офіційно підтримуються, але ще потребують додаткового тестування.*
-
-## 🔧 Вимоги
-
-- **.NET 10.0 (LTS)** або новіше — [Завантажити](https://dotnet.microsoft.com/download/dotnet/10.0)
-- **JDK 25+** — [Завантажити](https://www.oracle.com/java/technologies/javase-downloads.html) — *signal-cli 0.14.3 потребує саме Java 25+; не потрібна в native-режимі (Linux x64) або з bundled-JRE пакетами (Windows/macOS), див. нижче*
-- **signal-cli v0.14.3+** — [Завантажити](https://github.com/AsamK/signal-cli/releases)
+---
 
 ## 📦 Встановлення
-> Пакети публікуються в [GitHub Packages](https://github.com/07artem132/SignalCli.NET/pkgs/nuget) репозиторію.
 
-1. 🔐 Додайте джерело пакета GitHub Packages:
- ```bash
-dotnet nuget add source "https://nuget.pkg.github.com/07artem132/index.json" 
-   --name github 
-   --username USERNAME 
-   --password GITHUB_TOKEN 
-   --store-password-in-clear-text
-   ```
-2. 📦 Додайте сам пакет до свого проєкту:
+> Пакети публікуються в [GitHub Packages](https://github.com/07artem132/SignalCli.NET/pkgs/nuget). Спершу додайте джерело:
 
 ```bash
- dotnet add package SignalCli.NET
- dotnet add package SignalCli.Runtime
+dotnet nuget add source "https://nuget.pkg.github.com/07artem132/index.json" \
+    --name github \
+    --username USERNAME \
+    --password GITHUB_TOKEN \
+    --store-password-in-clear-text
 ```
 
-### 🚫☕ Без Java (native-режим, Linux x64)
+Тоді обирайте **один** з трьох рантайм-варіантів:
 
-signal-cli має офіційний **GraalVM native** збірку — самодостатній бінарник, якому **не потрібна Java**. Доступний лише для **Linux x64** (офіційних native-білдів для Windows/macOS немає).
+| Сценарій | Команда | Розмір | Java потрібна? |
+|---|---|---|---|
+| **Bundled JRE** *(рекомендовано для Win/macOS)* | `dotnet add package SignalCli.NET && dotnet add package SignalCli.Runtime.Jre.win-x64` *(або `.osx-arm64`)* | ~150 МБ | ❌ ні |
+| **Native binary** *(Linux x64, GraalVM)* | `dotnet add package SignalCli.NET && dotnet add package SignalCli.Runtime.Native` | ~30 МБ | ❌ ні |
+| **Системна Java** *(legacy / custom JVM)* | `dotnet add package SignalCli.NET && dotnet add package SignalCli.Runtime` | ~30 МБ | ✅ JDK 25+ |
 
-1. Замість `SignalCli.Runtime` підключіть нативний пакет:
-```bash
- dotnet add package SignalCli.NET
- dotnet add package SignalCli.Runtime.Native
-```
-2. Вкажіть шлях до нативного бінарника (його кладе пакет у вихідну папку):
-```csharp
-services.AddSignalCli(config =>
-{
-    config.AppHome = AppContext.BaseDirectory;
-    config.StoragePathCli = Path.Combine(AppContext.BaseDirectory, "SignalCliStorageData");
-    // Native-режим: Java не запускається взагалі
-    config.SignalCliExecutable = Path.Combine(AppContext.BaseDirectory, "signal-cli-native", "signal-cli");
-});
-```
-> Якщо `SignalCliExecutable` задано — бібліотека запускає бінарник напряму. Інакше використовується JVM-режим (`SignalCli.Runtime` + JDK 25+).
-> Для **Windows/macOS** офіційного native-білда немає → використовуйте bundled-JRE пакети нижче (або системну Java).
-
-### 🚫☕ Без системної Java (bundled-JRE, Windows/macOS)
-
-Для платформ, де нативного білда немає, є пакети з **вбудованим Eclipse Temurin 25 JRE** —
-самодостатні, **системна Java не потрібна**. Це drop-in заміна `SignalCli.Runtime`:
-
-| Платформа | Пакет |
-|-----------|-------|
-| Windows x64 | `SignalCli.Runtime.Jre.win-x64` |
-| macOS arm64 (Apple Silicon) | `SignalCli.Runtime.Jre.osx-arm64` |
+Опціонально:
 
 ```bash
- dotnet add package SignalCli.NET
- dotnet add package SignalCli.Runtime.Jre.win-x64   # або .osx-arm64
+dotnet add package SignalCli.NET.HealthChecks   # IHealthCheck-адаптер; див. секцію нижче
 ```
-
-```csharp
-services.AddSignalCli(config =>
-{
-    config.AppHome = AppContext.BaseDirectory;
-    config.LibDirectory = "signal-cli/lib";
-    config.StoragePathCli = Path.Combine(AppContext.BaseDirectory, "SignalCliStorageData");
-    // config.JavaExecutable НЕ задаємо — він автоматично резолвиться у jre/bin/java[.exe]
-});
-```
-
-> Пакет кладе у вихідну папку `jre/` (вбудований JRE) та `signal-cli/` (jar-файли).
-> `Config.CreateDefault()` спершу шукає вбудований JRE у `jre/bin/java[.exe]` і лише потім — системну Java.
-> ⚠️ Пакети великі (~150 МБ): містять і JRE, і signal-cli.
-
-> ⚠️ **Зверніть увагу**  
-> Без додавання джерела з GitHub цей пакет не буде доступний.
 
 ---
-## 🚦 Швидкий старт
 
-### 1. Реєстрація сервісів у DI-контейнері
+## 🚦 Швидкий старт за 30 рядків
+
+Робочий приклад. Скопіюй, встав, запусти — отримаєш version-handshake з реальним signal-cli через bundled JRE:
 
 ```csharp
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using SignalCli.Extensions;
+using SignalCli.Interfaces.Signal;
+using SignalCli.Interfaces.SignalCli;
 
 using var host = Host.CreateDefaultBuilder(args)
     .ConfigureServices(services =>
     {
-        // Реєстрація основних сервісів Signal CLI.
-        // ✨ 2.1.0: рекомендований overload — типована конфігурація через
-        //          SignalCliOptions з DataAnnotations + ValidateOnStart.
-        //          Помилки конфігу видно одразу на host.StartAsync(), а не у
-        //          ToProcessConfig() пізніше.
-        services.AddSignalCli((Action<SignalCliOptions>)(o =>
+        // Bundled-runtime defaults — auto-resolve JRE та jar-files.
+        // Override через delegate: AppHome, StoragePathCli, timeouts, тощо.
+        services.AddSignalCliWithBundledRuntimeDefaults(o =>
         {
-            o.AppHome = AppContext.BaseDirectory;
-            o.LibDirectory = "SignalCli/lib";
             o.StoragePathCli = Path.Combine(AppContext.BaseDirectory, "SignalCliStorageData");
             o.MaxRestartAttempts = 3;
-            o.HealthCheckIntervalSeconds = 40;
-            o.HealthCheckTimeoutSeconds = 10;
-        }));
-
-        // Додавання підтримки подій
-        services.AddSignalEvents();
-    })
-    .ConfigureLogging(logging =>
-    {
-        logging.ClearProviders();
-        // ⚠️ Приватність: рівень Trace вмикає логування сирого JSON-RPC трафіку
-        // (тіла повідомлень, номери, вкладення). Для звичайної роботи лишайте Information.
-        logging.SetMinimumLevel(LogLevel.Information);
-        logging.AddConsole();
+        });
+        services.AddSignalEvents();   // потрібен лише якщо плануєш TextMessages/Reaction/...
     })
     .Build();
 
-host.Start();
+await host.StartAsync();
+
+// Простий ping signal-cli — підтверджує що процес стартував і JSON-RPC handshake пройшов.
+var signalService = host.Services.GetRequiredService<ISignalCliClient>();
+var version = await (host.Services.GetRequiredService<ISignalService>()).VersionAsync();
+Console.WriteLine($"signal-cli {version.Version} ready");
+
+await host.StopAsync();
 ```
 
-> 💡 **Альтернатива: `appsettings.json`-секція.** Якщо ви бажаєте binding з конфіг-секції, можна
-> поєднати `AddOptions<>().Bind(...)` зі стандартним `Configuration`-API ASP.NET:
->
-> ```json
-> { "SignalCli": { "AppHome": "/app", "LibDirectory": "lib", "JavaExecutable": "java", "MaxRestartAttempts": 5 } }
-> ```
-> ```csharp
-> services.AddOptions<SignalCliOptions>()
->     .Bind(builder.Configuration.GetSection("SignalCli"))
->     .ValidateDataAnnotations()
->     .ValidateOnStart();
-> services.AddSignalCli((Action<SignalCliOptions>?)null);  // зареєструє сервіси, не торкаючись Options
-> ```
+> **Перший запуск** триває 2-5 секунд — bundled JVM має зінитілізуватись. Наступні виклики через цей же `host` — мілісекунди.
 
-> 🕰 **Legacy overload `AddSignalCli(Action<Config>?)`** лишається, але позначений `[Obsolete]`
-> і буде видалений у 3.0 — мігруйте на `Action<SignalCliOptions>`.
+---
 
-### 2. Зв'язування нового пристрою
+## ⚙️ Конфігурація — три шляхи
+
+Усі три overload'и `AddSignalCli` idempotent — повторні виклики тихо no-op'ують замість дублювати hosted-сервіси.
+
+### 1. `AddSignalCliWithBundledRuntimeDefaults` — найпростіший
+
+Для consumer'ів пакетів `SignalCli.Runtime.Jre.*` або `SignalCli.Runtime.Native`. Auto-resolve'ить `AppHome`, `LibDirectory`, `JavaExecutable` (через bundled JRE → `JAVA_HOME` → Windows Oracle → `PATH`). Delegate override опціональний.
 
 ```csharp
-var signalDevices = host.Services.GetRequiredService<ISignalDevices>();
-
-// Починаємо процес зв'язування
-var linkResponse = await signalDevices.StartLink();
-Console.WriteLine("Для зв'язування відскануйте QR-код у застосунку Signal");
-Console.WriteLine($"DeviceLinkUri: {linkResponse.DeviceLinkUri}");
-
-// Тут можна використати бібліотеку для генерації QR-коду
-// Наприклад: QRCoder, ZXing.Net тощо
-
-// Після сканування QR-коду завершуємо процес зв'язування
-var finishResult = await signalDevices.FinishLink(
-    linkResponse.DeviceLinkUri, 
-    "Мій новий комп'ютер"
-);
-Console.WriteLine($"Пристрій успішно зв'язано. Номер: {finishResult.number}");
-
+services.AddSignalCliWithBundledRuntimeDefaults(o =>
+{
+    o.MaxRestartAttempts = 5;
+    o.RequestTimeoutSeconds = 60;
+});
 ```
 
-### 3. Надсилання повідомлення
+### 2. `AddSignalCli(Action<SignalCliOptions>)` — повний контроль
 
 ```csharp
-var signalMessage = serviceProvider.GetRequiredService<ISignalMessage>();
-
-// Надсилання текстового повідомлення (через Builder + UseStyle для форматування)
-var options = new TextMessageOptions.Builder(
-        account: "+380501234568",
-        recipients: new List<IRecipient> { new UserRecipient("+380501234567") },
-        message: "Привіт! *Це текст* з **форматуванням**.")
-    .UseStyle()
-    .Build();
-
-await signalMessage.SendTextMessageAsync(options);
+services.AddSignalCli(o =>
+{
+    o.AppHome = "/opt/signal";
+    o.LibDirectory = "lib";
+    o.JavaExecutable = "/usr/bin/java";
+    o.MaxRestartAttempts = 3;
+    o.HealthCheckIntervalSeconds = 40;
+    o.HealthCheckTimeoutSeconds = 10;
+    o.RequestTimeoutSeconds = 30;
+});
 ```
 
-## ⚙️ API-можливості, доступні через обгортку
+Усі властивості валідуються через `[Required]`/`[Range]`-атрибути + cross-field XOR (`JavaExecutable` або `SignalCliExecutable` — один з двох обов'язковий) на `host.StartAsync()`. Помилки конфігу видно одразу, не на першому RPC.
 
-### 📱 Акаунт
+### 3. `AddSignalCli(IConfiguration)` — bind з `appsettings.json`
 
-| Функція | Статус | Опис                                   |
-|---------|:------:|----------------------------------------|
-| ListAccounts | ✅ | Отримання списку акаунтів              |
-| SyncAccount | ✅ | Синхронізація акаунта (групи,контакти) |
-| register | ❌ | Реєстрація                             |
-| verify | ❌ | Підтвердження                          |
-| unregister | ❌ | Вимкнення реєстрації                   |
-| deleteLocalAccountData | ❌ | Видалення локальних даних              |
-| updateAccount | ❌ | Оновлення акаунта                      |
-| startChangeNumber | ❌ | Початок зміни номера                   |
-| finishChangeNumber | ❌ | Завершення зміни номера                |
-| setPin | ❌ | Встановлення PIN-коду                  |
-| removePin | ❌ | Видалення PIN-коду                     |
+**AOT-safe** з 4.0.1 (`<EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>` робить bind reflection-free).
 
-### 📲 Пристрої
-
-| Функція | Статус | Опис |
-|---------|:------:|----------|
-| StartLink | ✅ | Початок прив'язки пристрою |
-| FinishLink | ✅ | Завершення прив'язки пристрою |
-| listDevices | ❌ | Список пристроїв |
-| addDevice | ❌ | Додавання пристрою |
-| removeDevice | ❌ | Видалення пристрою |
-
-### 💬 Повідомлення
-
-| Функція | Статус | Опис |
-|---------|:------:|----------|
-| SendTextMessageAsync | ✅ | Надсилання текстового повідомлення |
-| SendAttachmentAsync | ✅ | Надсилання повідомлення з вкладенням |
-| SendStickerAsync | ✅ | Надсилання стікера |
-| sendMessageRequestResponse | ❌ | Відповідь на запит |
-| sendPaymentNotification | ❌ | Платіжне повідомлення |
-| sendReaction | ❌ | Реакція |
-| sendReceipt | ❌ | Квитанція про прочитання/перегляд |
-| sendTyping | ❌ | Набір тексту |
-| remoteDelete | ❌ | Видалення |
-| receive | ❌ | Отримання |
-
-### 👥 Групи
-
-| Функція | Статус | Опис |
-|---------|:------:|----------|
-| ListGroups | ✅ | Отримання списку груп |
-| joinGroup | ❌ | Приєднання |
-| updateGroup | ❌ | Оновлення/створення |
-| quitGroup | ❌ | Вихід |
-
-### 📡 Події
-
-| Функція | Статус | Опис |
-|---------|:------:|----------|
-| SubscribeAsync | ✅ | Підписка на події |
-| UnsubscribeAsync | ✅ | Відписка від подій |
-
-**Підтримувані типи подій:**
-- ✅ Текстові повідомлення
-- ✅ Реакції
-- ✅ Вкладення
-- ✅ Стікери
-- ✅ Набір тексту
-- ✅ Квитанції (звіт про доставку та отримання)
-- ✅ Синхронізація
-
-### ⚙️ Системні
-
-| Функція | Статус | Опис |
-|---------|:------:|----------|
-| Version | ✅ | Отримання версії |
-| submitRateLimitChallenge | ❌ | Розв'язання CAPTCHA |
-
-### 📊 Observability (OpenTelemetry)
-
-Бібліотека експонує **дві OTel-сумісні поверхні** — `ActivitySource` і `Meter`, обидві з іменем `"SignalCli.NET"`. Без активного listener'а — нульова накладна.
+```json
+{
+  "SignalCli": {
+    "AppHome": "/opt/signal",
+    "LibDirectory": "lib",
+    "JavaExecutable": "/usr/bin/java",
+    "MaxRestartAttempts": 3,
+    "HealthCheckIntervalSeconds": 40
+  }
+}
+```
 
 ```csharp
-services.AddOpenTelemetry()
-    .WithTracing(t => t.AddSource("SignalCli.NET"))
-    .WithMetrics(m => m.AddMeter("SignalCli.NET"));
+services.AddSignalCli(builder.Configuration.GetSection("SignalCli"));
 ```
 
-**Спани:** `rpc.<method>`, `signalcli.process.start`, `signalcli.healthcheck.ping`, `signalcli.subscribe`. **Метрики:** `signalcli.rpc.requests` (counter), `signalcli.rpc.duration` (histogram, ms), `signalcli.process.restarts` (counter), `signalcli.events.dropped` (counter), `signalcli.subscriptions.active` (observable gauge).
+---
 
-**Privacy invariant** (CLAUDE.md rule #1): значення тегів — лише method-names, status-enums, integer-id, durations, exception-type-names. Тіло повідомлення, номер телефону, шлях до файлу — НЕ потрапляють у теги. Enforced unit-тестами `ObservabilityPrivacyTests` через `ActivityListener` + `MeterListener` із seed-PII substring assertions.
+## ⚙️ API-можливості
 
-**Окремий пакет `SignalCli.NET.HealthChecks`** дає `IHealthCheck`-адаптер для signal-cli process state. Залежить лише від `Microsoft.Extensions.Diagnostics.HealthChecks` (це generic-host пакет, **не ASP.NET**). Працює у будь-якому застосунку з `IHost`:
+| Категорія | Підтримано | На черзі |
+|-----------|------------|----------|
+| **Акаунт** | `ListAccountsAsync`, `SyncAccountAsync` | `register`, `verify`, `unregister`, `updateAccount`, `setPin`, ... |
+| **Пристрої** | `StartLinkAsync`, `FinishLinkAsync` | `listDevices`, `addDevice`, `removeDevice` |
+| **Повідомлення** | `SendTextMessageAsync`, `SendAttachmentAsync`, `SendStickerAsync` | `sendReaction`, `sendReceipt`, `sendTyping`, `remoteDelete` |
+| **Групи** | `ListGroupsAsync` | `joinGroup`, `updateGroup`, `quitGroup` |
+| **Події** | `SubscribeAsync`, `UnsubscribeAsync` + 10 потоків подій *(див. наступну секцію)* | — |
+| **Системні** | `VersionAsync` | `submitRateLimitChallenge` |
+| **Профіль · Контакти · Безпека · Стікери · Вкладення** | — | `updateProfile`, `listContacts`, `listIdentities`, `uploadStickerPack`, `getAttachment`, ... |
 
-```csharp
-services.AddHealthChecks().AddSignalCliHealthCheck();
-```
+**Підтримувані типи подій (10):** Текстові повідомлення, Реакції, Вкладення, Стікери, Набір тексту, Квитанції, Синхронізація, Цитати, Редагування, Віддалене видалення.
 
-Detailed examples — у [`docs/cloud-development.md`](docs/cloud-development.md#observability).
+> Бракує методу? Внесок вітається — `services.AddSignalCli(...)` + `ISignalCliClient.InvokeMethodAsync` дає прямий шлях додати будь-який signal-cli RPC.
 
-### 👤 Профіль
-
-| Функція | Статус | Опис |
-|---------|:------:|----------|
-| updateProfile | ❌ | Оновлення профілю |
-
-### 📓 Контакти
-
-| Функція | Статус | Опис |
-|---------|:------:|----------|
-| listContacts | ❌ | Список контактів |
-| updateContact | ❌ | Оновлення контакта |
-| removeContact | ❌ | Видалення контакта |
-| block | ❌ | Блокування |
-| unblock | ❌ | Розблокування |
-| sendContacts | ❌ | Надсилання списку контактів |
-| getUserStatus | ❌ | Отримання статусу користувача |
-
-### 🔒 Безпека
-
-| Функція | Статус | Опис |
-|---------|:------:|----------|
-| listIdentities | ❌ | Список ключів |
-| trust | ❌ | Встановлення довіри |
-| updateConfiguration | ❌ | Оновлення конфігурації |
-
-### 🎭 Стікери
-
-| Функція | Статус | Опис |
-|---------|:------:|----------|
-| uploadStickerPack | ❌ | Завантаження набору стікерів |
-| listStickerPacks | ❌ | Список наборів стікерів |
-| addStickerPack | ❌ | Додавання набору стікерів |
-
-### 📎 Вкладення
-
-| Функція | Статус | Опис |
-|---------|:------:|----------|
-| getAttachment | ❌ | Отримання вкладення |
-| getAvatar | ❌ | Отримання аватара |
-| getSticker | ❌ | Отримання стікера |
+---
 
 ## 🧩 Інтерфейси бібліотеки
 
-Взаємодія з бібліотекою відбувається через такі основні інтерфейси:
-
 ### IRecipient
-
-Абстракція для представлення отримувачів повідомлень.
 
 ```csharp
 public interface IRecipient
@@ -374,44 +190,41 @@ public interface IRecipient
 }
 ```
 
-**Реалізації:**
-- `UserRecipient` - для надсилання повідомлень користувачам
-- `GroupRecipient` - для надсилання повідомлень у групи
+**Реалізації:** `UserRecipient(phoneOrUuid)`, `GroupRecipient(groupId)`.
 
 ### ISignalAccounts
-
-Сервіс для роботи з обліковими записами Signal.
 
 ```csharp
 public interface ISignalAccounts
 {
-    Task<ListAccountsResponse> ListAccounts(CancellationToken cancellationToken = default);
-    Task<SyncAccountsResponse> SyncAccount(CancellationToken cancellationToken = default);
+    Task<ListAccountsResponse> ListAccountsAsync(CancellationToken cancellationToken = default);
+    Task<SyncAccountsResponse> SyncAccountAsync(CancellationToken cancellationToken = default);
 }
 ```
 
 ### ISignalDevices
 
-Сервіс для зв'язування та керування пристроями.
-
 ```csharp
 public interface ISignalDevices
 {
-    Task<StartLinkResponse> StartLink(CancellationToken cancellationToken = default);
-    Task<FinishLinkResponse> FinishLink(string deviceLinkUri, string deviceName, CancellationToken cancellationToken = default);
+    Task<StartLinkResponse> StartLinkAsync(CancellationToken cancellationToken = default);
+    Task<FinishLinkResponse> FinishLinkAsync(string deviceLinkUri, string deviceName, CancellationToken cancellationToken = default);
 }
 ```
 
+`FinishLinkResponse.Number` — PascalCase property (wire-name `"number"` через `[JsonPropertyName]`).
+
 ### ISignalEventService
 
-Реактивний сервіс для обробки подій Signal.
+10 паттернів подій × 2 поверхні (Rx + Channels). Симетрія enforced `EventApiSymmetryTests`.
 
 ```csharp
 public interface ISignalEventService
 {
     Task<SubscribeReceiveResponse> SubscribeAsync(string account, CancellationToken cancellationToken = default);
     Task<UnsubscribeReceiveResponse> UnsubscribeAsync(int subscriptionId, CancellationToken cancellationToken = default);
-    
+
+    // Rx — fan-out / broadcast
     IObservable<TextMessageEventArgs> TextMessages { get; }
     IObservable<ReactionEventArgs> Reaction { get; }
     IObservable<AttachmentEventArgs> Attachments { get; }
@@ -419,366 +232,354 @@ public interface ISignalEventService
     IObservable<TypingEventArgs> TypingNotifications { get; }
     IObservable<ReceiptEventArgs> Receipts { get; }
     IObservable<SyncEventArgs> Syncs { get; }
+    IObservable<QuoteEventArgs> Quotes { get; }
+    IObservable<EditEventArgs> Edits { get; }
+    IObservable<RemoteDeleteEventArgs> RemoteDeletes { get; }
+
+    // Async-stream — exclusive consumption + back-pressure
+    IAsyncEnumerable<TextMessageEventArgs> TextMessagesAsync(CancellationToken cancellationToken = default);
+    IAsyncEnumerable<ReactionEventArgs> ReactionAsync(CancellationToken cancellationToken = default);
+    IAsyncEnumerable<AttachmentEventArgs> AttachmentsAsync(CancellationToken cancellationToken = default);
+    IAsyncEnumerable<StickerEventArgs> StickerAsync(CancellationToken cancellationToken = default);
+    IAsyncEnumerable<TypingEventArgs> TypingAsync(CancellationToken cancellationToken = default);   // не TypingNotificationsAsync
+    IAsyncEnumerable<ReceiptEventArgs> ReceiptsAsync(CancellationToken cancellationToken = default);
+    IAsyncEnumerable<SyncEventArgs> SyncsAsync(CancellationToken cancellationToken = default);
+    IAsyncEnumerable<QuoteEventArgs> QuotesAsync(CancellationToken cancellationToken = default);
+    IAsyncEnumerable<EditEventArgs> EditsAsync(CancellationToken cancellationToken = default);
+    IAsyncEnumerable<RemoteDeleteEventArgs> RemoteDeletesAsync(CancellationToken cancellationToken = default);
 }
 ```
 
 ### ISignalGroups
 
-Сервіс для роботи з групами.
-
 ```csharp
 public interface ISignalGroups
 {
-    Task<ListGroupsResponse> ListGroups(string account, CancellationToken cancellationToken = default);
+    Task<ListGroupsResponse> ListGroupsAsync(string account, CancellationToken cancellationToken = default);
 }
 ```
 
 ### ISignalMessage
 
-Сервіс для надсилання різних типів повідомлень.
-
 ```csharp
 public interface ISignalMessage
 {
-    Task<List<SendMessageResponse>> SendTextMessageAsync(TextMessageOptions options);
-    Task<List<SendMessageResponse>> SendAttachmentAsync(AttachmentMessageOptions options);
-    Task<List<SendMessageResponse>> SendStickerAsync(StickerMessageOptions options);
+    Task<SendMessageResponse> SendTextMessageAsync(TextMessageOptions options, CancellationToken cancellationToken = default);
+    Task<SendMessageResponse> SendAttachmentAsync(AttachmentMessageOptions options, CancellationToken cancellationToken = default);
+    Task<SendMessageResponse> SendStickerAsync(StickerMessageOptions options, CancellationToken cancellationToken = default);
 }
 ```
 
-## 📝 Розширені приклади
+Повертає **одну** `SendMessageResponse` (3.0+ — раніше було `Task<List<...>>` що завжди мав один елемент).
 
-### Налаштування проекту та ініціалізація
+---
+
+## 📡 Події — `IObservable<T>` vs `IAsyncEnumerable<T>`
+
+Кожна подія доступна через **обидві** поверхні. Обирай за сценарієм:
+
+| Сценарій | Поверхня | Контракт |
+|---|---|---|
+| Broadcast/fan-out (декілька споживачів читають кожне повідомлення) | `IObservable<T>` Rx | Не-blocking, OnNext синхронний; кожен subscriber отримує копію |
+| Single-consumer pipeline з back-pressure | `IAsyncEnumerable<T>` Channels | Кожен елемент читає РІВНО ОДИН споживач (exclusive); `await foreach` з типовим `CancellationToken` |
+| Drop-oldest семантика при overflow | Обидві (Channel-сторона) | `Channel.CreateBounded<T>(1024, FullMode = DropOldest)`; drop логується на Debug + counter `signalcli.events.dropped` |
+
+```csharp
+// Async-stream — рекомендовано для нового коду
+await foreach (var msg in eventService.TextMessagesAsync(stoppingToken))
+{
+    Console.WriteLine($"[{msg.SourceNumber ?? msg.SourceUuid}] {msg.DataMessage.Message}");
+}
+
+// Rx — для broadcast у декілька handler'ів
+using var sub = eventService.TextMessages.Subscribe(msg =>
+{
+    Console.WriteLine($"[handler-1] {msg.DataMessage.Message}");
+});
+```
+
+---
+
+## 🩺 Health-checks (опціональний пакет)
+
+`SignalCli.NET.HealthChecks` — `IHealthCheck`-адаптер для signal-cli process state. Залежить лише від `Microsoft.Extensions.Diagnostics.HealthChecks` (generic-host пакет, **не ASP.NET**). Версія завжди в lockstep з main package (enforced `VersionLockstepTests`).
+
+```bash
+dotnet add package SignalCli.NET.HealthChecks
+```
+
+### Generic Host (worker / daemon)
+
+```csharp
+services.AddSignalCli(o => { /* ... */ });
+services.AddHealthChecks().AddSignalCliHealthCheck();
+
+// Periodic probe через HealthCheckService
+var hc = host.Services.GetRequiredService<HealthCheckService>();
+var report = await hc.CheckHealthAsync();
+Console.WriteLine($"signal-cli status: {report.Entries["signal-cli"].Status}");
+```
+
+### ASP.NET Core (потрібен окремий пакет `Microsoft.AspNetCore.Diagnostics.HealthChecks`)
+
+```csharp
+builder.Services.AddSignalCli(o => { /* ... */ });
+builder.Services.AddHealthChecks()
+    .AddSignalCliHealthCheck(
+        name: "signal-cli",
+        failureStatus: HealthStatus.Degraded,   // або Unhealthy — default
+        tags: ["signal", "ready"]);
+
+// ... app.Build() ...
+app.MapHealthChecks("/healthz");
+```
+
+Health-check expose'ить три data-bag поля: `state` (ProcessState enum), `last_ping_ok` (bool), `last_ping_at` (DateTimeOffset). PII-free.
+
+---
+
+## 📊 OpenTelemetry observability
+
+Бібліотека експонує **дві OTel-сумісні поверхні** з іменем `"SignalCli.NET"`. Без активного listener'а — нульова накладна.
+
+```csharp
+services.AddOpenTelemetry()
+    .WithTracing(t => t.AddSource("SignalCli.NET"))
+    .WithMetrics(m => m.AddMeter("SignalCli.NET"));
+```
+
+**Спани (`ActivitySource`):** `rpc.<method>`, `signalcli.process.start`, `signalcli.healthcheck.ping`, `signalcli.subscribe`.
+
+**Метрики (`Meter`):**
+
+| Інструмент | Тип | Теги |
+|---|---|---|
+| `signalcli.rpc.requests` | Counter\<long\> | `method`, `status` ∈ {`ok`,`timeout`,`error`} |
+| `signalcli.rpc.duration` | Histogram\<double\> (мс) | `method` |
+| `signalcli.process.restarts` | Counter\<long\> | `trigger` ∈ {`force`,`crash`,`health`} |
+| `signalcli.events.dropped` | Counter\<long\> | `event_type` (один з 10 event-kind'ів) |
+| `signalcli.subscriptions.active` | ObservableGauge\<int\> | — |
+
+**Privacy invariant:** значення тегів — лише method-names, status-enums, integer-id, durations, exception-type-names. **Тіло повідомлення, номер телефону, шлях до файлу — НЕ потрапляють у теги.** Enforced unit-тестами `ObservabilityPrivacyTests` через `ActivityListener` + `MeterListener` з seed-PII substring-assertions.
+
+Детальні приклади: [`docs/cloud-development.md`](docs/cloud-development.md#observability).
+
+---
+
+## 📝 Розширений приклад — worker з авто-відповіддю
+
+Console-worker що:
+1. Стартує signal-cli (bundled JRE).
+2. Підписується на первинний акаунт.
+3. Слухає текстові повідомлення через `IAsyncEnumerable<T>` з back-pressure.
+4. На кожне повідомлення — auto-reply з форматованим текстом.
 
 ```csharp
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using SignalCli.Extensions;
 using SignalCli.Interfaces.Signal;
 using SignalCli.Models.Signal.Message;
 
-// Налаштування DI-контейнера з використанням хоста
-var host = Host.CreateDefaultBuilder(args)
+using var host = Host.CreateDefaultBuilder(args)
     .ConfigureServices(services =>
     {
-        // Базове налаштування SignalCli
-        services.AddSignalCli(config =>
+        services.AddSignalCliWithBundledRuntimeDefaults(o =>
         {
-            config.AppHome = Path.Combine(AppDomain.CurrentDomain.BaseDirectory);
-            config.LibDirectory = "SignalCli/lib";
-            config.StoragePathCli = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SignalCliStorageData");
-            config.MaxRestartAttempts = 3;
-            config.HealthCheckIntervalSeconds = 40;
-            config.HealthCheckTimeoutSeconds = 10;
+            o.StoragePathCli = Path.Combine(AppContext.BaseDirectory, "SignalCliStorageData");
+            o.MaxRestartAttempts = 3;
         });
-        
-        // Реєстрація сервісу подій
         services.AddSignalEvents();
-    })
-    .ConfigureLogging(logging =>
-    {
-        logging.ClearProviders();
-        // ⚠️ Приватність: рівень Trace вмикає логування сирого JSON-RPC трафіку
-        // (тіла повідомлень, номери, вкладення). Для звичайної роботи лишайте Information.
-        logging.SetMinimumLevel(LogLevel.Information);
-        logging.AddConsole();
     })
     .Build();
 
-host.Start();
-```
+await host.StartAsync();
 
-### Отримання списку акаунтів та груп
-
-```csharp
-// Отримання необхідних сервісів
+var eventService = host.Services.GetRequiredService<ISignalEventService>();
+var signalMessage = host.Services.GetRequiredService<ISignalMessage>();
 var signalAccounts = host.Services.GetRequiredService<ISignalAccounts>();
-var signalGroups = host.Services.GetRequiredService<ISignalGroups>();
 
-// Отримання списку акаунтів та робота з групами
-await signalAccounts.ListAccounts().ContinueWith(async accountsTask =>
+// Знайти первинний акаунт (якщо порожньо — спершу запусти device-link flow, див. нижче).
+var accounts = await signalAccounts.ListAccountsAsync();
+if (accounts.Count == 0)
 {
-    var accounts = accountsTask.Result;
-    if (accounts.Count == 0)
-    {
-        Console.WriteLine("Немає зареєстрованих акаунтів");
-        return;
-    }
+    Console.WriteLine("Немає зареєстрованих акаунтів. Запусти QR-link через ISignalDevices.StartLinkAsync.");
+    return;
+}
+var account = accounts[0].Number;
 
-    // Отримуємо активний акаунт
-    var activeAccount = accounts[0].Number;
-    Console.WriteLine($"Активний акаунт: {activeAccount}");
-    
-    // Отримуємо список груп для акаунта
-    var groups = await signalGroups.ListGroups(activeAccount);
-    Console.WriteLine($"Всього груп: {groups.Count}");
-    
-    // Пошук конкретної групи за назвою
-    var targetGroup = groups
-        .Where(group => group.IsMember)
-        .FirstOrDefault(group => group.Name.Contains("test group"));
-        
-    if (targetGroup != null)
+// Підписка ідемпотентна: повторні виклики для того ж акаунту повертають той самий subscription id.
+await eventService.SubscribeAsync(account);
+
+// Auto-reply loop. SIGINT / SIGTERM ловиться у Host.StoppingToken — IAsyncEnumerable
+// завершиться gracefully коли host shutdown.
+var cts = new CancellationTokenSource();
+Console.CancelKeyPress += (_, e) => { cts.Cancel(); e.Cancel = true; };
+
+await foreach (var msg in eventService.TextMessagesAsync(cts.Token))
+{
+    Console.WriteLine($"[{msg.SourceNumber ?? msg.SourceUuid}] {msg.DataMessage.Message}");
+
+    // Відповідаємо тому ж відправнику (UUID — стабільніший за phone-number).
+    var reply = new TextMessageOptions.Builder(
+            account: msg.Account,
+            recipients: [new UserRecipient(msg.SourceUuid)],
+            message: "**Отримав!** Дякую за повідомлення.")
+        .UseStyle()  // bold/italic/strikethrough/spoiler/monospace через markdown-like syntax
+        .Build();
+
+    try
     {
-        Console.WriteLine($"Знайдено групу: {targetGroup.Name}");
-        Console.WriteLine($"Ідентифікатор групи: {targetGroup.Id}");
-        Console.WriteLine($"Кількість учасників: {targetGroup.Members.Count}");
+        await signalMessage.SendTextMessageAsync(reply, cts.Token);
     }
-});
+    catch (RateLimitException ex)
+    {
+        Console.Error.WriteLine($"Rate-limit: {ex.Error.Message}; retry-in вказаний в Error.Data");
+    }
+    catch (UntrustedIdentityException)
+    {
+        Console.Error.WriteLine($"Безпековий номер змінився; verify-safety-number перш ніж надсилати");
+    }
+}
+
+await host.StopAsync();
 ```
 
-### Зв'язування нового пристрою
+### Device-link flow (один раз перед першим запуском)
 
 ```csharp
 var signalDevices = host.Services.GetRequiredService<ISignalDevices>();
-
-// Починаємо процес зв'язування
-var linkResponse = await signalDevices.StartLink();
-Console.WriteLine("Для зв'язування відскануйте QR-код у застосунку Signal");
-Console.WriteLine($"DeviceLinkUri: {linkResponse.DeviceLinkUri}");
-
-// Тут можна використати бібліотеку для генерації QR-коду
-// Наприклад: QRCoder, ZXing.Net тощо
-
-// Після сканування QR-коду завершуємо процес зв'язування
-var finishResult = await signalDevices.FinishLink(
-    linkResponse.DeviceLinkUri, 
-    "Мій новий комп'ютер"
-);
-Console.WriteLine($"Пристрій успішно зв'язано. Номер: {finishResult.number}");
+var linkResponse = await signalDevices.StartLinkAsync();
+Console.WriteLine($"Скануйте QR з URI: {linkResponse.DeviceLinkUri}");
+// Згенеруй QR (QRCoder/ZXing.Net) → сканування у Signal mobile app.
+var finishResult = await signalDevices.FinishLinkAsync(linkResponse.DeviceLinkUri, "Мій worker");
+Console.WriteLine($"Зв'язано як: {finishResult.Number}");
 ```
 
-### Підписка на повідомлення та автоматична відповідь
+---
 
-> ✨ **2.1.0:** для нового коду рекомендуємо `IAsyncEnumerable<T>`-варіанти (`TextMessagesAsync`,
-> `AttachmentsAsync`, `ReactionAsync`, …) — це стандартний C# `await foreach` з back-pressure
-> (drop-oldest, capacity 1024) і коректним завершенням при `Dispose`. Rx-API (`TextMessages`,
-> …) лишається для broadcast/fan-out-сценаріїв.
->
-> ```csharp
-> // Async-stream API: один споживач читає кожен елемент.
-> await foreach (var msg in eventService.TextMessagesAsync(stoppingToken))
-> {
->     Console.WriteLine($"[{DateTime.Now}] {msg.SourceNumber}: {msg.DataMessage.Message}");
->     await signalMessage.SendTextMessageAsync(
->         new TextMessageOptions.Builder(msg.Account, [new UserRecipient(msg.SourceUuid)], "Got it!").Build(),
->         stoppingToken);
-> }
-> ```
+## 🔄 Міграція з 3.x → 4.0
 
-Класичний Rx-варіант (без змін у 2.x):
+<details>
+<summary>4.0.0 — breaking changes (натисни щоб розгорнути)</summary>
 
-```csharp
-var eventService = host.Services.GetRequiredService<ISignalEventService>();
-var signalMessage = host.Services.GetRequiredService<ISignalMessage>();
+| Видалено | Заміна / migration |
+|---|---|
+| `SignalCli.Models.Config` (клас) | `SignalCliOptions` (існує з 2.1.0) |
+| `AddSignalCli(Action<Config>?)` | `AddSignalCliWithBundledRuntimeDefaults(Action<SignalCliOptions>?)` *(для bundled-runtime консумерів)* або `AddSignalCli(Action<SignalCliOptions>?)` |
+| `ISignalCliClient.Version()` | `s/\.Version(/\.VersionAsync(/g` |
+| `ISignalAccounts.ListAccounts()` / `.SyncAccount()` | `s/\.ListAccounts(/\.ListAccountsAsync(/g`, `s/\.SyncAccount(/\.SyncAccountAsync(/g` |
+| `ISignalDevices.StartLink()` / `.FinishLink()` | `s/\.StartLink(/\.StartLinkAsync(/g`, `s/\.FinishLink(/\.FinishLinkAsync(/g` |
+| `ISignalGroups.ListGroups()` | `s/\.ListGroups(/\.ListGroupsAsync(/g` |
+| `FinishLinkResponse.number` (lowercase) | `FinishLinkResponse.Number` *(PascalCase з 3.0)* |
+| `Task<List<SendMessageResponse>>` поверталось зі `Send*Async` | `Task<SendMessageResponse>` *(одна відповідь; 3.0+)* |
 
-// Підписуємося на отримання подій для акаунта
-var accountNumber = "+380501234567";
-await eventService.SubscribeAsync(accountNumber);
+Детальніше: див. `CHANGELOG.md` секція `[4.0.0]`. Усі замінники існували принаймні з 3.0, тож грейс-вікно — один мажор.
 
-// Підписуємося на текстові повідомлення
-var textSubscription = eventService.TextMessages.Subscribe(message =>
-{
-    Console.WriteLine($"[{DateTime.Now}] Отримано повідомлення від {message.SourceNumber ?? message.SourceUuid}:");
-    Console.WriteLine(message.DataMessage.Message);
-    
-    // Надсилаємо відповідь
-    // Примітка: функціональність цитування повідомлень поки не підтримується через Builder API
-    var replyOptions = new TextMessageOptions.Builder(
-        account: message.Account,
-        recipients: new List<IRecipient> { new UserRecipient(message.SourceUuid) },
-        message: "Отримав ваше повідомлення!"
-    ).Build();
-    
-    signalMessage.SendTextMessageAsync(replyOptions);
-});
+</details>
 
-// Підписуємося на вкладення.
-// AttachmentEventArgs.Attachments — це List<JsonAttachment> з метаданими;
-// сирі байти signal-cli НЕ передає інлайн — їх треба окремо забирати з диска
-// (signal-cli зберігає файли у конфіг-каталозі). Тут лише читаємо метадані.
-var attachmentSubscription = eventService.Attachments.Subscribe(attachment =>
-{
-    Console.WriteLine($"[{DateTime.Now}] Отримано вкладення:");
-    foreach (var att in attachment.Attachments)
-    {
-        Console.WriteLine($"Тип: {att.ContentType}, ім'я: {att.Filename}, " +
-                          $"id: {att.Id}, розмір: {att.Size} B");
-    }
+---
 
-    // Надсилаємо підтвердження
-    var confirmOptions = new TextMessageOptions.Builder(
-        account: attachment.Account,
-        recipients: new List<IRecipient> { new UserRecipient(attachment.SourceUuid) },
-        message: $"Отримав ваші вкладення ({attachment.Attachments.Count})"
-    ).Build();
-
-    signalMessage.SendTextMessageAsync(confirmOptions);
-});
-
-// Підписуємося на події реакцій.
-// ReactionEventArgs.Reaction — це сам JsonReaction (не DataMessage.Reaction).
-var reactionSubscription = eventService.Reaction.Subscribe(reaction =>
-{
-    var emoji = reaction.Reaction.Emoji;
-    var remove = reaction.Reaction.IsRemove;
-    var operation = remove ? "видалив(ла)" : "додав(ла)";
-
-    Console.WriteLine($"[{DateTime.Now}] {reaction.SourceNumber ?? reaction.SourceUuid} {operation} реакцію {emoji}");
-});
-
-Console.WriteLine("Обробник повідомлень запущено. Натисніть будь-яку клавішу для виходу...");
-Console.ReadKey();
-
-// Відписуємося при завершенні роботи
-textSubscription.Dispose();
-attachmentSubscription.Dispose();
-reactionSubscription.Dispose();
-```
-
-### Надсилання різних типів повідомлень
-
-```csharp
-var signalMessage = host.Services.GetRequiredService<ISignalMessage>();
-var accountNumber = "+380501234567";
-
-// 1. Надсилання простого текстового повідомлення користувачу
-var userRecipient = new UserRecipient("+380501234568");
-var textOptions = new TextMessageOptions.Builder(
-    account: accountNumber,
-    recipients: new List<IRecipient> { userRecipient },
-    message: "Привіт! Як справи?"
-).Build();
-
-await signalMessage.SendTextMessageAsync(textOptions);
-
-// 2. Надсилання форматованого тексту
-var formattedTextOptions = new TextMessageOptions.Builder(
-    account: accountNumber,
-    recipients: new List<IRecipient> { userRecipient },
-    message: "Привіт! *Це курсив* і **це жирний текст**, а `це моноширинний`."
-)
-.UseStyle() // Активація форматування тексту
-.Build();
-
-await signalMessage.SendTextMessageAsync(formattedTextOptions);
-
-// 3. Надсилання повідомлення в групу
-var groupRecipient = new GroupRecipient("група-ідентифікатор-GUID");
-var groupMessageOptions = new TextMessageOptions.Builder(
-    account: accountNumber,
-    recipients: new List<IRecipient> { groupRecipient },
-    message: "Всім привіт у групі!"
-).Build();
-
-await signalMessage.SendTextMessageAsync(groupMessageOptions);
-
-// 4. Надсилання повідомлення з вкладенням
-var documentOptions = new AttachmentMessageOptions.Builder(
-    account: accountNumber,
-    recipients: new List<IRecipient> { userRecipient },
-    attachments: new List<IAttachmentEntry> { new AttachmentEntry("report.pdf", File.ReadAllBytes(@"C:\Documents\report.pdf")) }
-)
-.WithMessage("Подивись документ, який я тобі надіслав:")
-.Build();
-
-await signalMessage.SendAttachmentAsync(documentOptions);
-
-// 5. Надсилання зображення
-var imageOptions = new AttachmentMessageOptions.Builder(
-    account: accountNumber,
-    recipients: new List<IRecipient> { userRecipient },
-    attachments: new List<IAttachmentEntry> { new AttachmentEntry("meeting.jpg", File.ReadAllBytes(@"C:\Photos\meeting.jpg")) }
-)
-.WithMessage("Ось фото з вчорашньої зустрічі:")
-.Build();
-
-await signalMessage.SendAttachmentAsync(imageOptions);
-
-// 6. Надсилання стікера
-var stickerOptions = new StickerMessageOptions.Builder(
-    account: accountNumber,
-    recipients: new List<IRecipient> { userRecipient },
-    sticker: "b2e11667c59bce03b6bd13de0377a0b5:32" // ID пакета стікерів : ID стікера
-).Build();
-
-await signalMessage.SendStickerAsync(stickerOptions);
-```
-
-## 📋 Часті запитання (FAQ)
+## 📋 FAQ
 
 ### Як працює форматування тексту?
 
-Бібліотека підтримує такі стилі форматування тексту:
+Markdown-like syntax всередині `TextMessageOptions.Builder(...).UseStyle().Build()`:
 
-- *Курсив*: `*текст*`
-- **Жирний текст**: `**текст**`
-- Моноширинний: `` `текст` ``
-- ~~Закреслений~~: `~текст~`
-- Спойлер: `||текст||`
+| Стиль | Синтаксис |
+|---|---|
+| *Курсив* | `*текст*` |
+| **Жирний** | `**текст**` |
+| `Моноширинний` | `` `текст` `` |
+| ~~Закреслений~~ | `~текст~` |
+| Спойлер | `\|\|текст\|\|` |
 
-Форматування застосовується автоматично під час надсилання повідомлень через `SendTextMessageAsync` або `SendAttachmentAsync`.
+Форматування застосовується автоматично при `SendTextMessageAsync` / `SendAttachmentAsync` (caption).
 
 ### Які розміри вкладень підтримуються?
 
-Signal підтримує вкладення розміром до 100 МБ. Зверніть увагу, що великі файли можуть потребувати додаткового часу для завантаження та надсилання.
+Signal підтримує до **100 МБ**. На low-level бібліотека сама перемикається між inline data-URI (для малих) і temp-file path (для великих ≥ 12 МБ raw — поріг розрахований під Jackson `maxStringLength` 20M + 4M margin). Деталі: `MaxInlineEncodedAttachmentBytes` константа в `SignalMessage.cs`.
 
-### Чи працює бібліотека на Linux та macOS?
+### Чи працює на Linux та macOS?
 
-Бібліотека розроблена з урахуванням кросплатформності та має працювати на Linux і macOS, однак повне тестування на цих платформах ще не проведено. Якщо ви використовуєте бібліотеку на Linux або macOS, будь ласка, повідомте про результати тестування.
+**Linux x64:** так, native-режим (GraalVM-білд signal-cli, без Java) повністю підтримується + CI-тестування на ubuntu-latest. **macOS arm64:** bundled-JRE-пакет ship'ить Eclipse Temurin 25 — працює, але CI-coverage менший. **Linux ARM:** офіційного native-білда немає → потрібна системна JDK 25+.
+
+### AOT-публікація працює?
+
+Так — на main lib увімкнено `<IsAotCompatible>true</IsAotCompatible>` (3.0+). `dotnet publish /p:PublishAot=true` не дає warning'ів **за умови** використання `AddSignalCli(Action<SignalCliOptions>?)` або `AddSignalCli(IConfiguration)` (обидва source-gen-friendly з 4.0.1). JSON-серіалізація — source-gen-only.
+
+### Як додати власний RPC-метод який ще не обгорнутий?
+
+```csharp
+var client = host.Services.GetRequiredService<ISignalCliClient>();
+var result = await client.InvokeMethodAsync(
+    "yourMethodName",
+    new YourParameters(...),
+    YourJsonContext.Default.YourParameters,    // обов'язково — AOT-safe
+    YourJsonContext.Default.YourResponse,
+    cancellationToken);
+```
+
+Зареєструй DTO у власному `[JsonSerializerContext]` (test-pattern: див. `Tests/SignalCli.Tests/TestSerializationContext.cs`).
+
+---
 
 ## 🧩 Залежності
 
-| Бібліотека | Опис                                                 |
-|------------|------------------------------------------------------|
-| Microsoft.Extensions.Hosting.Abstractions | Абстракції для інтеграції з хостингом .NET           |
-| Microsoft.Extensions.Logging.Abstractions | Абстракції для логування                             |
-| Microsoft.Extensions.Options.DataAnnotations | `[Required]`/`[Range]`-атрибути для `[OptionsValidator]` source-gen |
-| System.Text.Json | Робота з JSON (вбудована в .NET) |
-| System.Reactive | Бібліотека для реактивного програмування             |
-| JetBrains.Annotations | `PublicAPI`/`NotNull`-hint'и; `PrivateAssets=all` — НЕ потрапляє у consumer dependency graph |
+**Core (`SignalCli.NET`):**
 
-Опціонально:
+| Бібліотека | Призначення |
+|---|---|
+| `Microsoft.Extensions.Hosting.Abstractions` | `IHostedService` / `IHost` інтеграція |
+| `Microsoft.Extensions.Logging.Abstractions` | Source-gen `[LoggerMessage]` |
+| `Microsoft.Extensions.Options.DataAnnotations` | `[Required]`/`[Range]` атрибути для `[OptionsValidator]` source-gen |
+| `Microsoft.Extensions.Options.ConfigurationExtensions` | `AddSignalCli(IConfiguration)` overload |
+| `System.Text.Json` | Source-gen JSON (production code reflection-free) |
+| `System.Reactive` | `IObservable<T>` event streams |
+| `JetBrains.Annotations` | `PublicAPI`/`NotNull`-hint'и; `PrivateAssets=all` — не потрапляє у consumer dependency graph |
 
-| Пакет | Опис |
-|-------|------|
-| SignalCli.NET.HealthChecks | `IHealthCheck`-адаптер для signal-cli state. Залежить лише від `Microsoft.Extensions.Diagnostics.HealthChecks` — generic-host, **не ASP.NET**. Працює всюди де є `IHost`. |
+**Опціонально:**
+
+| Пакет | Призначення |
+|---|---|
+| `SignalCli.NET.HealthChecks` | `IHealthCheck`-адаптер; залежить лише від generic-host `Microsoft.Extensions.Diagnostics.HealthChecks`; **не ASP.NET-coupled** |
+| `SignalCli.Runtime` | signal-cli jar (потребує системну Java 25+) |
+| `SignalCli.Runtime.Native` | GraalVM-native signal-cli (Linux x64, без Java) |
+| `SignalCli.Runtime.Jre.win-x64` | Bundled Temurin JRE + signal-cli (Windows, без системної Java) |
+| `SignalCli.Runtime.Jre.osx-arm64` | Те саме для macOS arm64 |
+
+---
 
 ## 🤝 Участь у розробці
 
-Запрошую всіх бажаючих до участі в розвитку проекту! Ось деякі напрямки, де потрібна допомога:
+Запрошуємо до участі. Перспективні напрямки:
 
-- ✅ Реалізація методів API Signal, яких бракує
-- ✅ Тестування на Linux та macOS
+- ✅ Реалізація методів API signal-cli, яких бракує (див. таблицю `❌` вище)
+- ✅ Тестування на Linux ARM та macOS arm64
 - ✅ Покращення документації та прикладів
-- ✅ Оптимізація продуктивності
+- ✅ Оптимізація — особливо attachment-pipelines
 
-### Як зробити внесок
+**Як зробити внесок:**
 
-1. Внесіть необхідні зміни в окремій гілці
-2. Надішліть Pull Request з описом змін
+1. Створіть feature-branch від `main`
+2. Внесіть зміни, додайте/оновіть тести (всі 287+ unit + 8+ Integration мають лишитись зеленими)
+3. Великі зміни — спершу через OpenSpec change у `openspec/changes/<name>/` (`proposal.md` + `tasks.md` + `specs/<capability>/spec.md`); запустіть `npx -y @fission-ai/openspec@latest validate <name> --strict`
+4. Надішліть Pull Request з посиланням на OpenSpec change (якщо є) та коротким описом impact'у
+
+Внутрішня документація для контрибуторів — `CLAUDE.md` у корені (rules, established patterns, audit baseline).
 
 ## 📜 Ліцензія
 
-Проект поширюється за ліцензією **GNU General Public License v3.0 (GPLv3)** через використання signal-cli та libsignal-service-java.
+GNU General Public License v3.0 (GPLv3) — через залежність від [signal-cli](https://github.com/AsamK/signal-cli) та libsignal-service-java.
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](http://www.gnu.org/licenses/gpl-3.0.html)
 
 ## 🙏 Подяки
 
-Проект використовує такі відкриті бібліотеки:
+Проект побудований на:
 
-- [signal-cli](https://github.com/AsamK/signal-cli)
-- [System.Reactive](https://github.com/dotnet/reactive)
-- [System.Text.Json](https://learn.microsoft.com/dotnet/standard/serialization/system-text-json/)
-- [Nito.AsyncEx](https://github.com/StephenCleary/AsyncEx)
-
----
-
-> ⚠️ **Зверніть увагу**  
-> Бібліотека повністю протестована на **Windows**. Для платформ **Linux** та **macOS** потрібне додаткове тестування. Якщо ви використовуєте ці платформи, будемо вдячні за зворотний зв'язок та допомогу в тестуванні.
-
----
-> **Розроблено з ❤️ для .NET-спільноти та ЗСУ**.
-> Якщо виникли запитання чи є ідеї — створюйте Pull Request або Issue!
+- [signal-cli](https://github.com/AsamK/signal-cli) — Java-CLI що обгортає `libsignal-service-java`
+- [System.Reactive](https://github.com/dotnet/reactive) — Rx-стріми
+- [System.Text.Json](https://learn.microsoft.com/dotnet/standard/serialization/system-text-json/) — source-gen serialization
+- [Eclipse Temurin](https://adoptium.net/temurin/) — bundled JRE для Win/macOS пакетів
+- [GraalVM](https://www.graalvm.org/) — native signal-cli build для Linux

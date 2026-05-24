@@ -20,7 +20,7 @@
   ```bash
   dotnet build SignalCli.sln
   ```
-- **НЕ запускає тести.** 215 unit-тестів виконуються секунди — запускайте з сесії, щоб бачити вивід.
+- **НЕ запускає тести.** 287 unit-тестів виконуються секунди — запускайте з сесії, щоб бачити вивід.
 - **НЕ робить NuGet vulnerability audit.** У warm-up передається `/p:NuGetAudit=false` — приватний GitHub-feed (`nuget.pkg.github.com/07artem132/`) у `NuGet.Config` потребує токен. Аудит вразливостей робиться окремим кроком у CI.
 
 ## Поширені команди в сесії
@@ -29,11 +29,11 @@
 # Швидко (тільки бібліотека)
 dotnet build src/SignalCli/SignalCli.csproj
 
-# Усі юніт-тести (~215, секунди)
+# Усі юніт-тести (~287, секунди)
 dotnet test  Tests/SignalCli.Tests/SignalCli.Tests.csproj
 
 # Конкретні тести
-dotnet test  Tests/SignalCli.Tests/SignalCli.Tests.csproj --filter "FullyQualifiedName~ConfigTests"
+dotnet test  Tests/SignalCli.Tests/SignalCli.Tests.csproj --filter "FullyQualifiedName~JsonRpcErrorTests"
 
 # Повна збірка (з network — runtime-пакети тягнуть signal-cli + JRE)
 dotnet build SignalCli.sln
