@@ -346,14 +346,16 @@ public sealed class ObservabilityCounterTests : IDisposable
             firstProcessMock.Raise(p => p.Exited += null, EventArgs.Empty);
 
             // OnProcessExited — async void, тому чекаємо deterministically через SpinUntil
-            // (CLAUDE.md rule #11: no Task.Delay(>10ms); SpinUntil — sync, bound 5s, локально <50ms).
+            // (CLAUDE.md rule #11: no Task.Delay(>10ms); SpinUntil — sync, bound 15s).
+            // 15s bound бо windows-latest Debug runner показав flake на 5s (CI run 26369330766);
+            // локально <50ms на типовій машині. SpinUntil не споживає CPU поки умова не true.
             var crashRecorded = SpinWait.SpinUntil(
                 () => Snapshot().Any(m =>
                     m.Instrument == "signalcli.process.restarts" &&
                     m.Tags.Any(t => t is { Key: "trigger", Value: "crash" })),
-                TimeSpan.FromSeconds(5));
+                TimeSpan.FromSeconds(15));
 
-            Assert.True(crashRecorded, "Expected signalcli.process.restarts{trigger=crash} within 5s");
+            Assert.True(crashRecorded, "Expected signalcli.process.restarts{trigger=crash} within 15s");
 
             var crashes = Snapshot()
                 .Where(m => m.Instrument == "signalcli.process.restarts")
@@ -458,18 +460,31 @@ public sealed class ObservabilityCounterTests : IDisposable
             await hostedService.StartAsync(CancellationToken.None);
             await monitor.StartAsync(CancellationToken.None);
 
-            // PeriodicTimer.WaitForNextTickAsync на FakeTimeProvider — провертаємо повз
-            // HealthCheckIntervalSeconds + ще трохи буферу, щоб гарантовано прокинутись.
-            fakeTime.Advance(TimeSpan.FromSeconds(2));
+            // BackgroundService.ExecuteAsync runs in background; need a few yields щоб
+            // дати йому шанс дійти до `await timer.WaitForNextTickAsync(...)` перш ніж
+            // ми викличемо Advance. Без yield'у race: Advance fires до того як timer
+            // setup завершиться, і fake-time-tick "губиться".
+            for (var i = 0; i < 10; i++) await Task.Yield();
+
+            // Adv'ансимо в loop'і — окрім фіксу гонки, це самоадаптується до slow runner'ів
+            // (Windows-Debug runner показав timing variance).
+            for (var i = 0; i < 20 && !Snapshot().Any(m =>
+                m.Instrument == "signalcli.process.restarts" &&
+                m.Tags.Any(t => t is { Key: "trigger", Value: "health" })); i++)
+            {
+                fakeTime.Advance(TimeSpan.FromSeconds(2));
+                for (var y = 0; y < 5; y++) await Task.Yield();
+            }
 
             // SpinUntil — деterministic очікування на counter без wall-clock-Task.Delay.
+            // 15s bound для симетрії з T04 (windows-latest Debug-runner flake-tolerance).
             var healthRecorded = SpinWait.SpinUntil(
                 () => Snapshot().Any(m =>
                     m.Instrument == "signalcli.process.restarts" &&
                     m.Tags.Any(t => t is { Key: "trigger", Value: "health" })),
-                TimeSpan.FromSeconds(5));
+                TimeSpan.FromSeconds(15));
 
-            Assert.True(healthRecorded, "Expected signalcli.process.restarts{trigger=health} within 5s after fakeTime.Advance");
+            Assert.True(healthRecorded, "Expected signalcli.process.restarts{trigger=health} within 15s after fakeTime.Advance");
 
             var healthRestarts = Snapshot()
                 .Where(m => m.Instrument == "signalcli.process.restarts")
