@@ -68,8 +68,17 @@ public record AttachmentMessageOptions
         }
 
         /// <summary>Будує <see cref="AttachmentMessageOptions"/>.</summary>
+        /// <exception cref="InvalidOperationException">
+        /// post-modernize-tuning §4.15 (D9): post-mutation guard.
+        /// </exception>
         public AttachmentMessageOptions Build()
         {
+            if (string.IsNullOrEmpty(_options.Account))
+                throw new InvalidOperationException("Account був скинутий після конструювання Builder.");
+            if (!_options.Recipients.Any())
+                throw new InvalidOperationException("Recipients було очищено після конструювання Builder.");
+            if (!_options.Attachments.Any())
+                throw new InvalidOperationException("Attachments було очищено після конструювання Builder.");
             return _options;
         }
     }

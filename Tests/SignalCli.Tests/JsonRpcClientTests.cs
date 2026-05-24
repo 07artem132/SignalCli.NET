@@ -39,8 +39,10 @@ public class JsonRpcClientTests
     /// <summary>
     /// Створює клієнт JsonRpcClient з замоканим IStreamPairProvider.
     /// Дефолтний таймаут — великий, щоб тести з очікуванням відповіді не падали з TimeoutException.
+    /// post-modernize-tuning §1.8 (audit N4): optional FakeTimeProvider — для тестів,
+    /// що віртуалізують timeout-CTS (без wall-clock-залежності).
     /// </summary>
-    private JsonRpcClient CreateClient(int requestTimeoutSeconds = 60)
+    private JsonRpcClient CreateClient(int requestTimeoutSeconds = 60, TimeProvider? timeProvider = null)
     {
         var config = new Config
         {
@@ -53,7 +55,8 @@ public class JsonRpcClientTests
         return new JsonRpcClient(
             _loggerMock.Object,
             _streamProviderMock.Object,
-            config.ToOptions()
+            config.ToOptions(),
+            timeProvider
         );
     }
 

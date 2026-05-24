@@ -48,8 +48,17 @@ public record StickerMessageOptions
         }
 
         /// <summary>Будує <see cref="StickerMessageOptions"/>.</summary>
+        /// <exception cref="InvalidOperationException">
+        /// post-modernize-tuning §4.15 (D9): post-mutation guard.
+        /// </exception>
         public StickerMessageOptions Build()
         {
+            if (string.IsNullOrEmpty(_options.Account))
+                throw new InvalidOperationException("Account був скинутий після конструювання Builder.");
+            if (!_options.Recipients.Any())
+                throw new InvalidOperationException("Recipients було очищено після конструювання Builder.");
+            if (string.IsNullOrEmpty(_options.Sticker))
+                throw new InvalidOperationException("Sticker був скинутий після конструювання Builder.");
             return _options;
         }
     }

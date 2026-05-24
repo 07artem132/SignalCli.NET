@@ -88,6 +88,18 @@
 - **(round 14 §6.11)** CLAUDE.md rule #6 оновлено: source-gen-only invariant + `OptionsForTests`-test-path задокументовано.
 - **(round 14 §8b.10/§11.D.2/§9.4)** З AOT-увімкненим: library build = 0 IL2026/IL3050 warnings (включно з `Diagnostics/`, options-pipeline). `AddSignalCli(IConfiguration)` overload позначено `[RequiresUnreferencedCode]` (бо `Bind` тягне reflection) — для AOT-deploy використовуйте `AddSignalCli(Action<SignalCliOptions>)`.
 
+#### Deferred-cluster (round 15) — усі тести з 2026-05-23 audit реалізовано
+
+- **(round 15 §1.6/§7.7)** `BackPressureTests.NotificationBurst_WithSlowSubscriber_AllMessagesDeliveredInOrder`: 100-message burst через приватний ProcessMessageAsync (reflection), bounded channel capacity=8, sync-subscriber 5ms/msg → всі 100 доставлено в FIFO-порядку. Захист від drop'ів і реордерінгу при slow-consumer back-pressure.
+- **(round 15 §1.8)** `TimeoutVirtualizationTests` × 2: `_InvokeMethodAsync_TimeoutPath_VirtualizedByFakeTimeProvider_ThrowsTimeoutException` (FakeTimeProvider.Advance(61s) триггерить timeoutCts → TimeoutException без real wall-clock) + sanity `_CallerCancellation_DoesNotFalselyAttributeToTimeout`. Сертифікує §1.7 TimeProvider-CTS wire-up.
+- **(round 15 §2.5/§7.5)** `StateManagerReentrancyTests` × 2: synchronous Rx-subscriber виклика повторний `UpdateState` із OnNext-handler — ланцюг доходить до Stopping за <2с (інакше WaitAsync фейлить як deadlock). Concurrent-callers contention теж покрито.
+- **(round 15 §4.15)** `*Options.Builder.Build()` post-mutation guard на 3 типах — кидає `InvalidOperationException` якщо обов'язкові поля обнулено між ctor і Build (захист від reflection / record-`with` mutation).
+- **(round 15 §5.12)** `ScopeCaptureTests.InvokeMethodAsync_OpensScope_WithRpcMethod_AndRpcRequestId` через `FakeLogger<JsonRpcClient>` (пакет `Microsoft.Extensions.Diagnostics.Testing`) — фіксує що `RpcMethod` + `RpcRequestId` structured-scope-properties присутні на кожному log-entry, як обіцяно §5.11.
+- **(round 15 §8a.6)** `BackgroundServiceLifecycleTests.StopAsync_BlocksUntilExecuteAsync_ObservesCancellation`: FakeTimeProvider-driven tick → ping observed → StopAsync → ExecuteTask.IsCompleted upto 5s real-time. Доказує що base.StopAsync блокує до завершення ExecuteAsync.
+- **(round 15 §8a.8)** `StopProcessTimeoutVirtualizationTests.StopAsync_WhenWaitForExitTimesOut_KillsProcess_OnVirtualClock`: mock-process'у `WaitForExitAsync` блокує на CancellationToken.Register; `fakeTime.Advance(StopTimeoutSeconds + 1)` тригерить kill-branch. Сертифікує §1.7/§8a.7 TimeProvider-CTS wire-up на StopProcessInternalAsync.
+
+Tests: **210/210 ✅** (baseline 180 → 210). Усі originally-deferred тести з 2026-05-23 audit виконано.
+
 ## [2.1.0] — неопубліковано
 
 **Agent-friendly modernization** — п'ять незалежно вмикаємих кластерів, що приводять

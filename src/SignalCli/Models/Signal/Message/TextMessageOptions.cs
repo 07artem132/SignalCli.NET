@@ -86,8 +86,20 @@ public record TextMessageOptions
         }
 
         /// <summary>Будує <see cref="TextMessageOptions"/>.</summary>
+        /// <exception cref="InvalidOperationException">
+        /// post-modernize-tuning §4.15 (D9): post-mutation guard — якщо хтось обнулив
+        /// обов'язкове поле через reflection / set-через-record-with, ловимо тут.
+        /// Ctor-validation у Builder ловить початковий стан; цей guard — захист від
+        /// мутацій між ctor і Build.
+        /// </exception>
         public TextMessageOptions Build()
         {
+            if (string.IsNullOrEmpty(_options.Account))
+                throw new InvalidOperationException("Account був скинутий після конструювання Builder.");
+            if (!_options.Recipients.Any())
+                throw new InvalidOperationException("Recipients було очищено після конструювання Builder.");
+            if (string.IsNullOrEmpty(_options.Message))
+                throw new InvalidOperationException("Message був скинутий після конструювання Builder.");
             return _options;
         }
     }

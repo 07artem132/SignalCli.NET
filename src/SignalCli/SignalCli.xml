@@ -3967,6 +3967,9 @@
         </member>
         <member name="M:SignalCli.Models.Signal.Message.AttachmentMessageOptions.Builder.Build">
             <summary>Будує <see cref="T:SignalCli.Models.Signal.Message.AttachmentMessageOptions"/>.</summary>
+            <exception cref="T:System.InvalidOperationException">
+            post-modernize-tuning §4.15 (D9): post-mutation guard.
+            </exception>
         </member>
         <member name="T:SignalCli.Models.Signal.Message.GroupRecipient">
             <summary>
@@ -4246,6 +4249,9 @@
         </member>
         <member name="M:SignalCli.Models.Signal.Message.StickerMessageOptions.Builder.Build">
             <summary>Будує <see cref="T:SignalCli.Models.Signal.Message.StickerMessageOptions"/>.</summary>
+            <exception cref="T:System.InvalidOperationException">
+            post-modernize-tuning §4.15 (D9): post-mutation guard.
+            </exception>
         </member>
         <member name="T:SignalCli.Models.Signal.Message.TextMessageOptions">
             <summary>
@@ -4300,6 +4306,12 @@
         </member>
         <member name="M:SignalCli.Models.Signal.Message.TextMessageOptions.Builder.Build">
             <summary>Будує <see cref="T:SignalCli.Models.Signal.Message.TextMessageOptions"/>.</summary>
+            <exception cref="T:System.InvalidOperationException">
+            post-modernize-tuning §4.15 (D9): post-mutation guard — якщо хтось обнулив
+            обов'язкове поле через reflection / set-через-record-with, ловимо тут.
+            Ctor-validation у Builder ловить початковий стан; цей guard — захист від
+            мутацій між ctor і Build.
+            </exception>
         </member>
         <member name="T:SignalCli.Models.Signal.Message.TextStyleMode">
             <summary>
