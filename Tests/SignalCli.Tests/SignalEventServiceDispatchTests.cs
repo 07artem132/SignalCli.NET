@@ -117,7 +117,9 @@ public class SignalEventServiceDispatchTests
         rpc.Setup(c => c.InvokeMethodAsync<SubscribeReceiveParameters, JsonElement>("subscribeReceive", It.IsAny<SubscribeReceiveParameters>(), It.IsAny<JsonTypeInfo<SubscribeReceiveParameters>>(), It.IsAny<JsonTypeInfo<JsonElement>>(), It.IsAny<CancellationToken>()))
             .Returns(async (string _, SubscribeReceiveParameters _, JsonTypeInfo<SubscribeReceiveParameters> _, JsonTypeInfo<JsonElement> _, CancellationToken _) =>
             {
-                await Task.Delay(50).ConfigureAwait(false);
+                // CancellationToken intentionally not forwarded — тест перевіряє reservation race
+                // незалежно від caller cancel.
+                await Task.Delay(50, CancellationToken.None).ConfigureAwait(false);
                 return JsonSerializer.SerializeToElement(SubId);
             });
 

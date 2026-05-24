@@ -30,6 +30,18 @@ public class AtomicCounterTests
         Parallel.For(0, 1000, _ => results.Add(c.Increment()));
         Assert.Equal(1000, results.Distinct().Count());
     }
+
+    // audit-followup-2026 (edge-case-coverage §6.c): CLAUDE.md "Established patterns" каже
+    // "unchecked Interlocked.Increment for monotonic ID counters … int32 wraparound is fine
+    // for request IDs". Пінуємо що wrap дійсно НЕ throw'ить OverflowException.
+    [Fact]
+    public void Increment_AtInt32MaxValue_WrapsToInt32MinValue_WithoutThrowing()
+    {
+        // Seed = MaxValue - 1, перший Increment → MaxValue, другий → MinValue (wrap).
+        var c = new AtomicCounter(int.MaxValue - 1);
+        Assert.Equal(int.MaxValue, c.Increment());
+        Assert.Equal(int.MinValue, c.Increment());
+    }
 }
 
 public class JsonRpcExceptionTests

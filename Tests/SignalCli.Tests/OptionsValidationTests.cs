@@ -168,4 +168,121 @@ public class OptionsValidationTests
         Assert.Throws<ArgumentNullException>(() =>
             services.AddSignalCli((IConfiguration)null!));
     }
+
+    // audit-followup-2026 (addsignalcli-idempotency-fix): після fix'у з sentinel-marker
+    // guard'ом — re-introduce три idempotency-тести (видалені під час initial landing коли
+    // знайдено bug).
+
+    /// <summary>
+    /// Sentinel-marker guard має fire'ити: другий виклик AddSignalCli — no-op.
+    /// Перший виклик виграє щодо options-значень + жодних нових IHostedService descriptor'ів.
+    /// </summary>
+    [Fact]
+    public void AddSignalCli_CalledTwice_SecondCallIsNoOp()
+    {
+        var services = new ServiceCollection();
+        services.AddSignalCli((SignalCliOptions o) =>
+        {
+            o.AppHome = "/first";
+            o.LibDirectory = "lib";
+            o.JavaExecutable = "java-first";
+        });
+        var firstCount = services.Count;
+
+        services.AddSignalCli((SignalCliOptions o) =>
+        {
+            o.AppHome = "/SECOND";
+            o.LibDirectory = "DIFFERENT";
+            o.JavaExecutable = "java-SECOND";
+        });
+
+        Assert.Equal(firstCount, services.Count); // sentinel-marker guard fired
+
+        var sp = services.BuildServiceProvider();
+        var opts = sp.GetRequiredService<IOptions<SignalCliOptions>>().Value;
+        Assert.Equal("/first", opts.AppHome); // first-call's configure delegate wins
+        Assert.Equal("java-first", opts.JavaExecutable);
+    }
+
+    /// <summary>
+    /// Mixed-overload idempotency: перший — Action&lt;SignalCliOptions&gt;, другий — IConfiguration.
+    /// Sentinel-marker guard має fire'ити для ОБОХ overload'ів, бо marker один для всіх трьох.
+    /// </summary>
+    [Fact]
+    public void AddSignalCli_MixedOverloads_SecondIsNoOp()
+    {
+        var services = new ServiceCollection();
+        services.AddSignalCli((SignalCliOptions o) =>
+        {
+            o.AppHome = "/from-action";
+            o.LibDirectory = "lib";
+            o.JavaExecutable = "java";
+        });
+        var firstCount = services.Count;
+
+        var cfg = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["SignalCli:AppHome"] = "/from-config",
+                ["SignalCli:LibDirectory"] = "different-lib",
+                ["SignalCli:JavaExecutable"] = "java-config",
+            })
+            .Build();
+        services.AddSignalCli(cfg.GetSection("SignalCli"));
+
+        Assert.Equal(firstCount, services.Count);
+
+        var sp = services.BuildServiceProvider();
+        var opts = sp.GetRequiredService<IOptions<SignalCliOptions>>().Value;
+        Assert.Equal("/from-action", opts.AppHome); // Action overload wins
+    }
+
+    /// <summary>
+    /// Hosted-services SHALL bе exactly 3 (SignalCliHostedService, JsonRpcClientHostedService,
+    /// SignalCliHealthMonitor) незалежно від N викликів AddSignalCli — pre-fix кожен повторний
+    /// виклик додавав 3 duplicate descriptor'и → подвійний startup.
+    /// </summary>
+    [Fact]
+    public void AddSignalCli_RepeatedCalls_HostedServicesCountStaysAt3()
+    {
+        var services = new ServiceCollection();
+        for (int i = 0; i < 5; i++)
+        {
+            services.AddSignalCli((SignalCliOptions o) =>
+            {
+                o.AppHome = "/tmp";
+                o.LibDirectory = "lib";
+                o.JavaExecutable = "java";
+            });
+        }
+
+        var hostedServiceCount = services.Count(d =>
+            d.ServiceType == typeof(Microsoft.Extensions.Hosting.IHostedService));
+        Assert.Equal(3, hostedServiceCount);
+    }
+
+    /// <summary>
+    /// audit-followup-2026 (edge-case-coverage §6.h): EnvironmentVariables — read-only-snapshot
+    /// семантика. Тип експонується як <see cref="IReadOnlyDictionary{TKey,TValue}"/>; consumer
+    /// не може мутувати через cast до <see cref="IDictionary{TKey,TValue}"/> на runtime-вʼю.
+    /// </summary>
+    [Fact]
+    public void EnvironmentVariables_IsTypedAsReadOnlyDictionary()
+    {
+        var services = new ServiceCollection();
+        services.AddSignalCli((SignalCliOptions o) =>
+        {
+            o.AppHome = "/tmp";
+            o.LibDirectory = "lib";
+            o.JavaExecutable = "java";
+            o.EnvironmentVariables = new Dictionary<string, string> { ["k"] = "v" };
+        });
+        var sp = services.BuildServiceProvider();
+        var opts = sp.GetRequiredService<IOptions<SignalCliOptions>>().Value;
+
+        // Property-тип на read — IReadOnlyDictionary. Це compile-time-guarantee, runtime-check
+        // лише sanity (зміна типу зламає compile, не runtime).
+        Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(opts.EnvironmentVariables);
+        Assert.Equal("v", opts.EnvironmentVariables["k"]);
+    }
 }
