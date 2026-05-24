@@ -44,6 +44,11 @@ internal static class SignalJson
         // Це локальний stdin/stdout канал (не HTML), тож мінімальне екранування —
         // не екрануємо '+', '<' тощо у "+" (як це робив Newtonsoft).
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        // audit-followup-2026 (json-hardening): новий .NET 10 flag — дублікати ключів у JSON
+        // = protocol-violation per JSON-RPC 2.0; fail-loud з JsonException замість тихого
+        // last-wins. signal-cli (Jackson) не може ємітити дублікати в нормальному flow,
+        // тож це чисто defensive проти corruption / malicious-injection.
+        AllowDuplicateProperties = false,
         // §6.4: ТІЛЬКИ source-gen контекст. Reflection-fallback видалено заради AOT-готовності.
         TypeInfoResolver = SignalJsonContext.Default,
     };
@@ -92,6 +97,10 @@ internal static class SignalJson
         AllowTrailingCommas = true,
         ReadCommentHandling = JsonCommentHandling.Skip,
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        // audit-followup-2026 (json-hardening): дзеркалимо production-hardening і в тестових
+        // options'ах, щоб тести випадково не покривали duplicate-key behavior, який production
+        // відкидає.
+        AllowDuplicateProperties = false,
         TypeInfoResolver = JsonTypeInfoResolver.Combine(
             SignalJsonContext.Default, new DefaultJsonTypeInfoResolver()),
     };

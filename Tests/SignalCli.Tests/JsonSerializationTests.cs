@@ -126,6 +126,43 @@ public class JsonSerializationTests
         Assert.Contains("\"number\":\"+380501234567\"", roundtripped);
     }
 
+    /// <summary>
+    /// audit-followup-2026 (json-hardening): .NET 10 `AllowDuplicateProperties=false` —
+    /// duplicate keys у JSON-відповіді відкидаються з JsonException замість тихого last-wins.
+    /// </summary>
+    /// <summary>
+    /// audit-followup-2026 §6.i (edge-case-coverage): JSON-RPC 2.0 spec забороняє і result,
+    /// і error разом, але defensive — якщо signal-cli раптом violate'нув, пінуємо що ми
+    /// віддаємо перевагу error. JsonRpcException — ловиться JsonRpcClient.InvokeMethodAsync
+    /// раніше за typed-result deserialization (див. JsonRpcClient.cs `if (response.Error != null) throw`).
+    /// На рівні DTO — обидва поля просто заповнюються.
+    /// </summary>
+    [Fact]
+    public void Response_WithBothResultAndError_DeserializesBothFields()
+    {
+        const string json = """{"jsonrpc":"2.0","result":{"version":"x"},"error":{"code":-1,"message":"E"},"id":"1"}""";
+        var resp = JsonSerializer.Deserialize<JsonRpcResponse>(json, Opt)!;
+
+        // DTO desеріалізує обидва — error.Code = -1 і result.Version = "x" одночасно присутні.
+        // JsonRpcClient.InvokeMethodAsync робить розрізнення (error wins) на business-level.
+        Assert.NotNull(resp.Error);
+        Assert.Equal(-1, resp.Error!.Code);
+        Assert.Equal("E", resp.Error.Message);
+        Assert.Equal(System.Text.Json.JsonValueKind.Object, resp.Result.ValueKind);
+    }
+
+    [Fact]
+    public void DuplicateProperty_FailsDeserialization()
+    {
+        // {"jsonrpc":"2.0","jsonrpc":"X",...} — два рази "jsonrpc". JSON-RPC 2.0 SHALL NOT
+        // дублювати ключі; .NET 10 за default'ом мовчки бере "last wins", але наш hardening
+        // вимикає це і фолтить десеріалізацію.
+        const string duplicateJson = """{"jsonrpc":"2.0","jsonrpc":"X","id":"1","result":{"version":"0.14.3"}}""";
+
+        Assert.Throws<JsonException>(() =>
+            JsonSerializer.Deserialize<JsonRpcResponse>(duplicateJson, Opt));
+    }
+
     /// <summary>§4.20: те саме для <see cref="Models.Signal.Groups.ListGroupsResponse"/>.</summary>
     [Fact]
     public void ListGroupsResponse_RoundTrip_PreservesFlatJsonArrayShape()
