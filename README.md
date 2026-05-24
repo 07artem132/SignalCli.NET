@@ -1,5 +1,5 @@
 # SignalCli.NET
-![Lines](.github/badges/lines.svg) ![Methods](.github/badges/methods.svg) ![Branches](.github/badges/branches.svg)
+![Lines](https://raw.githubusercontent.com/07artem132/SignalCli.NET/main/.github/badges/lines.svg) ![Methods](https://raw.githubusercontent.com/07artem132/SignalCli.NET/main/.github/badges/methods.svg) ![Branches](https://raw.githubusercontent.com/07artem132/SignalCli.NET/main/.github/badges/branches.svg)
 
 [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](http://www.gnu.org/licenses/gpl-3.0.html)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/download/dotnet/10.0)

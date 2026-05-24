@@ -163,13 +163,13 @@ jobs:
             FIRST_EMPTY_LINE=$(grep -n "^$" README.md | head -1 | cut -d: -f1)
             
             # Вставляємо нові бейджі
-            sed -i "${FIRST_EMPTY_LINE}i![Lines](.github/badges/lines.svg) ![Methods](.github/badges/methods.svg) ![Branches](.github/badges/branches.svg)" README.md
+            sed -i "${FIRST_EMPTY_LINE}i![Lines](https://raw.githubusercontent.com/07artem132/SignalCli.NET/main/.github/badges/lines.svg) ![Methods](https://raw.githubusercontent.com/07artem132/SignalCli.NET/main/.github/badges/methods.svg) ![Branches](https://raw.githubusercontent.com/07artem132/SignalCli.NET/main/.github/badges/branches.svg)" README.md
           else
             # Додаємо бейджі після першого рядка
             FIRST_LINE=$(head -n 1 README.md)
             echo "$FIRST_LINE" > README.md.new
             echo "" >> README.md.new
-            echo "![Lines](.github/badges/lines.svg) ![Methods](.github/badges/methods.svg) ![Branches](.github/badges/branches.svg)" >> README.md.new
+            echo "![Lines](https://raw.githubusercontent.com/07artem132/SignalCli.NET/main/.github/badges/lines.svg) ![Methods](https://raw.githubusercontent.com/07artem132/SignalCli.NET/main/.github/badges/methods.svg) ![Branches](https://raw.githubusercontent.com/07artem132/SignalCli.NET/main/.github/badges/branches.svg)" >> README.md.new
             echo "" >> README.md.new
             tail -n +2 README.md >> README.md.new
             mv README.md.new README.md
@@ -178,7 +178,7 @@ jobs:
           # Створюємо новий README.md з бейджами
           echo "# SignalCli.NET" > README.md
           echo "" >> README.md
-          echo "![Lines](.github/badges/lines.svg) ![Methods](.github/badges/methods.svg) ![Branches](.github/badges/branches.svg)" >> README.md
+          echo "![Lines](https://raw.githubusercontent.com/07artem132/SignalCli.NET/main/.github/badges/lines.svg) ![Methods](https://raw.githubusercontent.com/07artem132/SignalCli.NET/main/.github/badges/methods.svg) ![Branches](https://raw.githubusercontent.com/07artem132/SignalCli.NET/main/.github/badges/branches.svg)" >> README.md
           echo "" >> README.md
           echo "A .NET wrapper for Signal CLI." >> README.md
         fi
@@ -200,7 +200,7 @@ jobs:
       run: |
         echo "### Результати покриття коду" > coverage-summary.md
         echo "" >> coverage-summary.md
-        echo "![Lines](.github/badges/lines.svg) ![Methods](.github/badges/methods.svg) ![Branches](.github/badges/branches.svg)" >> coverage-summary.md
+        echo "![Lines](https://raw.githubusercontent.com/07artem132/SignalCli.NET/main/.github/badges/lines.svg) ![Methods](https://raw.githubusercontent.com/07artem132/SignalCli.NET/main/.github/badges/methods.svg) ![Branches](https://raw.githubusercontent.com/07artem132/SignalCli.NET/main/.github/badges/branches.svg)" >> coverage-summary.md
         echo "" >> coverage-summary.md
         echo "Повний звіт доступний як артефакт збірки." >> coverage-summary.md
         

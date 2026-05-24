@@ -33,11 +33,20 @@
         <RepositoryUrl>https://github.com/07artem132/SignalCli.NET</RepositoryUrl>
         <IncludeContentFiles>true</IncludeContentFiles>
         <Description>SignalCli.NET — .NET-обгортка для signal-cli, яка забезпечує зручний та зрозумілий API для інтеграції месенджера Signal у ваші .NET-застосунки.</Description>
+        <!-- audit-followup-2026 (badge-url-fix): ship README у NuGet pack. Парний з
+             absolute raw.githubusercontent.com badge-URL'ами у самому README (інакше
+             nuget.org рендерив би broken images). -->
+        <PackageReadmeFile>README.md</PackageReadmeFile>
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
         <AssemblyVersion>3.0.0</AssemblyVersion>
         <FileVersion>3.0.0</FileVersion>
     </PropertyGroup>
+    <ItemGroup>
+        <!-- audit-followup-2026 (badge-url-fix): pack repo-root README у NuGet. -->
+        <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+
     <ItemGroup>
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
             <_Parameter1>SignalCli.Tests</_Parameter1>
