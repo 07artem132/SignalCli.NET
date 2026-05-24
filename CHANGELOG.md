@@ -5,201 +5,193 @@
 
 ## [4.0.2] — 2026-05-24
 
-Patch: **post-audit-remediation** на основі `audit_supplement v2.0` + `v2.1` (read-only audit
-пост-4.0.1 на агент-friendliness / .NET 10 best practices / test coverage). Шість гнучко-послідовних
-комітів — version lockstep двох NuGet-пакетів, шість regression-захисних тестів, hygiene на test-csproj,
-**закриття реальної знахідки rule #18** (source-gen Default fast-path обходив runtime-flag
-`AllowDuplicateProperties=false`), нова паралельна-RPC-correlation E2E. Нульові breaking changes.
+Patch-реліз без breaking changes. **Якщо ти використовуєш `SignalCli.NET.HealthChecks` — онови його разом з main package**: до 4.0.2 версії розійшлися й змішування пакетів давало runtime crash. Решта — 8 нових захисних тестів і одна реальна знахідка про JSON-валідацію, яка мовчки не fire'ила у продакшені.
 
 ### 🐛 Виправлено
 
-#### Capability `healthchecks-version-sync` (NF-003)
+- **Якщо консьюм'иш обидва пакети (`SignalCli.NET` + `SignalCli.NET.HealthChecks`) — онови їх разом.** До 4.0.2 main lib був `4.0.1`, а health-checks-adapter — `3.0.0`. Змішування пакетів кидало `MissingMethodException` на першому health-check probe (бо adapter читає internal'и main lib через `[InternalsVisibleTo]`). Тепер обидва завжди ходять в lockstep через єдиний MSBuild property у `Directory.Build.props`. Bug-class виключено: reflection-тест `VersionLockstepTests` ловить розбіжність до merge'у. *(NF-003, RG07)*
 
-- **`SignalCli.NET.HealthChecks` версія більше НЕ хардкодиться — централізована в `Directory.Build.props`.** До 4.0.2 main lib був `4.0.1`, а adapter csproj мав хардкод `<Version>3.0.0</Version>` — divergent versions = `MissingMethodException` на першому health-check-probe у консумерах (adapter читає internal'и main lib через `[InternalsVisibleTo("SignalCli.HealthChecks")]`). Тепер обидва csproj читають `$(SignalCliPackageVersion)` з `Directory.Build.props` — bump у одному місці = lockstep автоматично. Бonus: adapter csproj отримав `<PackageReadmeFile>README.md</PackageReadmeFile>` — закриває NuGet `dotnet pack` warning "missing a readme" що йшов з кожного build'у.
-
-#### Capability `json-hardening-source-gen-attribute` (rule #18 reality-check)
-
-- **CLAUDE.md rule #18 (`AllowDuplicateProperties = false`) тепер дійсно діє на production-шляху.** До 4.0.2 флаг був виставлений лише на runtime `SignalJson.Options`, але production деserializ'ить через `SignalJsonContext.Default.JsonRpcResponse` тощо — source-gen `GenerationMode = Default` fast-path генерує власний `Utf8JsonReader`-loop і НЕ консумує runtime-flag. Net effect: malformed `{"id":"1","id":"2",...}` від broken-signal-cli (або MITM на stdio) тихо застосовував last-wins — exactly те що rule #18 був написаний попередити. Знайдено під час audit v2.1 RG05 implementation коли третій тест (`SignalJsonContext_AllowDuplicateProperties_ThrowsOnDuplicateKey`) спершу був RED. Fix: додано `AllowDuplicateProperties = false` у `[JsonSourceGenerationOptions(...)]` на `SignalJsonContext` (per [MS Learn .NET 10 docs](https://learn.microsoft.com/dotnet/api/system.text.json.serialization.jsonsourcegenerationoptionsattribute.allowduplicateproperties)). CLAUDE.md rule #18 переписано на dual-site contract: runtime flag + source-gen attribute, обидва обов'язкові.
+- **JSON duplicate-key захист (rule #18) тепер реально діє на production-шляху.** З 4.0.0 ми оголошували що malformed signal-cli response з повтореним ключем fail'ить deserialize. У реальності — fail'ило тільки на reflection-шляху, а production деsеріалізує через source-gen fast-path який власний runtime-flag не консумує. Тепер захист увімкнено на обох рівнях (runtime flag + source-gen attribute). *Без впливу на нормальні signal-cli responses* — Jackson на upstream-стороні фізично не може емітити дублікати; fix чисто defensive проти MITM/corruption. Знайшли під час audit'у коли наш же RG-тест спочатку failed. *([json-hardening-source-gen-attribute](openspec/changes/json-hardening-source-gen-attribute/proposal.md))*
 
 ### 🛡️ Захист від регресій
 
-#### Capability `defensive-test-guards` (audit v2.1 T01–T05 + RG05–RG07)
+8 нових unit + 1 E2E-тести закривають declared-але-untested invariants з CLAUDE.md "Future development guardrails":
 
-- **`InvokeMethodAsync_WhenBothResultAndErrorPresent_ErrorWins` (T01 / G9)** — пінує архітектурний інваріант `JsonRpcClient.cs:494`: коли (malformed-but-possible) відповідь несе ОДНОЧАСНО `result` AND `error` — `error` виграє, `result` ніколи не потрапляє у typed deserializer. CHANGELOG [4.0.1] стверджував покриття, `grep` показав що ні; тепер дійсно покрито.
-- **`EventApiSymmetryTests` (RG06 / NF-002)** — reflection-based guard на `ISignalEventService`: кожна `IObservable<T>`-властивість МУСИТЬ мати парний `IAsyncEnumerable<T>` метод з тим самим `TEventArgs` + `CancellationToken = default`. До цього "Established patterns → Event streams: two surfaces" enforcъ'вся соціально; додати 11-й event без парного методу скомпілилось би. Тепер — build-failure-detectable.
-- **`SignalJsonOptions_AllowDuplicateProperties_IsFalse` + `JsonDocumentOptions_…_ThrowsOnDuplicateKey` + `SignalJsonContext_…_ThrowsOnDuplicateKey` (RG05 ×3 facts / G12)** — тришарова перевірка rule #18: runtime-options-flag + .NET 10 framework-API behavior + source-gen attribute. Видалення будь-якого з трьох рівнів surface'иться як failed regression test.
-- **`Meter_ProcessRestarts_WhenProcessCrashes_IncrementsWithCrashTrigger` (T04 / G4 crash subcase)** — пінує `signalcli.process.restarts{trigger="crash"}` тикає при OnProcessExited (anchor: SignalCliHostedService.cs:602). Pattern mirror'ить `OnProcessExited_WhenUnexpected_ShouldAutoRestart` через `processMock.Raise(p.Exited)` + `SpinWait.SpinUntil`.
-- **`Meter_ProcessRestarts_WhenHealthCheckFails_IncrementsWithHealthTrigger` (T05 / G4 health subcase)** — пінує `signalcli.process.restarts{trigger="health"}` тикає при failed health-check (anchor: SignalCliHealthMonitor.cs:130). `FakeTimeProvider.Advance` через `HealthCheckIntervalSeconds` — no wall-clock per rule #11.
-- **`VersionLockstepTests` (RG07 / NF-003)** — reflection-based guard: `typeof(SignalCliOptions).Assembly.Version` == `typeof(SignalCliHealthCheck).Assembly.Version`. Ловить regression "контрибутор хардкоднув `<Version>` у будь-якому з двох csproj".
-- **`Process_ParallelVersionCalls_AllResolveToCorrectResponseById` (E2E)** — пінує CLAUDE.md "signal-cli protocol behavior we depend on" §3 (*"Parallel request processing → match by id, not by order"*) проти **реального** signal-cli virtual-thread dispatcher'а (`JsonRpcReader.java:58`). 10 паралельних `version`-викликів через bundled JRE; всі 10 повертають ту саму version-string'у. Раніше correlation покривалась лише `Subject<T>`-моком на unit-рівні — рефакторинг до `Queue<TaskCompletionSource>` "бо order збережений" пройшов би unit-tests і впав би тільки під real concurrent load. Тепер ловиться build-time.
+- **Паралельні JSON-RPC виклики тепер pinned проти реального signal-cli** — не лише проти mock'а на unit-рівні. Новий E2E запускає bundled JRE, кидає 10 паралельних `version`-викликів через справжній signal-cli virtual-thread dispatcher, асертить що всі 10 повертають свою власну відповідь. Якщо хтось у майбутньому замінить `ConcurrentDictionary<id, TCS>` на `Queue<TCS>` "бо порядок збережений" — unit-тести з in-order `Subject<T>`-моком цього б не побачили; цей E2E одразу впаде. *([e2e-coverage-expansion](openspec/changes/e2e-coverage-expansion/proposal.md))*
+
+- **Observability counters тепер pinned на всіх 3 тригерах перезапуску.** Раніше privacy-guards перевіряли лише *відсутність* PII у Meter-tags, а фактичне інкрементування `signalcli.process.restarts{trigger=…}` було pinned тільки на `trigger=force`. Тепер `trigger=crash` (через event-raise на mock IProcess) і `trigger=health` (через `FakeTimeProvider.Advance` повз `HealthCheckIntervalSeconds`) теж покриті. *(G4 subcases — T04, T05)*
+
+- **Event-API симетрія enforced reflection-тестом.** CLAUDE.md правило "кожен `IObservable<T>` event-kind має парний `IAsyncEnumerable<T>` метод" раніше enforcъ'вся code-review'ом. Тепер `EventApiSymmetryTests` reflectively сканує `ISignalEventService` і fail'ить build якщо хтось додав 11-й event без парного методу. *(NF-002, RG06)*
+
+- **JSON duplicate-key захист — 3-шаровий guard.** Окрім самого fix'у з "Виправлено" вище, додано 3 facts у `JsonSerializationTests`: `SignalJsonOptions_…IsFalse`, `JsonDocumentOptions_…ThrowsOnDuplicateKey`, `SignalJsonContext_…ThrowsOnDuplicateKey`. Видалення будь-якого з 3 шарів (runtime flag, .NET 10 API contract, source-gen attribute) surface'иться як failed test. *(G12, RG05)*
+
+- **JSON-RPC error wins over result.** Захисний test пінує що при malformed-response (одночасно `result` І `error`) JsonRpcClient кидає exception, а не повертає result. CHANGELOG [4.0.1] стверджував покриття; `grep` показав що тесту не існувало. Тепер дійсно існує. *(NF-001, G9)*
 
 ### 🛠 Інше
 
-#### Capability `version-centralization`
+- **Test-проект тепер ловить warnings як errors** (як main lib давно). Раніше тихо акумулювалися 3 `xUnit1031` violations у `SyncDisposeDuringCleanupTests.cs` (deadlock-prone `.GetAwaiter().GetResult()`). Виправлено: метод-сигнатури `async Task` + `await`; `service.Dispose()` навмисно залишається SYNC бо саме його тести й вимірюють. *(NF-004)*
 
-- **Новий `<SignalCliPackageVersion>` property в `Directory.Build.props`** — single source of truth для версії обох пакетів. `SignalCli.csproj` + `SignalCli.HealthChecks.csproj` обидва читають `$(SignalCliPackageVersion)`. Bumping version = single-file edit (`Directory.Build.props`).
-- **`<PackageReadmeFile>README.md</PackageReadmeFile>` додано в HealthChecks csproj** — закриває NuGet warning "missing a readme"; пакет тепер ship'ить корневий README.
+- **`Microsoft.Extensions.*.Testing` bumped 9.0.0 → 10.0.0** — закриває last mismatched-major у dependency graph. Public-surface unchanged per [MS Learn](https://learn.microsoft.com/dotnet/core/extensions/timeprovider-testing). *(NF-005)*
 
-#### Capability `test-hygiene` (NF-004, NF-005)
+- **Версія обох NuGet-пакетів тепер централізована** в `Directory.Build.props → <SignalCliPackageVersion>`. Bump = single-file edit. Hardcoded `<Version>` у будь-якому csproj заборонено.
 
-- **`TreatWarningsAsErrors=true` тепер і на `Tests/SignalCli.Tests.csproj`** — main lib давно warning-clean, але test-csproj тихо акумулював 3 xUnit1031 violations у `SyncDisposeDuringCleanupTests.cs` (рядки 89, 144, 145: `service.StartAsync(...).GetAwaiter().GetResult()`). Виправлено: метод-сигнатури `public void` → `public async Task` + `await`; `service.Dispose()` залишається SYNC бо саме його тести й вимірюють. Без warnings будь-який майбутній xUnit-violation fail'не build одразу.
-- **`Microsoft.Extensions.TimeProvider.Testing` + `Microsoft.Extensions.Diagnostics.Testing` bumped 9.0.0 → 10.0.0** — закриває last mismatched-major у dependency graph тестового проєкту. Решта Microsoft.Extensions.* уже на 10.0.0. Підтверджено через [MS Learn TimeProvider.Testing docs](https://learn.microsoft.com/dotnet/core/extensions/timeprovider-testing) — public-surface unchanged між 9.x і 10.x.
+- **CLAUDE.md розширено двома секціями для майбутніх контрибуторів + новим правилом:**
+  - **"Audit baseline"** — мінімальна планка яку PR не може опустити (test counts, regression guards, архітектурні invariants).
+  - **"How we discovered these issues"** — 5 failure-mode-сценаріїв з PR-time checklists, щоб не повторювати ті самі паттерни.
+  - **"Version-CHANGELOG lockstep" + "CHANGELOG voice template"** — bump версії МУСИТЬ йти з CHANGELOG-секцією в одному коміті; новий template для consumer-first voice (bold leading claim, технічна обгортка, internal-IDs у дужках).
+  - Виправлено константа `MaxInlineEncodedAttachmentBytes`: 15 000 000 → **12 000 000** (drift з 4.0.0 — реальне значення в коді змінилось у `signal-cli-protocol-alignment §5`, doc відстав). *(NF-006)*
 
-#### Capability `claude-md-baseline-codification`
+- **CHANGELOG voice tightened** — починаючи з [4.0.2] (цей entry), пишемо у consumer-first voice. Старіші версії [4.0.1]/[4.0.0] перероблено в тому ж коміті задля консистенції.
 
-- **Нова секція CLAUDE.md "Audit baseline — invariants that MUST NOT regress"** — мінімальна планка якості зафіксована після audit v2.1: unit ≥ 287, E2E ≥ 2, обидва проєкти з `TreatWarningsAsErrors=true`, таблиця 7 regression guards (R01–RG07), архітектурні інваріанти, версійна синхронізація.
-- **Нова секція CLAUDE.md "How we discovered these issues — prevention checklist"** — п'ять failure-mode-сценаріїв (package version drift, silent warnings, test gap при рефакторингу, doc/code constant drift, missing regression guard) з PR-time перевірками для кожного.
-- **CLAUDE.md "Future development guardrails" реструктуризовано** — більшість untested invariants з audit-followup-2026 era тепер shipped (мають тести); катаlog розділено на "Already shipped" + "Currently open (empty)". Виправлено константа `MaxInlineEncodedAttachmentBytes`: 15 000 000 → **12 000 000** (відповідає signal-cli-protocol-alignment §5 src/SignalMessage.cs:38; CLAUDE.md drifted).
-- **CLAUDE.md rule #18 переписано на dual-site contract** — runtime flag AND source-gen attribute обов'язкові разом; видалення будь-якого silently weakens defense-in-depth.
-- **Нова субсекція CLAUDE.md "Version-CHANGELOG lockstep"** — bump `<SignalCliPackageVersion>` у `Directory.Build.props` МУСИТЬ ідти в одному коміті з відповідною `## [X.Y.Z] — YYYY-MM-DD` секцією у CHANGELOG.md. Цей самий patch — перший застосунок правила.
+### 📊 Тестова статистика
 
-### Тестова statistika
-
-- **Unit tests:** 279 → **287** (+8: T01, T02/RG06, T03/RG05×3, T04, T05, VersionLockstepTests/RG07).
-- **Integration tests:** 7 → **8** (+1: SignalCliE2EParallelRpcCorrelationTests).
-- **Build:** 0 warnings, 0 errors на обох проєктах (`src/SignalCli` + `Tests/SignalCli.Tests`).
-- **OpenSpec changes:** 2 active (`json-hardening-source-gen-attribute`, `e2e-coverage-expansion`) — будуть архівовані після PR merge per CLAUDE.md "Post-merge archive workflow".
+- Unit: 279 → **287** (+8 захисних тестів).
+- Integration: 7 → **8** (+1 E2E на паралельний RPC).
+- Build на src/ + Tests/: 0 warnings, 0 errors.
 
 ### Pending follow-up
 
-_(нічого — usі audit v2.1 findings закриті; усі 6 OpenSpec subtasks landed)_
+_Нічого — усі audit v2.1 знахідки закриті._
 
 ---
 
 ## [4.0.1] — 2026-05-24
 
-Patch: завершує **усі чотири "Pending follow-up"** позиції з [4.0.0] — включаючи 4 з 5 integration-tests-expansion E2E, які раніше вважалися non-feasible без CI runtime. Нульові breaking changes — лише hardening, observability test-coverage, реальна активація AOT-friendly configuration-binding, і skip-gated E2E повного set'у.
+Patch-реліз без breaking changes. **Дві user-facing покращення:** AOT-публікація через `AddSignalCli(IConfiguration)` нарешті дійсно AOT-safe (warning'и зняті); вкладення з небезпечними іменами файлів (NUL byte, RTL-override) фільтруються від UI-spoofing-атак. Решта — 25 нових захисних тестів + 5 нових E2E.
 
 ### 🐛 Виправлено
 
-#### Capability `configuration-binder-aot-completion`
+- **`AddSignalCli(IConfiguration)` тепер дійсно AOT-safe — атрибути `[RequiresUnreferencedCode]` / `[RequiresDynamicCode]` зняті.** У 4.0.0 ми оголошували що цей шлях AOT-friendly через `<EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>`, але насправді **флаг не був доданий у csproj**. У 4.0.1 нарешті присутній — source-gen перехоплює `OptionsBuilder.Bind` call-site і substitutes reflection-free generated binder ([MS Learn](https://learn.microsoft.com/dotnet/core/extensions/configuration-generator): *"all APIs that eventually call into these various binding methods are intercepted and replaced with generated code"*). AOT-targeting consumers тепер використовують overload без warning'ів. *(`configuration-binder-aot-completion`)*
 
-- **`AddSignalCli(IConfiguration)` тепер AOT-safe — `[RequiresUnreferencedCode]` / `[RequiresDynamicCode]` атрибути зняті.** Корінь проблеми в 4.0.0: `<EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>` згадувався у CHANGELOG-ентрі, але **не був доданий** у `SignalCli.csproj`. Без активного source-generator'а `OptionsBuilder.Bind` справді залишався reflection-based і attribute мав сенс. У 4.0.1 флаг нарешті присутній — source-gen intercepts `OptionsBuilderConfigurationExtensions.Bind` call-site і substitutes reflection-free generated binder (per [Microsoft Docs — Configuration source generator](https://learn.microsoft.com/dotnet/core/extensions/configuration-generator): *"all APIs that eventually call into these various binding methods are intercepted and replaced with generated code"*). AOT-targeting consumers тепер можуть використовувати overload без warning'ів.
+- **Вкладення з небезпечними іменами файлів захищені від UI-spoofing.** `AttachmentEntry.SafeFileName` тепер відкидає:
+  - **Control characters** (U+0000..U+001F + U+007F) — NUL byte у середині імені труньчить файл на багатьох ОС, дозволяючи "невидиме" розширення (`evil\0.jpg.exe` стає `evil`).
+  - **Bidi-override markers** (U+202A..U+202E, U+2066..U+2069) — класична UI-spoofing атака: `evil<U+202E>gpj.exe` у Explorer відображається як `evilexe.jpg`, користувач думає що відкриває картинку.
+  - **Path-invalid chars** — крос-платформенний union через `Path.GetInvalidFileNameChars()` (Windows строгіший за POSIX).
 
-#### Capability `safe-filename-hardening`
-
-- **`AttachmentEntry.SafeFileName` тепер фільтрує control-чартки і bidi-override-маркери.** Окрім path-traversal-захисту (Path.GetFileName, був з 1.0), додатково відкидає:
-  - **Control characters** U+0000..U+001F + U+007F (DEL). NUL byte у середині імені файлу труньчить на багатьох ОС і дозволяє "невидиме" розширення.
-  - **Bidi-override / formatting** U+202A..U+202E (LRE/RLE/PDF/LRO/RLO) + U+2066..U+2069 (LRI/RLI/FSI/PDI). Класична UI-spoofing атака: `evil<U+202E>gpj.exe` у Explorer відображається як `evilexe.jpg`, користувач думає що відкриває картинку.
-  - **`Path.GetInvalidFileNameChars()`** — крос-платформенний union (Windows строгіший).
-  - Реалізація через `System.Buffers.SearchValues<char>` (zero-alloc fast-path на чистих іменах) + посимвольну фільтрацію (з stack-buffer ≤256 chars, heap-fallback інакше).
-- За повністю-небезпечного імені (всі символи відфільтровані) — fallback на літерал `"attachment"`.
+  Реалізовано через `System.Buffers.SearchValues<char>` (zero-alloc fast-path на чистих іменах) + посимвольну фільтрацію на повільному шляху. За повністю-небезпечного імені — fallback на літерал `"attachment"`. *(`safe-filename-hardening`)*
 
 ### 🛡️ Захист від регресій
 
-- **`AttachmentEntryTests` розширено з 3 → 12 тестів** (×4): NUL byte у середині, U+202E RLO стрипінг, кожен з 9 bidi/control-символів (Theory), повністю-небезпечне ім'я, `SaveToTempFile` re-entry (`InvalidOperationException`), heap-buffer-path при іменах > 256 chars.
-- **`EdgeCaseFollowupTests` (3 файли тестів, 6 нових assertions)** — закриває останні три untested invariants з CLAUDE.md "Future development guardrails" (вони лежали поза першим проходом 4.0.1, виявлено в audit-fraction-check):
-  - `ForceRestartAsync_OnNonRestartableState_IsNoOp` (Theory × 4: NotStarted/Starting/Stopping/Stopped) — пінує що ForceRestart не змінює стан і не стартує новий процес коли він у нерестартабельному state.
-  - `NotificationChannel_CapacityOne_DeliversInFifoOrder` — `NotificationChannelCapacity=1` (мінімум) усе ще FIFO-доставляє всі 50 нотифікацій по одній (FullMode=Wait блокує producer'а доки consumer відчитає).
-  - `SubscribeAsync_LeaderCancellation_FollowerReceivesSameException` — коли leader's `CancellationToken` скасовується mid-RPC, follower отримує **той самий** `OperationCanceledException` через TCS rollback path (SignalEventService.cs:270-279).
-- **`ObservabilityCounterTests` (3 нових)** — раніше privacy-guards перевіряли лише *відсутність* PII у тагах, а *factual increment* counter'ів був untested invariant у CLAUDE.md "Future development guardrails". Тепер закрите:
-  - `RpcDuration_OnSuccessRoundTrip_RecordsPositiveDurationAndOkStatus` — happy-path round-trip через `JsonRpcClient` фіксує `signalcli.rpc.duration` + `signalcli.rpc.requests{status=ok}` через MeterListener.
-  - `EventsDropped_OnChannelOverflow_IncrementsWithCorrectEventType` — прокидає 1100 typing-нотифікацій (capacity=1024, no consumer) → асертить `signalcli.events.dropped{event_type=typing}` тікнув exactly 76 разів.
-  - `ProcessRestarts_OnForceRestart_IncrementsWithForceTrigger` — викликає `ForceRestartAsync()` → асертить `signalcli.process.restarts{trigger=force}` тікнув ≥1.
-- **`SyncDisposeDuringCleanupTests` (2 нових)** — пінує `field-barrier-hardening` invariant з [4.0.0]: `SignalCliHostedService.Dispose()` sync-path дренує `_operationLock` із 50ms fallback'ом і не дедлокає навіть з held-lock. Перший тест тримає семафор через reflection і викликає `Dispose()` синхронно; другий — happy-path lock-free assertion.
-- **`SignalCliE2EAdditionalTests` (5 нових E2E, skip-gated)** — закриває останній follow-up з [4.0.0] ("4 з 5 integration-tests-expansion E2E require real signal-cli runtime"). Той самий runtime-availability gate що `SignalCliE2EVersionTests` / `SignalCliE2EGracefulShutdownTests` — без bundled JRE / native бінарника тести return early з `[SKIP] …` маркером у Console.Error; інакше виконують повний E2E:
-  - `Process_StartStopRestart_TransitionsObservedCorrectly` — повний цикл Start → ForceRestart → Stop, асерти `ProcessStateManager.CurrentState` transitions + unique PID між циклами.
-  - `Process_KilledExternally_AutoRestartReclaimsProcess` — `Process.Kill()` real signal-cli, чекаємо до 60с watchdog tick, асертимо новий PID + новий процес відповідає на `version`.
-  - `HealthMonitor_OverInterval_LastPingResultUpdates` — `HealthCheckIntervalSeconds=2`, ждемо 6с, асертимо `LastPingResult.Ok==true` + timestamp fresh (<10s old).
-  - `DisposeAsync_MidFlight_LeavesNoOrphanProcess` — fire `VersionAsync` паралельно з `host.DisposeAsync()`, чекаємо до 5с race-window, асертимо `Process.GetProcessById(pid).HasExited`.
-  - `Configuration_FromIConfiguration_StartsRealCli` — validates `configuration-binder-aot-completion` end-to-end: `AddSignalCli(IConfiguration)` overload + `InMemoryCollection`-bound options → real signal-cli start → `version` returns "0.14.x".
+- **`AttachmentEntryTests` розширено з 3 → 12 тестів.** Кожен bidi/control-символ покрито Theory; повністю-небезпечне ім'я fallback'ує на `"attachment"`; heap-buffer-path при іменах > 256 chars; `SaveToTempFile` re-entry → `InvalidOperationException`.
+
+- **5 нових unit-тестів закривають останні CLAUDE.md untested invariants:**
+  - **`ForceRestartAsync` no-op** на нерестартабельних станах (Theory × 4: NotStarted/Starting/Stopping/Stopped) — не змінює стан і не стартує новий процес.
+  - **`NotificationChannelCapacity=1`** (мінімум) усе ще FIFO-доставляє всі повідомлення (FullMode=Wait блокує producer'а доки consumer відчитає).
+  - **`SubscribeAsync` leader cancellation propagation** — коли leader's CT скасовується mid-RPC, follower отримує **той самий** `OperationCanceledException` через TCS rollback path.
+
+- **3 нових observability-counter тести.** Раніше privacy-guards перевіряли лише *відсутність* PII у Meter-tags. Тепер pinned і фактичне інкрементування:
+  - `signalcli.rpc.duration` записує позитивне значення на happy-path RPC.
+  - `signalcli.events.dropped{event_type=…}` тикає exactly N разів при overflow (capacity=1024, 1100 typing-нотифікацій → counter=76).
+  - `signalcli.process.restarts{trigger=force}` тикає при `ForceRestartAsync()`.
+
+- **2 нові тести на sync-Dispose race** — пінують що `SignalCliHostedService.Dispose()` sync-path дренує `_operationLock` із 50ms fallback'ом і не дедлокає навіть з held-lock.
+
+- **5 нових E2E тестів** (skip-gated тим самим runtime-availability gate що `SignalCliE2EVersionTests`). Без bundled JRE / native бінарника тести return early з `[SKIP] …` маркером; інакше виконують повний E2E:
+  - **Start → ForceRestart → Stop** цикл проти реального signal-cli з unique PID між циклами.
+  - **External `Process.Kill()`** real signal-cli; чекаємо watchdog tick; асертимо новий PID + новий процес відповідає на `version`.
+  - **HealthMonitor cadence** — `HealthCheckIntervalSeconds=2`, чекаємо 6с, асертимо `LastPingResult.Ok==true` + fresh timestamp.
+  - **`DisposeAsync` mid-flight** — fire `VersionAsync` паралельно з `host.DisposeAsync()`, асертимо що OS-процес гарантовано exit'ив.
+  - **`AddSignalCli(IConfiguration)` end-to-end** — `InMemoryCollection`-bound options → real signal-cli start → `version` повертає "0.14.x" (валідує `configuration-binder-aot-completion`).
 
 ### 🛠 Інше
 
-- `<EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>` нарешті у [`SignalCli.csproj`](src/SignalCli/SignalCli.csproj) — фікс root-cause проблеми з 4.0.0.
-- Test count: unit 254 → 279 (+25); integration 2 → 7 (+5 skip-gated E2E).
+- `<EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>` нарешті у `SignalCli.csproj` — root-cause-фікс проблеми з 4.0.0.
+
+### 📊 Тестова статистика
+
+- Unit: 254 → **279** (+25).
+- Integration: 2 → **7** (+5 skip-gated E2E).
 
 ### Pending follow-up
 
-_(нічого — всі чотири follow-up'и з [4.0.0] повністю закриті)_
+_Нічого — усі 4 follow-up'и з [4.0.0] повністю закриті._
 
 ---
 
 ## [4.0.0] — 2026-05-24
 
-Третя велика хвиля — фокус на завершенні deprecated-shim-cycle, типізації RPC-помилок, і correctness-fix'у graceful-shutdown. Cargo з трьох OpenSpec changes: `audit-followup-2026` + `signal-cli-protocol-alignment` + `deprecated-shim-removal`. **Містить breaking changes**; повна migration table нижче.
+**Major з breaking changes.** Три речі для консумерів:
 
-### ⚠️ Breaking (v4.0)
+1. **Усі `[Obsolete]`-shim'и з in-flight-to-4.0 видалено** — `Config`, `AddSignalCli(Action<Config>?)`, `Version()` і ще 5 Async-suffix-less методів. Migration table нижче — все механічно через `sed`.
+2. **Graceful shutdown нарешті працює без silent Kill** — критичний correctness bug ще з 1.0: **кожен** Stop фактично робив `Process.Kill()`, що означало потенційну SQLite corruption у локальному signal-cli store. Якщо ти страждав від dataset corruption між рестартами — це причина.
+3. **JSON-RPC error codes тепер типізовані** — новий enum `JsonRpcErrorCode` + два derived exceptions (`RateLimitException`, `UntrustedIdentityException`) для catch-by-type замість inspect-message-text.
 
-**Усе in-flight-to-4.0 з CLAUDE.md "Backward compatibility convention" нарешті видалено.** Один-мажорний-грейс зреалізовано.
+Реліз cargo'ить три OpenSpec changes: `audit-followup-2026` + `signal-cli-protocol-alignment` + `deprecated-shim-removal`.
 
-- **`SignalCli.Models.Config`** клас повністю видалено. Заміна — `SignalCliOptions` (вже існував з 2.1.0). Resolver-логіка (`Config.ResolveBundledJava`, `ResolveOnPath`, `TryResolveJavaPath`) переїхала в новий internal `SignalCli.Utilities.JavaPathResolver`. `Config.ToProcessConfig` логіка переїхала в `SignalCli.Models.SignalCliOptionsExtensions.ToProcessConfig` (internal extension). Classpath кеш скасовано (1 виклик на life-cycle — overhead negligible).
-- **`ServiceCollectionExtensions.AddSignalCli(Action<Config>?)`** overload видалено. Заміна для consumer'ів пакетів `SignalCli.Runtime.Jre.*` — новий `AddSignalCliWithBundledRuntimeDefaults(Action<SignalCliOptions>?)` extension, що wires auto-resolve (bundled JRE/JAVA_HOME/PATH) через `JavaPathResolver` + дає consumer override-hook через delegate. Без bundled-runtime — `AddSignalCli(Action<SignalCliOptions>?)` напряму.
-- **`SignalCliOptionsExtensions.ToOptions(Config)` / `ToIOptions(Config)` adapters** видалено разом з Config-типом.
-- **`ServiceCollectionExtensions.CopyFrom(SignalCliOptions, SignalCliOptions)` helper** видалено (був тільки для legacy `Action<Config>?`-flow).
-- **`SignalCliOptions.ToConfig()` shim** видалено.
-- **`ISignalCliClient.Version()`** DIM shim видалено. Заміна — `VersionAsync()`. Migration: `s/\.Version(/\.VersionAsync(/g`.
-- **`ISignalAccounts.ListAccounts` / `SyncAccount`** DIM shims видалено. Migration: `s/\.ListAccounts(/\.ListAccountsAsync(/g`, `s/\.SyncAccount(/\.SyncAccountAsync(/g`.
-- **`ISignalDevices.StartLink` / `FinishLink`** DIM shims видалено. Migration: `s/\.StartLink(/\.StartLinkAsync(/g`, `s/\.FinishLink(/\.FinishLinkAsync(/g`.
-- **`ISignalGroups.ListGroups`** DIM shim видалено. Migration: `s/\.ListGroups(/\.ListGroupsAsync(/g`.
+### ⚠️ Breaking changes — migration table
+
+Усе in-flight-to-4.0 з CLAUDE.md "Backward compatibility convention" нарешті видалено — один-мажорний-грейс відпрацьовано. Усі замінники існували принаймні з 3.0.
+
+| Видалено | Заміна / migration |
+|---|---|
+| `SignalCli.Models.Config` (клас) | `SignalCliOptions` (існує з 2.1.0). Internal resolver-логіка переїхала в `JavaPathResolver`; mapping → `SignalCliOptionsExtensions.ToProcessConfig`. |
+| `ServiceCollectionExtensions.AddSignalCli(Action<Config>?)` | **Для bundled-runtime консумерів:** новий `AddSignalCliWithBundledRuntimeDefaults(Action<SignalCliOptions>?)` — auto-resolve JRE/JAVA_HOME/PATH + delegate-override. **Без bundled-runtime:** `AddSignalCli(Action<SignalCliOptions>?)` напряму. |
+| `SignalCliOptionsExtensions.ToOptions(Config)` / `ToIOptions(Config)` | — (адаптери, видалені з Config-типом). |
+| `ServiceCollectionExtensions.CopyFrom(SignalCliOptions, SignalCliOptions)` | — (internal helper, був тільки для legacy flow). |
+| `SignalCliOptions.ToConfig()` | — (shim). |
+| `ISignalCliClient.Version()` | `s/\.Version(/\.VersionAsync(/g` |
+| `ISignalAccounts.ListAccounts` / `SyncAccount` | `s/\.ListAccounts(/\.ListAccountsAsync(/g`, `s/\.SyncAccount(/\.SyncAccountAsync(/g` |
+| `ISignalDevices.StartLink` / `FinishLink` | `s/\.StartLink(/\.StartLinkAsync(/g`, `s/\.FinishLink(/\.FinishLinkAsync(/g` |
+| `ISignalGroups.ListGroups` | `s/\.ListGroups(/\.ListGroupsAsync(/g` |
 
 ### ✨ Додано
 
-#### Capability `typed-rpc-errors` (раніше `signal-cli-protocol-alignment`)
+- **Типізовані RPC-помилки — `catch (RateLimitException)` замість inspect'у `ex.Message`.** Новий public enum `SignalCli.Exceptions.JsonRpcErrorCode` з 10 значеннями: 5 JSON-RPC 2.0 standard (`ParseError -32700`, `InvalidRequest -32600`, `MethodNotFound -32601`, `InvalidParams -32602`, `InternalError -32603`) + 5 signal-cli specific (`UserError -1`, `IoError -3`, `UntrustedIdentity -4`, `RateLimit -5`, `CaptchaRejected -6` — цит. `SignalJsonRpcCommandHandler.java:35-280`). Нова public property `JsonRpcException.KnownCode { get; }` мапить wire-code на enum (null для unknown — forward-compat). Два derived exceptions — **`RateLimitException`** (-5) і **`UntrustedIdentityException`** (-4) — для типових retry-with-backoff / verify-safety-number-flow'ів. *(`typed-rpc-errors`)*
 
-- Новий enum **`SignalCli.Exceptions.JsonRpcErrorCode`** з 10 значеннями: 5 JSON-RPC 2.0 standard (`ParseError -32700`, `InvalidRequest -32600`, `MethodNotFound -32601`, `InvalidParams -32602`, `InternalError -32603`) + 5 signal-cli specific (`UserError -1`, `IoError -3`, `UntrustedIdentity -4`, `RateLimit -5`, `CaptchaRejected -6`). Цитується до `SignalJsonRpcCommandHandler.java:35-280` @ signal-cli bda4e7f.
-- Нова public property **`JsonRpcException.KnownCode { get; }`** — типізована мапа з `Error.Code` на `JsonRpcErrorCode?` (null для unknown codes — forward-compat).
-- Два нові derived exception types: **`RateLimitException`** (code -5) і **`UntrustedIdentityException`** (code -4) — для consumer-actionable error-кодів які типічно catch'аться by type (retry-with-backoff / verify-safety-number). `JsonRpcClient.InvokeMethodAsync` тепер кидає derived типи коли wire-code співпадає; інші коди лишаються базовим `JsonRpcException`.
-
-#### Capability `config-auto-resolve-migration`
-
-- Нове public extension **`ServiceCollectionExtensions.AddSignalCliWithBundledRuntimeDefaults(Action<SignalCliOptions>? = null)`** — replacement для legacy `AddSignalCli(Action<Config>?)` що робив auto-resolve через `Config.CreateDefault()`. Wires `AppHome = AppContext.BaseDirectory`, `LibDirectory = "SignalCli/lib"`, `JavaExecutable` resolved через bundled JRE → JAVA_HOME → Windows Oracle → PATH. Consumer override приходить пізніше через delegate.
+- **`AddSignalCliWithBundledRuntimeDefaults(Action<SignalCliOptions>? = null)`** — public extension як replacement для видаленого `AddSignalCli(Action<Config>?)`. Wires defaults (`AppHome = AppContext.BaseDirectory`, `LibDirectory = "SignalCli/lib"`, `JavaExecutable` auto-resolved через bundled JRE → JAVA_HOME → Windows Oracle → PATH) + consumer override через delegate. *(`config-auto-resolve-migration`)*
 
 ### 🐛 Виправлено
 
-#### Capability `graceful-shutdown-fix` (critical correctness bug, в.чав з 1.0)
+- **Graceful shutdown нарешті дійсно працює — критичний correctness bug ще з 1.0.** `SignalCliHostedService.StopProcessInternalAsync` писав літеральне `"exit"` на signal-cli stdin. signal-cli **не має** JSON-RPC методу `exit` і парсить кожен stdin-рядок як JSON — наш літерал виробляв `-32700 Parse error` response на stdout, процес залишався живий, наш wait-for-exit timeout вистрілював, ми завжди falled through на `Kill(entireProcessTree: true)`. **Кожен** graceful shutdown насправді був hard-kill (TerminateProcess на Windows, SIGKILL на Unix), bypass'ачи signal-cli shutdown hooks → **потенційна SQLite corruption** у локальному signal-cli store. **Fix:** закриваємо stdin (`StandardInput.Close()`) замість `WriteLine("exit")` — signal-cli reader-loop природньо завершується, JVM exit clean. Перевірено новим E2E `SignalCliE2EGracefulShutdownTests` через real bundled JRE. *(`graceful-shutdown-fix`)*
 
-- **`SignalCliHostedService.StopProcessInternalAsyncNoLock` тепер закриває stdin** (`StandardInput.Close()`) замість того щоб писати літеральне `"exit"` як рядок. signal-cli не має JSON-RPC методу `exit` і парсить кожен stdin-рядок як JSON (`JsonRpcReader.java:59-75` @ bda4e7f) — наш літерал виробляв `-32700 Parse error` response на stdout, процес ЗАЛИШАВСЯ ЖИВИЙ, наш wait-for-exit timeout вистрілював, і ми завжди falled through до `Kill(entireProcessTree: true)`. **КОЖЕН** graceful shutdown був насправді hard-kill (TerminateProcess на Win, SIGKILL на Unix), bypass'ачи signal-cli shutdown hooks → потенційна SQLite corruption. Fix: stdin EOF — signal-cli reader-loop природньо завершується, dispatcher finally clears subscriptions, JVM exit clean.
-- **`SignalCliHostedServiceLog.ExitWriteFailed`** видалено, заміна — **`StdinCloseFailed`** (тей самий EventId 117, Debug-level).
+- **`AddSignalCli` нарешті дійсно idempotent.** Pre-fix guard ніколи не fire'ив (`IOptions<T>` зареєстровано open-generic, не concrete), тож кожен повторний виклик re-run'ив configure delegate (second-wins на options) і додавав 3 duplicate `IHostedService` descriptor'и → подвійний startup. CHANGELOG `[3.0.0]` оголошення idempotency було over-broad. **Fix:** private sentinel-type marker. *(`addsignalcli-idempotency-fix`)*
 
-#### Capability `addsignalcli-idempotency-fix`
+- **Coverage badges у README тепер render'яться поза github.com.** Relative paths `.github/badges/*.svg` працювали тільки на github.com — інші renderers (NuGet.org, IDE previewers, third-party gallery sites) інтерпретували `.github` як hostname → broken `http://.github/…` URLs. Тепер absolute `raw.githubusercontent.com` URLs у README + 4 emission sites у CI workflow. Bonus: `<PackageReadmeFile>README.md</PackageReadmeFile>` додано — README тепер у NuGet pack, build warning *"missing a readme"* зник. *(`badge-url-fix`)*
 
-- **`ServiceCollectionExtensions.AddSignalCli` нарешті дійсно idempotent.** Pre-fix guard `services.Any(d => d.ServiceType == typeof(IOptions<SignalCliOptions>) || d.ServiceType == typeof(SignalCliOptions))` НІКОЛИ не fire'ив, бо `IOptions<T>` зареєстровано open-generic а не concrete. Repeated `AddSignalCli` calls (a) re-run'или configure delegate (second-wins), (b) додавали 3 duplicate `IHostedService` descriptor'и → подвійний startup. CHANGELOG `[3.0.0]` декларація idempotency була over-broad. Fix: private sentinel-type `SignalCliRegistrationMarker` реєструється на першому виклику, перевіряється на наступних. Now correct for the first time.
+### 🛡️ Defensive hardening
 
-#### Capability `badge-url-fix`
+- **JSON duplicate-key захист увімкнено.** `SignalJson.Options.AllowDuplicateProperties = false` (новий .NET 10 flag). Малформовані signal-cli responses з повтореним ключем тепер кидають `JsonException` замість silent last-wins. *Caveat виявлений пізніше у [4.0.2]:* flag fire'ить лише на reflection-шляху; повний захист для source-gen path landед у [4.0.2]. *(`json-hardening`)*
 
-- README.md coverage badges і 4 emission sites у `.github/workflows/dotnet-desktop.yml` тепер використовують absolute `https://raw.githubusercontent.com/07artem132/SignalCli.NET/main/.github/badges/*.svg` URLs. Relative paths `.github/badges/*.svg` працювали тільки на github.com — інші renderers (NuGet.org, IDE previewers, third-party gallery sites) інтерпретували `.github` як hostname і виробляли broken `http://.github/badges/*.svg`.
-- `SignalCli.csproj` тепер має `<PackageReadmeFile>README.md</PackageReadmeFile>` + `<None Include="..\..\README.md" Pack="true" PackagePath="\" />`. Build warning *"The package SignalCli.NET.x.x.x is missing a readme"* зник; README тепер у NuGet pack.
+- **Attachment inline-vs-temp-file threshold знижено з 15M → 12M.** signal-cli's Jackson 2.20.2 enforces `maxStringLength = 20_000_000` per STRING TOKEN. Base64 inflation 4/3: 12M raw × 4/3 = 16M encoded → 4M margin для решти `send` JSON envelope. Old 15M давало 20M encoded — exactly at cap, zero margin → occasional `StreamConstraintsException` на attachments близьких до межі. *(`attachment-threshold-margin`)*
 
-### 🛡️ Defensive
+- **`JsonRpcClientHostedService._client` тепер `volatile`** — захист thread-safety reads з `SignalCliHealthMonitor` + `SignalEventService` на ARM64 (.NET 10 first-class). На x64 reference-read атомарний; на ARM64 без acquire/release-семантики reader міг би побачити stale null. `volatile` додає memory barrier з near-zero cost на x64. *(`field-barrier-hardening`)*
 
-#### Capability `json-hardening`
-
-- **`SignalJson.Options.AllowDuplicateProperties = false`** (новий .NET 10 flag). signal-cli response з duplicate-key — protocol violation per JSON-RPC 2.0; раніше `System.Text.Json` мовчки слідував last-wins; тепер `JsonException` fire'ить при deserialization.
-
-#### Capability `attachment-threshold-margin`
-
-- **`SignalMessage.MaxInlineEncodedAttachmentBytes` знижено з 15M → 12M**. signal-cli's Jackson 2.20.2 enforces `StreamReadConstraints.maxStringLength = 20_000_000` per STRING TOKEN (`gradle/libs.versions.toml:10` @ bda4e7f). base64 inflation 4/3: 12M raw × 4/3 = 16M encoded → 4M margin для решти `send` JSON envelope. Old 15M давало 20M encoded — exactly at cap, zero margin → occasional StreamConstraintsException на attachments близьких до межі.
-
-#### Capability `field-barrier-hardening`
-
-- **`JsonRpcClientHostedService._client`** змінено на `volatile IJsonRpcClient?`. Field читається з кількох потоків (`SignalCliHealthMonitor.PingCliAsync`, `SignalEventService.StartAsync`) без локу — на x64 reference-read атомарний, але на ARM64 (.NET 10 first-class) без acquire/release-семантики reader міг би побачити stale null. `volatile` додає memory barrier з nullov-runtime-cost на x64.
-- **`SignalCliHostedService.Dispose()` sync path** тепер бере `_operationLock.Wait(TimeSpan.FromMilliseconds(50))` перед `DisposeCore()` — синхронізує read `_currentProcess` з write'ами в `CleanupProcess` (під lock-finally у `StopProcessInternalAsyncNoLock`). 50ms drain timeout — worst case identical to pre-fix.
+- **`SignalCliHostedService.Dispose()` тепер дренує `_operationLock`** перед `DisposeCore()` із 50ms fallback timeout — синхронізує read `_currentProcess` з паралельними write'ами під lock. Worst case identical to pre-fix. *(`field-barrier-hardening`)*
 
 ### 🛠 Інше
 
-- **`<EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>`** у `SignalCli.csproj` — допомагає source-gen-перехоплюваним configuration-binding call-site'ам у внутрішніх шляхах. **АЛЕ** `[RequiresUnreferencedCode]`/`[RequiresDynamicCode]` на `AddSignalCli(IConfiguration)` довелося ЛИШИТИ: `OptionsBuilder.Bind<T>(IConfiguration)` сам framework-annotated у `Microsoft.Extensions.Options.ConfigurationExtensions`, і source-gen цей call-site не перехоплює. Full AOT-fix для overload'у — окремий PR з rewrite binding path. AOT-targeting consumers MUST use `AddSignalCli(Action<SignalCliOptions>?)`.
-- **CLAUDE.md** отримав новий H2 розділ **"signal-cli protocol behavior we depend on"** з 7 cited facts про upstream signal-cli (stdin EOF graceful, stdout pure-JSON line-flushed, virtual-thread parallel dispatch, `subscribeReceive` non-idempotent at protocol level, Jackson `maxStringLength = 20M`, custom error codes `-1..-6`, Java 25 requirement). Кожен факт pin'ить до signal-cli source file:line @ commit bda4e7f. Bumping `<SignalCliVersion>` має сопровождатися re-verify-pass за тими ж facts.
-- 6 stale `[Obsolete("…will be removed in 3.0")]` повідомлень переписано на `4.0` (codebase уже був 3.0.0 коли message казало 3.0 — drift trained agents to disbelieve `[Obsolete]` lifetime claims).
-- Three new **regression-guard tests** під `Tests/SignalCli.Tests/RegressionGuards/`:
-  - **`ObsoleteMessageConsistencyTests`** — reflectively scans every `[Obsolete]` attribute, parses `"will be removed in N.0"`, asserts N > current major. Drift class неможлива going forward.
-  - **`EventIdBlockTests`** — Theory × 12 `*Log.cs` classes, asserts EventId lies в reserved block per CLAUDE.md "Established patterns → Logging".
-  - **`PublicApiSurfaceTests`** — reflective walker generates canonical-form line per public member, diffs against `SignalCli.public-api.txt` baseline (1087 lines after this release). Будь-який accidental public-API drift — fail з unified diff.
-- Edge-case test coverage додано: `AtomicCounter` int32 wrap, JSON-RPC `error.data` field preservation, `JsonRpcResponse` with both `result` and `error`, attachment encoded-size boundary, EnvironmentVariables read-only-snapshot semantics, AddSignalCli idempotency × 3.
-- Integration E2E `SignalCliE2EGracefulShutdownTests` валідує `graceful-shutdown-fix` через real signal-cli runtime (skip-gated like existing `SignalCliE2EVersionTests`).
-- Test count: 215 baseline → 254 (+39 net new).
-- Race-prober `Client_ConcurrentAccessUninitialized_DoesNotThrowNullRef` (50 parallel readers, JsonRpcClientHostedService) — пінує volatile-семантику.
-- Example `Program.cs` тепер використовує typed lambda parameter `(SignalCliOptions o) => {...}` замість cast — overload resolution однозначний без надмірного annotation noise.
-- **CLAUDE.md "Future development guardrails"** секція документує що ще лишилося як untested invariants (NUL/RTL filename sanitization, ForceRestart no-op states, NotificationChannelCapacity=1 boundary, observability counter increment assertions, SubscribeAsync leader-cancelled propagation) для майбутніх PRs.
+- **CLAUDE.md новий H2 розділ "signal-cli protocol behavior we depend on"** — 7 cited facts про upstream signal-cli (stdin EOF graceful, stdout pure-JSON line-flushed, virtual-thread parallel dispatch, `subscribeReceive` non-idempotent at protocol level, Jackson `maxStringLength = 20M`, custom error codes `-1..-6`, Java 25 requirement). Кожен факт pin'ить до signal-cli source file:line @ commit `bda4e7f`. Bumping `<SignalCliVersion>` має сопровождатися re-verify-pass.
+
+- **3 нові reflection-based regression guards** — будь-яка drift тепер ловиться build-time:
+  - **`ObsoleteMessageConsistencyTests`** — сканує кожен `[Obsolete]` attribute, parses "will be removed in N.0", asserts N > current major. Закриває drift-class коли M-1 version-message лишається у source після релізу.
+  - **`EventIdBlockTests`** — Theory × 12 `*Log.cs` classes, asserts EventId лежить у reserved block per CLAUDE.md.
+  - **`PublicApiSurfaceTests`** — reflective walker генерує line-per-public-member, diffs проти baseline (1087 lines). Accidental public-API drift → fail з unified diff.
+
+- **6 stale `[Obsolete("…will be removed in 3.0")]` повідомлень переписано на `4.0`** — codebase вже був 3.0.0 коли message казало 3.0; drift trained agents to disbelieve `[Obsolete]` lifetime claims.
+
+- **`<EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>` згадано в csproj-документації, але** `[RequiresUnreferencedCode]`/`[RequiresDynamicCode]` на `AddSignalCli(IConfiguration)` довелося лишити: `OptionsBuilder.Bind<T>(IConfiguration)` сам framework-annotated, і source-gen цей call-site не перехоплює. AOT-targeting consumers MUST use `AddSignalCli(Action<SignalCliOptions>?)`. *(У [4.0.1] виявлено що флаг насправді не був доданий у csproj — root-cause-fix landed там.)*
+
+- **Edge-case test coverage додано:** `AtomicCounter` int32 wrap, JSON-RPC `error.data` field preservation, attachment encoded-size boundary, `EnvironmentVariables` read-only-snapshot semantics, `AddSignalCli` idempotency × 3.
+
+- **Race-prober `Client_ConcurrentAccessUninitialized_DoesNotThrowNullRef`** (50 parallel readers, `JsonRpcClientHostedService`) — пінує volatile-семантику.
+
+- **Integration E2E `SignalCliE2EGracefulShutdownTests`** — валідує `graceful-shutdown-fix` через real signal-cli runtime (skip-gated).
+
+- **Example/Program.cs** тепер typed lambda `(SignalCliOptions o) => {...}` замість cast — overload resolution однозначний без annotation noise.
+
+- **CLAUDE.md "Future development guardrails"** — каталог untested invariants для майбутніх PRs.
+
+### 📊 Тестова статистика
+
+- Unit: 215 baseline → **254** (+39 net new).
 
 ### Pending follow-up
 
-_(усі чотири позиції повністю закриті у [4.0.1] — див. вище)_
-
-- ✅ Configuration-binder full AOT fix → `configuration-binder-aot-completion` (4.0.1).
-- ✅ 4 з 5 integration-tests-expansion E2E → `SignalCliE2EAdditionalTests` (5 skip-gated tests, 4.0.1).
-- ✅ 6 з 12 edge-case-coverage tests → `safe-filename-hardening` + `observability-counter-assertions` (4.0.1).
-- ✅ 1 з 2 race-prober tests → `SyncDisposeDuringCleanupTests` (4.0.1).
+_Усі 4 позиції закриті у [4.0.1]:_
+- ✅ Configuration-binder full AOT fix → `configuration-binder-aot-completion`.
+- ✅ 4 з 5 integration-tests-expansion E2E → `SignalCliE2EAdditionalTests`.
+- ✅ 6 з 12 edge-case-coverage tests → `safe-filename-hardening` + `observability-counter-assertions`.
+- ✅ 1 з 2 race-prober tests → `SyncDisposeDuringCleanupTests`.
 
 ---
 
