@@ -37,6 +37,14 @@ jobs:
       - name: Pack SignalCli.NET
         run: dotnet pack src/SignalCli/SignalCli.csproj -c Release --no-build -o "${{ github.workspace }}/nupkgs"
 
+      # nf003-completion (audit v2.1 follow-up): без цього step'у lockstep двох пакетів
+      # діє ТІЛЬКИ на csproj-стороні; на registry-стороні consumer отримує stale 3.0.0
+      # HealthChecks-пакета бо нічого свіжіше не пушиться. RG07 (VersionLockstepTests)
+      # ловить розбіжність у source-tree, цей крок гарантує що оновлення дійсно
+      # доходить до nuget.pkg.github.com/07artem132/.
+      - name: Pack SignalCli.NET.HealthChecks
+        run: dotnet pack src/SignalCli.HealthChecks/SignalCli.HealthChecks.csproj -c Release --no-build -o "${{ github.workspace }}/nupkgs"
+
       - name: Pack SignalCli.Runtime
         run: dotnet pack src/SignalCli.runtime/SignalCli.runtime.csproj -c Release --no-build -o "${{ github.workspace }}/nupkgs"
 
