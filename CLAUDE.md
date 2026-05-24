@@ -279,18 +279,97 @@ When adding a new deprecation, mirror this shape: real new API + `[Obsolete("Use
 
 This list captures CLAUDE.md-declared invariants that DO NOT yet have an executable regression-guard test. PRs that touch the relevant code SHOULD add the matching test (rather than waiting for an audit pass to discover the gap). When `audit-followup-2026` is archived, the entries marked `(in audit-followup-2026 §X)` move to "shipped" and stop being a TODO.
 
-- **JSON-RPC standard error codes** (`-32601` Method not found, `-32700` Parse error, `error.data` payload preservation): `JsonRpcErrorTests` (in `audit-followup-2026` §6.a).
-- **Attachment filename edge cases:** NUL byte, U+202E (RIGHT-TO-LEFT OVERRIDE), exact boundary at `MaxInlineEncodedAttachmentBytes` (= 15 000 000), `SaveToTempFile` re-entry — `AttachmentEntryTests` (in `audit-followup-2026` §6.b).
-- **`AtomicCounter` int32 wrap-around:** explicit assertion that `int.MaxValue → int.MinValue` is `unchecked` (no `OverflowException`) — `UtilityEdgeCaseTests` (in `audit-followup-2026` §6.c).
-- **Observability counters fire on real events:** `signalcli.events.dropped` increments by exact overflow count, `signalcli.rpc.duration` records `> 0` on happy path, `signalcli.process.restarts{trigger=force|crash|health}` ticks per trigger — `ObservabilityCounterTests` (in `audit-followup-2026` §6.d). Today `ObservabilityPrivacyTests` only assert *absence* of PII, not counter increment.
-- **State-machine no-op paths:** `ForceRestartAsync` skipped in `Stopping`/`Stopped`/`NotStarted` states (in `audit-followup-2026` §6.f).
-- **Channel-capacity boundary:** `NotificationChannelCapacity = 1` (minimum) still FIFO-delivers (in `audit-followup-2026` §6.g).
-- **DI registration idempotency:** repeated `AddSignalCli` does NOT override the first call's options nor add duplicate descriptors (in `audit-followup-2026` §6.h).
-- **`EnvironmentVariables` snapshot semantics:** post-start external-map mutation does NOT leak into running process (in `audit-followup-2026` §6.h).
-- **`JsonRpcResponse` defensiveness:** when both `result` AND `error` are present (a protocol violation), error wins → `JsonRpcException` (in `audit-followup-2026` §6.i).
-- **Subscription leader cancellation propagation:** when leader `SubscribeAsync(account, ct)` cancels mid-RPC, the documented follower outcome is pinned (in `audit-followup-2026` §6.e).
+**Already shipped — moved out of this catalog (do NOT re-flag):**
+
+- **JSON-RPC standard error codes** (`-32601`, `-32700`, `error.data` payload preservation): `JsonRpcErrorTests` (shipped in `audit-followup-2026` §6.a; T01 `InvokeMethodAsync_WhenBothResultAndErrorPresent_ErrorWins` added in audit v2.1 closes G9).
+- **Attachment filename edge cases:** NUL byte, U+202E (RIGHT-TO-LEFT OVERRIDE), bidi controls, `SaveToTempFile` re-entry, exact boundary at `MaxInlineEncodedAttachmentBytes` (= **12 000 000** after `signal-cli-protocol-alignment`) — `AttachmentEntryTests` + `SignalMessageValidationTests.EncodedSize_OverBoundary_UsesTempFile` (shipped in `audit-followup-2026` §6.b).
+- **`AtomicCounter` int32 wrap-around:** `UtilityEdgeCaseTests` (shipped in `audit-followup-2026` §6.c).
+- **Observability counters fire on real events:** `signalcli.events.dropped`, `signalcli.rpc.duration`, `signalcli.process.restarts{trigger=force|crash|health}` — `ObservabilityCounterTests` (shipped in `audit-followup-2026` §6.d; T04/T05 added in audit v2.1 close `trigger=crash` + `trigger=health` subcases).
+- **State-machine no-op paths:** `ForceRestartAsync` skipped in `Stopping`/`Stopped`/`NotStarted` (shipped in `audit-followup-2026` §6.f).
+- **Channel-capacity boundary:** `NotificationChannelCapacity = 1` minimum FIFO (shipped in `audit-followup-2026` §6.g).
+- **DI registration idempotency:** repeated `AddSignalCli` is no-op (shipped in `audit-followup-2026` §6.h).
+- **`EnvironmentVariables` snapshot semantics:** read-only-dict type contract (shipped in `audit-followup-2026` §6.h).
+- **`JsonRpcResponse` defensiveness:** when both `result` AND `error` are present, error wins → `JsonRpcException` (shipped in audit v2.1 T01).
+- **Subscription leader cancellation propagation:** follower receives same `OperationCanceledException` (shipped in `audit-followup-2026` §6.e).
+- **Event-API symmetry (10 paired surfaces):** every `IObservable<T>` has paired `IAsyncEnumerable<T>` — `RegressionGuards/EventApiSymmetryTests` (shipped in audit v2.1 RG06).
+- **Version lockstep:** `SignalCli.NET` and `SignalCli.NET.HealthChecks` ship at the same assembly version — `RegressionGuards/VersionLockstepTests` (shipped in audit v2.1 RG07).
+
+**Currently open — still no executable guard:**
+
+_(empty as of audit v2.1 — all previously-declared invariants now have tests; this section will repopulate as new declared-but-untested invariants surface in future PRs.)_
 
 **Rule for new PRs:** when you find an invariant CLAUDE.md declares but no test pins, choose ONE — (a) write the test in your PR, (b) add the gap to this catalog, (c) explicitly justify why testing is impractical (and add an `// CLAUDE.md guardrails: untested invariant` source comment at the relevant site).
+
+## Audit baseline — invariants that MUST NOT regress
+
+Цей список — мінімальна планка якості зафіксована після аудиту v2.1 (2026-05-24).
+Будь-який PR що порушує хоча б один з цих пунктів МУСИТЬ бути відхилений або
+супроводжуватись явним обґрунтуванням у CHANGELOG.
+
+### Тестова база
+
+- Unit tests: **≥ 286** (поточна планка після audit v2.1 landing).
+- E2E tests: **≥ 1** (bundled-JRE, не потребує live Signal account).
+- `dotnet build` з `TreatWarningsAsErrors=true` — **обидва** проекти (`src/SignalCli`, `Tests/SignalCli.Tests`); Integration слідує тому ж шляху коли стане доцільним.
+- Нуль `xUnit1031` violations (DoNotUseBlockingTaskOperationsInTestMethod). Якщо новий тест вимагає sync-blocking — додай `[SuppressMessage("xUnit", "xUnit1031", Justification="…")]` із поясненням, інакше build впаде.
+
+### Regression guards — ВСІ мають бути зеленими
+
+| Guard | Файл | Що pins |
+|-------|------|---------|
+| R01 | `JsonContextRegistrationTests.cs` | Кожен `*Parameters`/`*Response` DTO зареєстрований у `SignalJsonContext` |
+| R02 | `RegressionGuards/EventIdBlockTests.cs` | `[LoggerMessage(EventId=…)]` лежить у блоці свого `*Log.cs` класу |
+| R03 | `RegressionGuards/PublicApiSurfaceTests.cs` | Public API surface не змінюється без оновлення `SignalCli.public-api.txt` baseline |
+| R04 | `RegressionGuards/ObsoleteMessageConsistencyTests.cs` | `[Obsolete("...will be removed in N.0")]` посилається на N строго > поточного major |
+| RG05 | `JsonSerializationTests.cs` (`SignalJsonOptions_AllowDuplicateProperties_IsFalse` + JsonDocument proxy) | `SignalJson.Options.AllowDuplicateProperties = false` (CLAUDE.md rule #18) |
+| RG06 | `RegressionGuards/EventApiSymmetryTests.cs` | Кожен `IObservable<T>` на `ISignalEventService` має парний `IAsyncEnumerable<T>` метод |
+| RG07 | `RegressionGuards/VersionLockstepTests.cs` | `SignalCli.NET.HealthChecks` assembly version == `SignalCli.NET` |
+
+### Архітектурні інваріанти
+
+- Жоден `JsonSerializer.Serialize/Deserialize/SerializeToElement` у `src/SignalCli/**` без `JsonTypeInfo<T>` overload (rule #15).
+- Жоден `_logger.LogXxx("template", arg)` — тільки `[LoggerMessage]`-generated `partial` методи (CA1848/CA1873 green).
+- Жоден `new CancellationTokenSource(TimeSpan)` у класі що ін'єктить `TimeProvider` — тільки overload `(TimeSpan, TimeProvider)` (Established patterns → "TimeProvider consistency").
+- Жоден `Task.Delay(>10ms)` у тестах із `SignalCliHealthMonitor/` чи `SignalCliHostedService/Restart*/` — тільки `FakeTimeProvider.Advance` (rule #11).
+- `<SignalCliPackageVersion>` живе **ТІЛЬКИ** у `Directory.Build.props` — не хардкодити `<Version>` у `SignalCli.csproj` або `SignalCli.HealthChecks.csproj`.
+
+### Версійна синхронізація
+
+`SignalCli.NET` і `SignalCli.NET.HealthChecks` ЗАВЖДИ мають однакову версію. Адаптер бінарно прив'язаний до main lib через `[InternalsVisibleTo("SignalCli.HealthChecks")]` — divergent versions = `MissingMethodException` на першому health-check-probe в продакшені. Єдине місце де версія визначається: `Directory.Build.props → <SignalCliPackageVersion>`. Enforced: `VersionLockstepTests.MainLibAndHealthChecksAdapter_ShareExactSameAssemblyVersion`.
+
+## How we discovered these issues — prevention checklist
+
+Всі знахідки з аудиту v2.0/v2.1 потрапили в кодову базу через один з цих сценаріїв. При кожному PR перевір що ти не повторюєш той самий паттерн:
+
+### Package version drift (→ NF-003, NF-005)
+
+**Що сталося:** `SignalCli.NET.HealthChecks.csproj` мав хардкодовану `<Version>3.0.0</Version>` поки main lib вже був на `4.0.1`. Окремо: `Microsoft.Extensions.TimeProvider.Testing` і `Microsoft.Extensions.Diagnostics.Testing` залишились на `9.0.0` поки решта Microsoft.Extensions.* перейшли на `10.0.0`.
+
+**Перевірка при PR:** якщо змінюєш версію в будь-якому csproj — `grep -rn "<Version>" src/ Tests/` і подивись чи всі релевантні csproj оновлені. Якщо версія має бути спільною — вона МУСИТЬ йти через MSBuild property у `Directory.Build.props`, не хардкодом.
+
+### Silent warnings у test project (→ NF-004)
+
+**Що сталося:** `TreatWarningsAsErrors=true` був тільки в `src/SignalCli.csproj`, не в `Tests/SignalCli.Tests.csproj`. Три xUnit1031 violations тихо жили в CI місяцями, бо CI не fail'ив на test-project warning.
+
+**Перевірка при PR:** `dotnet build` має бути 0 warnings в **обох** проєктах. Додаючи новий test-файл — переконайся що він не вводить аналізатор-warning (зокрема xUnit1031: ніяких `.GetAwaiter().GetResult()` / `.Wait()` / `.Result` на `Task`). Для тестів що навмисно тестують sync-path (як `SyncDisposeDuringCleanupTests.Dispose()`) — лиш sync API залишається sync; `StartAsync`/`StopAsync` обгортаючи з `await`.
+
+### Test gap при рефакторингу (→ NF-001, G4 subcases)
+
+**Що сталося:** Логіка "error wins over result" у `JsonRpcClient.cs:494` і observability trigger subcases (`crash` / `health`) були коректно реалізовані але не мали тестів. CHANGELOG [4.0.1] навіть стверджував що `JsonRpcResponse` з обома полями покрито — `grep` показав що ні. Рефакторинг міг мовчки зламати їх.
+
+**Перевірка при PR:** якщо змінюєш файл де є CLAUDE.md "Future development guardrails" bullet — перевір що для цього bullet існує тест. Якщо ні — додай перед мержем. Якщо CHANGELOG говорить "тест X covered" — `grep` репозиторій на ім'я тесту, не довіряй на слово.
+
+### Doc/code constant drift (→ NF-006)
+
+**Що сталося:** `MaxInlineEncodedAttachmentBytes` змінили з `15_000_000` на `12_000_000` у `signal-cli-protocol-alignment`, але CLAUDE.md "Future development guardrails" bullet залишився із `(= 15 000 000)`. Той же bullet був у "untested" поки тест `EncodedSize_OverBoundary_UsesTempFile` уже існував.
+
+**Перевірка при PR:** якщо змінюєш будь-яку іменовану константу або threshold у `src/SignalCli/**` — `grep CLAUDE.md` на стару назву **І** на стару величину. Аналогічно: якщо додаєш тест на CLAUDE.md-задекларовану invariant — перенеси bullet із "untested" у "shipped" у тому ж PR.
+
+### Missing regression guard для нового патерну (→ NF-002)
+
+**Що сталося:** "кожен `IObservable<T>` має парний `IAsyncEnumerable<T>`" — правило існувало у "Established patterns" розділі, але не було машинно-верифіковане. Новий event kind без парного методу пройшов би code review (компілився б, тести б проходили).
+
+**Правило:** кожен новий "Established patterns" bullet у CLAUDE.md МУСИТЬ мати відповідний regression guard у таблиці "Audit baseline" вище. Якщо додаєш новий патерн — одразу додай guard. Якщо такого guard'а ще не існує і його неможливо швидко скласти — поясни чому в `// CLAUDE.md guardrails: untested invariant` коменті біля сайту pattern'у.
 
 ## Planning (OpenSpec)
 

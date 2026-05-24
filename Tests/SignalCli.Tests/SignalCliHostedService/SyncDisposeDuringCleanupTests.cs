@@ -59,7 +59,7 @@ public sealed class SyncDisposeDuringCleanupTests : IDisposable
     }
 
     [Fact]
-    public void Dispose_DuringHeldOperationLock_DoesNotDeadlock_AndCompletesUnderFallback()
+    public async Task Dispose_DuringHeldOperationLock_DoesNotDeadlock_AndCompletesUnderFallback()
     {
         // Arrange — стандартний runner, нормальна StartAsync.
         var startCount = 0;
@@ -86,7 +86,9 @@ public sealed class SyncDisposeDuringCleanupTests : IDisposable
         var stateManager = new SignalCli.Services.SignalCli.ProcessStateManager(smLogger.Object);
         var service = CreateService(runnerMock, stateManager);
 
-        service.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+        // nf004 (audit v2.1): StartAsync — справді async, await; xUnit1031 fix.
+        // service.Dispose() нижче — навмисно SYNC, бо саме його ми й тестуємо.
+        await service.StartAsync(CancellationToken.None);
 
         // Тримаємо _operationLock через reflection — імітуємо in-flight операцію.
         var lockField = typeof(SignalCli.Services.SignalCli.SignalCliHostedService)
@@ -117,7 +119,7 @@ public sealed class SyncDisposeDuringCleanupTests : IDisposable
     }
 
     [Fact]
-    public void Dispose_WhenLockFree_AcquiresImmediately_AndReleases()
+    public async Task Dispose_WhenLockFree_AcquiresImmediately_AndReleases()
     {
         var runnerMock = new Mock<IProcessRunner>();
         runnerMock.Setup(r => r.StartProcessWithHandle(It.IsAny<ProcessConfig>(), It.IsAny<CancellationToken>()))
@@ -141,8 +143,10 @@ public sealed class SyncDisposeDuringCleanupTests : IDisposable
         var stateManager = new SignalCli.Services.SignalCli.ProcessStateManager(smLogger.Object);
         var service = CreateService(runnerMock, stateManager);
 
-        service.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
-        service.StopAsync(CancellationToken.None).GetAwaiter().GetResult();
+        // nf004 (audit v2.1): StartAsync / StopAsync — await замість .GetAwaiter().GetResult();
+        // service.Dispose() нижче — sync, бо це його контракт тут перевіряється.
+        await service.StartAsync(CancellationToken.None);
+        await service.StopAsync(CancellationToken.None);
 
         // Lock free → Dispose() має взяти його і відпустити; після цього інший
         // consumer семафора має змогу взяти лок без очікування.
