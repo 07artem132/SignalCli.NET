@@ -13,6 +13,8 @@ Patch-реліз без breaking changes. **Якщо ти використову
 
 - **JSON duplicate-key захист (rule #18) тепер реально діє на production-шляху.** З 4.0.0 ми оголошували що malformed signal-cli response з повтореним ключем fail'ить deserialize. У реальності — fail'ило тільки на reflection-шляху, а production деsеріалізує через source-gen fast-path який власний runtime-flag не консумує. Тепер захист увімкнено на обох рівнях (runtime flag + source-gen attribute). *Без впливу на нормальні signal-cli responses* — Jackson на upstream-стороні фізично не може емітити дублікати; fix чисто defensive проти MITM/corruption. Знайшли під час audit'у коли наш же RG-тест спочатку failed. *([json-hardening-source-gen-attribute](openspec/changes/json-hardening-source-gen-attribute/proposal.md))*
 
+- **CI pipeline нарешті пушить `SignalCli.NET.HealthChecks` на NuGet feed разом з main package.** До 4.0.2 `publish-nuget.yml` workflow мав pack-steps для 5 пакетів (`SignalCli.NET`, `SignalCli.Runtime`, `SignalCli.Runtime.Native`, `SignalCli.Runtime.Jre.{win-x64,osx-arm64}`) — але `SignalCli.NET.HealthChecks` був відсутній. Net effect: csproj-сторона мала версії в lockstep (NF-003 main fix), але consumer-сторона все одно отримувала stale `3.0.0` HealthChecks-пакета з registry бо нічого свіжіше не пушилось. Цей gap робив весь NF-003 lockstep косметичним на consumer-стороні. Тепер крок присутній — після першого `gh release create v4.0.2` HealthChecks теж потрапить на feed. *(nf003-completion follow-up)*
+
 ### 🛡️ Захист від регресій
 
 8 нових unit + 1 E2E-тести закривають declared-але-untested invariants з CLAUDE.md "Future development guardrails":
