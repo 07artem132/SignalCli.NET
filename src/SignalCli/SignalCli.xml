@@ -353,12 +353,13 @@
             </example>
             <para>Реєстрація ідемпотентна — повторні виклики не дублюють хост-сервіси.</para>
             <para>
-            <b>AOT-warning:</b> `OptionsBuilder.Bind&lt;TOptions&gt;(IConfiguration)` annotated
-            <c>[RequiresUnreferencedCode]/[RequiresDynamicCode]</c> у фреймворку, тож цей overload
-            SHALL bear ті ж самі attributes. Configuration source-gen (увімкнений у csproj через
-            <c>EnableConfigurationBindingGenerator=true</c>) допомагає іншим call-site'ам, але
-            сам <c>OptionsBuilder.Bind</c> досі несе attribute. Для AOT-deploy'у користуйтеся
-            <c>AddSignalCli(Action&lt;SignalCliOptions&gt;)</c>-overload'ом (повністю reflection-free).
+            <b>AOT-safe:</b> завдяки <c>EnableConfigurationBindingGenerator=true</c> у csproj
+            configuration source-gen (.NET 8+) intercepts call-sites у
+            <c>Microsoft.Extensions.DependencyInjection.OptionsBuilderConfigurationExtensions</c>
+            — включаючи <c>OptionsBuilder.Bind(IConfiguration)</c> — і генерує reflection-free
+            binder. Source: <see href="https://learn.microsoft.com/dotnet/core/extensions/configuration-generator"/>
+            ("all APIs that eventually call into these various binding methods are intercepted").
+            Тож overload більше НЕ потребує <c>[RequiresUnreferencedCode]/[RequiresDynamicCode]</c>.
             </para>
             </remarks>
         </member>
@@ -4787,8 +4788,9 @@
         </member>
         <member name="P:SignalCli.Services.FileSystem.AttachmentEntry.SafeFileName">
             <summary>
-            Безпечне ім'я файлу без компонентів шляху (захист від path traversal).
-            Відкидає каталоги та послідовності "../"; за порожнього результату — "attachment".
+            Безпечне ім'я файлу без компонентів шляху (захист від path traversal) і без
+            control- / bidi-override-символів (захист від UI-spoofing). За порожнього
+            результату повертає <c>"attachment"</c>.
             </summary>
         </member>
         <member name="M:SignalCli.Services.FileSystem.AttachmentEntry.ToDataUri">
@@ -5711,6 +5713,21 @@
             <summary>
             Спойлер (||текст||).
             </summary>
+        </member>
+        <member name="M:Microsoft.Extensions.Configuration.Binder.SourceGeneration.BindingExtensions.Bind``1(Microsoft.Extensions.Options.OptionsBuilder{``0},Microsoft.Extensions.Configuration.IConfiguration)">
+            <summary>Registers a configuration instance which <typeparamref name="TOptions"/> will bind against.</summary>
+        </member>
+        <member name="M:Microsoft.Extensions.Configuration.Binder.SourceGeneration.BindingExtensions.Bind``1(Microsoft.Extensions.Options.OptionsBuilder{``0},Microsoft.Extensions.Configuration.IConfiguration,System.Action{Microsoft.Extensions.Configuration.BinderOptions})">
+            <summary>Registers a configuration instance which <typeparamref name="TOptions"/> will bind against.</summary>
+        </member>
+        <member name="M:Microsoft.Extensions.Configuration.Binder.SourceGeneration.BindingExtensions.Configure``1(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.String,Microsoft.Extensions.Configuration.IConfiguration,System.Action{Microsoft.Extensions.Configuration.BinderOptions})">
+            <summary>Registers a configuration instance which TOptions will bind against.</summary>
+        </member>
+        <member name="M:Microsoft.Extensions.Configuration.Binder.SourceGeneration.BindingExtensions.TryGetConfigurationValue(Microsoft.Extensions.Configuration.IConfiguration,System.String,System.String@)">
+            <summary>Tries to get the configuration value for the specified key.</summary>
+        </member>
+        <member name="M:Microsoft.Extensions.Configuration.Binder.SourceGeneration.BindingExtensions.ValidateConfigurationKeys(System.Type,System.Lazy{System.Collections.Generic.HashSet{System.String}},Microsoft.Extensions.Configuration.IConfiguration,Microsoft.Extensions.Configuration.BinderOptions)">
+            <summary>If required by the binder options, validates that there are no unknown keys in the input configuration object.</summary>
         </member>
     </members>
 </doc>

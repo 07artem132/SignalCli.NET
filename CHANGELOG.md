@@ -3,6 +3,45 @@
 Формат заснований на [Keep a Changelog](https://keepachangelog.com/),
 проєкт дотримується [семантичного версіонування](https://semver.org/lang/uk/).
 
+## [4.0.1] — 2026-05-24
+
+Patch: завершує **усі чотири "Pending follow-up"** позиції з [4.0.0]. Нульові breaking changes — лише hardening, observability test-coverage та реальна активація AOT-friendly configuration-binding.
+
+### 🐛 Виправлено
+
+#### Capability `configuration-binder-aot-completion`
+
+- **`AddSignalCli(IConfiguration)` тепер AOT-safe — `[RequiresUnreferencedCode]` / `[RequiresDynamicCode]` атрибути зняті.** Корінь проблеми в 4.0.0: `<EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>` згадувався у CHANGELOG-ентрі, але **не був доданий** у `SignalCli.csproj`. Без активного source-generator'а `OptionsBuilder.Bind` справді залишався reflection-based і attribute мав сенс. У 4.0.1 флаг нарешті присутній — source-gen intercepts `OptionsBuilderConfigurationExtensions.Bind` call-site і substitutes reflection-free generated binder (per [Microsoft Docs — Configuration source generator](https://learn.microsoft.com/dotnet/core/extensions/configuration-generator): *"all APIs that eventually call into these various binding methods are intercepted and replaced with generated code"*). AOT-targeting consumers тепер можуть використовувати overload без warning'ів.
+
+#### Capability `safe-filename-hardening`
+
+- **`AttachmentEntry.SafeFileName` тепер фільтрує control-чартки і bidi-override-маркери.** Окрім path-traversal-захисту (Path.GetFileName, був з 1.0), додатково відкидає:
+  - **Control characters** U+0000..U+001F + U+007F (DEL). NUL byte у середині імені файлу труньчить на багатьох ОС і дозволяє "невидиме" розширення.
+  - **Bidi-override / formatting** U+202A..U+202E (LRE/RLE/PDF/LRO/RLO) + U+2066..U+2069 (LRI/RLI/FSI/PDI). Класична UI-spoofing атака: `evil<U+202E>gpj.exe` у Explorer відображається як `evilexe.jpg`, користувач думає що відкриває картинку.
+  - **`Path.GetInvalidFileNameChars()`** — крос-платформенний union (Windows строгіший).
+  - Реалізація через `System.Buffers.SearchValues<char>` (zero-alloc fast-path на чистих іменах) + посимвольну фільтрацію (з stack-buffer ≤256 chars, heap-fallback інакше).
+- За повністю-небезпечного імені (всі символи відфільтровані) — fallback на літерал `"attachment"`.
+
+### 🛡️ Захист від регресій
+
+- **`AttachmentEntryTests` розширено з 3 → 12 тестів** (×4): NUL byte у середині, U+202E RLO стрипінг, кожен з 9 bidi/control-символів (Theory), повністю-небезпечне ім'я, `SaveToTempFile` re-entry (`InvalidOperationException`), heap-buffer-path при іменах > 256 chars.
+- **`ObservabilityCounterTests` (3 нових)** — раніше privacy-guards перевіряли лише *відсутність* PII у тагах, а *factual increment* counter'ів був untested invariant у CLAUDE.md "Future development guardrails". Тепер закрите:
+  - `RpcDuration_OnSuccessRoundTrip_RecordsPositiveDurationAndOkStatus` — happy-path round-trip через `JsonRpcClient` фіксує `signalcli.rpc.duration` + `signalcli.rpc.requests{status=ok}` через MeterListener.
+  - `EventsDropped_OnChannelOverflow_IncrementsWithCorrectEventType` — прокидає 1100 typing-нотифікацій (capacity=1024, no consumer) → асертить `signalcli.events.dropped{event_type=typing}` тікнув exactly 76 разів.
+  - `ProcessRestarts_OnForceRestart_IncrementsWithForceTrigger` — викликає `ForceRestartAsync()` → асертить `signalcli.process.restarts{trigger=force}` тікнув ≥1.
+- **`SyncDisposeDuringCleanupTests` (2 нових)** — пінує `field-barrier-hardening` invariant з [4.0.0]: `SignalCliHostedService.Dispose()` sync-path дренує `_operationLock` із 50ms fallback'ом і не дедлокає навіть з held-lock. Перший тест тримає семафор через reflection і викликає `Dispose()` синхронно; другий — happy-path lock-free assertion.
+
+### 🛠 Інше
+
+- `<EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>` нарешті у [`SignalCli.csproj`](src/SignalCli/SignalCli.csproj) — фікс root-cause проблеми з 4.0.0.
+- Test count: 254 (post-4.0.0) → 273 (+19 нових assertions).
+
+### Pending follow-up
+
+_(нічого — всі чотири follow-up'и з [4.0.0] закриті у цьому релізі)_
+
+---
+
 ## [4.0.0] — 2026-05-24
 
 Третя велика хвиля — фокус на завершенні deprecated-shim-cycle, типізації RPC-помилок, і correctness-fix'у graceful-shutdown. Cargo з трьох OpenSpec changes: `audit-followup-2026` + `signal-cli-protocol-alignment` + `deprecated-shim-removal`. **Містить breaking changes**; повна migration table нижче.
@@ -82,10 +121,12 @@
 
 ### Pending follow-up
 
-- Configuration-binder full AOT fix (потребує rewrite away from `OptionsBuilder.Bind`).
-- 4 з 5 integration-tests-expansion E2E (require real signal-cli runtime + CI infrastructure for tests beyond graceful-shutdown).
-- 6 з 12 edge-case-coverage tests (NUL/RTL filename sanitization потребує `SafeFileName` implementation changes; counter assertions потребують MeterListener setup).
-- 1 з 2 race-prober tests (SyncDispose_DuringCleanup_AcquiresLock).
+_(усі чотири позиції закриті у [4.0.1] — див. вище)_
+
+- ✅ Configuration-binder full AOT fix → `configuration-binder-aot-completion` (4.0.1).
+- ⏳ 4 з 5 integration-tests-expansion E2E — require real signal-cli runtime + CI infrastructure; залишаються відкладеними бо потребують зовнішньої інфраструктури (Java JDK 25 + signal-cli runtime у CI runner).
+- ✅ 6 з 12 edge-case-coverage tests → `safe-filename-hardening` + `observability-counter-assertions` (4.0.1).
+- ✅ 1 з 2 race-prober tests → `SyncDisposeDuringCleanupTests` (4.0.1).
 
 ---
 

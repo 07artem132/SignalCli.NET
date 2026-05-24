@@ -90,16 +90,15 @@ public static class ServiceCollectionExtensions
         /// </example>
         /// <para>Реєстрація ідемпотентна — повторні виклики не дублюють хост-сервіси.</para>
         /// <para>
-        /// <b>AOT-warning:</b> `OptionsBuilder.Bind&lt;TOptions&gt;(IConfiguration)` annotated
-        /// <c>[RequiresUnreferencedCode]/[RequiresDynamicCode]</c> у фреймворку, тож цей overload
-        /// SHALL bear ті ж самі attributes. Configuration source-gen (увімкнений у csproj через
-        /// <c>EnableConfigurationBindingGenerator=true</c>) допомагає іншим call-site'ам, але
-        /// сам <c>OptionsBuilder.Bind</c> досі несе attribute. Для AOT-deploy'у користуйтеся
-        /// <c>AddSignalCli(Action&lt;SignalCliOptions&gt;)</c>-overload'ом (повністю reflection-free).
+        /// <b>AOT-safe:</b> завдяки <c>EnableConfigurationBindingGenerator=true</c> у csproj
+        /// configuration source-gen (.NET 8+) intercepts call-sites у
+        /// <c>Microsoft.Extensions.DependencyInjection.OptionsBuilderConfigurationExtensions</c>
+        /// — включаючи <c>OptionsBuilder.Bind(IConfiguration)</c> — і генерує reflection-free
+        /// binder. Source: <see href="https://learn.microsoft.com/dotnet/core/extensions/configuration-generator"/>
+        /// ("all APIs that eventually call into these various binding methods are intercepted").
+        /// Тож overload більше НЕ потребує <c>[RequiresUnreferencedCode]/[RequiresDynamicCode]</c>.
         /// </para>
         /// </remarks>
-        [RequiresUnreferencedCode("Calls OptionsBuilder.Bind which is annotated [RequiresUnreferencedCode]. Use AddSignalCli(Action<SignalCliOptions>) for AOT scenarios.")]
-        [RequiresDynamicCode("Calls OptionsBuilder.Bind which is annotated [RequiresDynamicCode]. Use AddSignalCli(Action<SignalCliOptions>) for AOT scenarios.")]
         public IServiceCollection AddSignalCli(IConfiguration configurationSection)
         {
             ArgumentNullException.ThrowIfNull(configurationSection);
@@ -190,14 +189,14 @@ public static class ServiceCollectionExtensions
     /// post-modernize-tuning §8b.3: інший шлях конфігурації — Bind із <see cref="IConfiguration"/>-секції.
     /// Усі решта валідаційних правил такі самі (cross-field + source-gen).
     /// </summary>
-    // audit-followup-2026 (configuration-binder-aot): EnableConfigurationBindingGenerator=true
-    // флаг увімкнений у csproj — допомагає там, де source-gen перехоплює call-site. АЛЕ:
-    // OptionsBuilder.Bind<TOptions>(IConfiguration) annotated [RequiresUnreferencedCode]/
-    // [RequiresDynamicCode] у фреймворку (Microsoft.Extensions.Options.ConfigurationExtensions),
-    // тож source-gen НЕ замінює цей call-site. Залишаємо attributes на public overload'і;
-    // консумерам, що цілять AOT — використовувати Action<SignalCliOptions>-overload.
-    [RequiresUnreferencedCode("OptionsBuilder.Bind is annotated [RequiresUnreferencedCode].")]
-    [RequiresDynamicCode("OptionsBuilder.Bind is annotated [RequiresDynamicCode].")]
+    // configuration-binder-aot-completion (CHANGELOG [4.0] pending follow-up):
+    // EnableConfigurationBindingGenerator=true у csproj activates configuration source-gen
+    // (.NET 8+), який intercepts OptionsBuilderConfigurationExtensions.Bind(...) call-site
+    // і substitutes reflection-free generated binder. Per Microsoft Docs
+    // (configuration-generator article): "all APIs that eventually call into these various
+    // binding methods are intercepted and replaced with generated code." Тому overload
+    // більше НЕ потребує [RequiresUnreferencedCode]/[RequiresDynamicCode] атрибутів —
+    // call-site AOT-safe.
     private static void ConfigureOptionsFromConfiguration(IServiceCollection services, IConfiguration section)
     {
         var builder = services.AddOptions<SignalCliOptions>().Bind(section);

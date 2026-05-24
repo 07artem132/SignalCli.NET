@@ -13,6 +13,13 @@
              `JsonElement.Deserialize<T>(JsonTypeInfo<T>)`. Reflection fallback у SignalJson.Options
              видалено (§6.4); production-options тримає лише SignalJsonContext.Default. -->
         <IsAotCompatible>true</IsAotCompatible>
+        <!-- configuration-binder-aot-completion (CHANGELOG [4.0] pending follow-up):
+             enables .NET 8+ configuration source-generator which intercepts ConfigurationBinder /
+             OptionsBuilderConfigurationExtensions / OptionsConfigurationServiceCollectionExtensions
+             call-sites and substitutes reflection-free generated binder. Required for AOT-safe
+             AddSignalCli(IConfiguration). See:
+             https://learn.microsoft.com/dotnet/core/extensions/configuration-generator -->
+        <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
         <!-- Налаштування документації -->
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <DocumentationFile>$(OutputPath)$(AssemblyName).xml</DocumentationFile>
@@ -27,7 +34,7 @@
         <!-- v4.0.0 (2026-05-24): deprecated-shim-removal landed BREAKING — Config + Version()
              + 5 Async-suffix-less DIMs + AddSignalCli(Action<Config>?) overload + adapters
              усі видалені. Migration table у CHANGELOG.md [4.0.0]. -->
-        <Version>4.0.0</Version>
+        <Version>4.0.1</Version>
         <PackageProjectUrl>https://github.com/07artem132/SignalCli.NET</PackageProjectUrl>
         <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
         <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
@@ -40,8 +47,8 @@
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-        <AssemblyVersion>4.0.0</AssemblyVersion>
-        <FileVersion>4.0.0</FileVersion>
+        <AssemblyVersion>4.0.1</AssemblyVersion>
+        <FileVersion>4.0.1</FileVersion>
     </PropertyGroup>
     <ItemGroup>
         <!-- audit-followup-2026 (badge-url-fix): pack repo-root README у NuGet. -->
