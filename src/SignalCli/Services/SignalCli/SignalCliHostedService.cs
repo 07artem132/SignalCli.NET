@@ -16,7 +16,7 @@ namespace SignalCli.Services.SignalCli;
 /// HostedService, який:
 /// 1) Запускає та зупиняє Signal-CLI при старті/зупинці застосунку.
 /// 2) Автоматично перезапускає його при аварійному завершенні (до MaxRestartAttempts
-///    у межах вікна <see cref="Config.RestartWindowSeconds"/>).
+///    у межах вікна <see cref="SignalCliOptions.RestartWindowSeconds"/>).
 /// 3) Надає доступ до StreamPair через IStreamPairProvider.
 /// </summary>
 // post-modernize-tuning §4.8 (audit D5): sealed — inheriting from hosted-services
@@ -364,17 +364,21 @@ public sealed class SignalCliHostedService : IHostedLifecycleService, IStreamPai
         {
             if (_currentProcess != null && !_currentProcess.HasExited)
             {
-                // B.9: stdin "exit" — у власному try/catch (наприклад, потік уже міг закритися).
+                // signal-cli-protocol-alignment §1 (graceful-shutdown-fix): close stdin для EOF.
+                // signal-cli НЕ має JSON-RPC методу `exit` і парсить КОЖЕН stdin-рядок як JSON
+                // (JsonRpcReader.java:59-75 @ bda4e7f). Раніше літеральне "exit" → -32700 Parse error
+                // → процес лишався живим → falling through до Kill(entireProcessTree:true). Canonical
+                // graceful trigger у signal-cli — stdin EOF (line supplier returns null → reader loop
+                // exit → JsonRpcDispatcher finally clears subscriptions → JVM exit clean).
                 if (_currentStreamPair != null)
                 {
                     try
                     {
-                        await _currentStreamPair.StandardInput.WriteLineAsync("exit").ConfigureAwait(false);
-                        await _currentStreamPair.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
+                        _currentStreamPair.StandardInput.Close();
                     }
                     catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException)
                     {
-                        SignalCliHostedServiceLog.ExitWriteFailed(_logger, ex);
+                        SignalCliHostedServiceLog.StdinCloseFailed(_logger, ex);
                     }
                 }
 
@@ -437,7 +441,7 @@ public sealed class SignalCliHostedService : IHostedLifecycleService, IStreamPai
     }
 
     /// <summary>
-    /// Стартує таймер, який після <see cref="Config.RestartWindowSeconds"/> у стані Running
+    /// Стартує таймер, який після <see cref="SignalCliOptions.RestartWindowSeconds"/> у стані Running
     /// скине лічильник перезапусків у 0. Викликається тільки тоді, коли процес щойно перейшов
     /// у Running; будь-який наступний рестарт/стоп має скасувати цей таймер.
     /// </summary>
@@ -628,7 +632,22 @@ public sealed class SignalCliHostedService : IHostedLifecycleService, IStreamPai
     {
         if (Interlocked.Exchange(ref _disposedFlag, 1) != 0) return;
         GC.SuppressFinalize(this);
-        DisposeCore();
+
+        // signal-cli-protocol-alignment (field-barrier-hardening): беремо _operationLock з
+        // коротким timeout'ом перед DisposeCore — синхронізуємо read'и _currentProcess із
+        // write'ами в CleanupProcess (під лок-finally у StopProcessInternalAsyncNoLock).
+        // Якщо in-flight операція не drain'ить за 50ms, продовжуємо без локу (best-effort,
+        // ідентично попередньому стану — без deadlock'у sync-disposal'у).
+        bool lockTaken = false;
+        try
+        {
+            lockTaken = _operationLock.Wait(TimeSpan.FromMilliseconds(50));
+            DisposeCore();
+        }
+        finally
+        {
+            if (lockTaken) _operationLock.Release();
+        }
     }
 
     /// <summary>

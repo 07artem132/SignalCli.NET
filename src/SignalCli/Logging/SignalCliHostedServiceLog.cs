@@ -66,8 +66,13 @@ internal static partial class SignalCliHostedServiceLog
     [LoggerMessage(EventId = 116, Level = LogLevel.Information, Message = "Зупинка процесу Signal CLI...")]
     public static partial void StoppingProcess(ILogger logger);
 
-    [LoggerMessage(EventId = 117, Level = LogLevel.Debug, Message = "Не вдалося надіслати команду exit у stdin — перейдемо до wait/kill")]
-    public static partial void ExitWriteFailed(ILogger logger, Exception ex);
+    // signal-cli-protocol-alignment §1: stdin EOF (Close) — це канонічний graceful-shutdown
+    // trigger у signal-cli (JsonRpcReader.java:59-75 повертає null при EOF, JsonRpcDispatcher
+    // у finally чистить підписки, JVM exit clean). Раніше тут писалося літеральне "exit" —
+    // signal-cli парсить кожен stdin-рядок як JSON, отримував -32700 Parse error, процес
+    // лишався живим, і ми завжди falled through до Kill(entireProcessTree:true).
+    [LoggerMessage(EventId = 117, Level = LogLevel.Debug, Message = "Не вдалося закрити stdin — перейдемо до wait/kill")]
+    public static partial void StdinCloseFailed(ILogger logger, Exception ex);
 
     [LoggerMessage(EventId = 118, Level = LogLevel.Warning,
         Message = "Процес не завершився за {Timeout}c, примусово завершуємо його...")]

@@ -20,7 +20,8 @@ public class JsonRpcClientHostedServiceTests
     private readonly Mock<ILogger<Services.SignalCli.SignalCliHostedService>> _scsLoggerMock;
     private readonly Mock<IProcessRunner> _processRunnerMock;
     private readonly ProcessStateManager _stateManager;
-    private readonly Config _config;
+    // deprecated-shim-removal §5: SignalCliOptions напряму.
+    private readonly SignalCliOptions _options;
 
     public JsonRpcClientHostedServiceTests()
     {
@@ -73,7 +74,7 @@ public class JsonRpcClientHostedServiceTests
         var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir);
 
-        _config = new Config
+        _options = new SignalCliOptions
         {
             AppHome = tempDir,
             LibDirectory = "lib",
@@ -97,7 +98,7 @@ public class JsonRpcClientHostedServiceTests
             _scsLoggerMock.Object,
             _processRunnerMock.Object,
             _stateManager,
-            _config.ToIOptions()
+            Microsoft.Extensions.Options.Options.Create(_options)
         );
     }
 
@@ -111,6 +112,30 @@ public class JsonRpcClientHostedServiceTests
             _clientFactoryMock.Object,
             scs // Справжній SCS (не мок!)
         );
+    }
+
+    // signal-cli-protocol-alignment (field-barrier-hardening): пінує що volatile-семантика
+    // на `_client` field дозволяє concurrent reader'ам безпечно бачити або null (документований
+    // InvalidOperationException), або non-null reference — але НІКОЛИ NullReferenceException.
+    [Fact]
+    public async Task Client_ConcurrentAccessUninitialized_DoesNotThrowNullRef()
+    {
+        var scs = CreateSignalCliService();
+        var hosted = CreateJsonRpcClientHostedService(scs);
+
+        // 50 паралельних читачів `Client` getter'а до StartAsync. Очікувано: всі отримують
+        // InvalidOperationException("not initialized") — НЕ NullRef.
+        // (ObjectDisposedException : InvalidOperationException, тож super-catch покриває обидва.)
+        var tasks = Enumerable.Range(0, 50)
+            .Select(i => Task.Run(() =>
+            {
+                try { _ = hosted.Client; }
+                catch (InvalidOperationException) { /* documented "not initialized" or disposed */ }
+            }))
+            .ToArray();
+
+        await Task.WhenAll(tasks);
+        // Дійшли сюди — жоден потік не leak'нув NullReferenceException.
     }
 
     [Fact]

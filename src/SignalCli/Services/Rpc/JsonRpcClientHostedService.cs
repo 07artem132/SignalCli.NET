@@ -17,7 +17,12 @@ internal sealed class JsonRpcClientHostedService : IHostedLifecycleService, IJso
     private readonly ILogger<JsonRpcClientHostedService> _logger;
     private readonly IJsonRpcClientFactory _factory;
     private readonly SignalCliHostedService _signalCliHostedService;
-    private IJsonRpcClient? _client;
+    // signal-cli-protocol-alignment (field-barrier-hardening): volatile — поле читається з кількох
+    // потоків (Client getter ← SignalCliHealthMonitor.PingCliAsync, SignalEventService.StartAsync)
+    // без локу; на ARM64 (.NET 10 first-class) без acquire/release-семантики reader на іншому ядрі
+    // міг би побачити stale-null після того як StartAsync опублікував non-null. На x64 reference-
+    // read атомарний — фікс не змінює спостережувану поведінку, але закриває weak-memory-model gap.
+    private volatile IJsonRpcClient? _client;
     // post-modernize-tuning §2.4: Interlocked.Exchange-based disposal flag.
     private int _disposedFlag;
     private bool _disposed => Volatile.Read(ref _disposedFlag) != 0;

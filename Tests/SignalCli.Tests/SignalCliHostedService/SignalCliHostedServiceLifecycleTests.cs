@@ -91,16 +91,20 @@ public class SignalCliHostedServiceLifecycleTests : SignalCliHostedServiceTestsB
         // Act
         await service.StopAsync(CancellationToken.None);
 
-        // MemoryStream.ToArray() працює навіть після закриття потоку — детермінована
-        // перевірка без гонки з утилізацією (на відміну від читання живого потоку).
+        // signal-cli-protocol-alignment (graceful-shutdown-fix): тепер ми закриваємо stdin
+        // (EOF — канонічний graceful trigger), а НЕ пишемо літеральне "exit". MemoryStream.ToArray()
+        // лишається доступним навіть після Close (документована поведінка MemoryStream).
         var streamContent = System.Text.Encoding.UTF8.GetString(memStream.ToArray());
 
         // Assert
         Assert.Equal(ProcessState.Stopped, StateManager.CurrentState);
         Assert.Null(service.CurrentProcessForTests);
         Assert.Null(service.CurrentStreamPairForTests);
-        Assert.Contains("exit", streamContent);
-    
+        // Жодного "exit"-тексту у stdin — signal-cli не має JSON-RPC методу `exit`, тож літеральний
+        // текст спричиняв -32700 Parse error замість граційного завершення. Тепер ми закриваємо
+        // потік, signal-cli отримує EOF і завершується чисто через свій reader-loop-finally.
+        Assert.DoesNotContain("exit", streamContent);
+
         VerifyLog(LogLevel.Information, "SignalCliHostedService зупинено.");
     }
 
