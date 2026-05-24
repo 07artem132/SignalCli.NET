@@ -163,6 +163,36 @@ The patterns below are not aspirational. They were rolled out across the codebas
     - 900–999 `ProcessRunnerLog` / `ProcessStateManagerLog`
 - **`BeginScope` for subscription-bound work.** `SignalEventService.OnNotificationReceived` wraps the dispatch in `_logger.BeginScope(new Dictionary<string, object> { ["SubscriptionId"] = …, ["Account"] = … })` — downstream logs inherit those structured properties. Follow this for any per-notification / per-account work added later.
 - **Privacy still wins.** Critical rule #1 is the contract: PII (bodies, phones, attachment payloads) never appears in `[LoggerMessage]` templates at `Information+`. The `PrivacyLoggingTests` suite asserts on `EventId`, not text — so renaming a message won't accidentally break privacy verification.
+- **Canonical `[LoggerMessage]` template — copy this shape.** EventId allocation: next free integer in the reserved block (sequential, gap-free; current `JsonRpcClientLog` runs 300→332). One method per log-event; `partial` keyword required; `ILogger` first parameter; additional template-`{Name}` parameters typed as concrete types (not `object`). Generated method visibility — `public static` for consumers from outside the file, `internal static` if only the owning service calls it.
+
+  ```csharp
+  internal static partial class JsonRpcClientLog
+  {
+      // EventId-блок 300–399 reserved per Established patterns table.
+      // Next free: see end of file; bump by 1 for each new event.
+      [LoggerMessage(EventId = 333, Level = LogLevel.Debug,
+          Message = "Some event with structured {RequestId} and {Method}")]
+      public static partial void SomeEvent(ILogger logger, string requestId, string method);
+
+      // PII rule: anything Information+ must NOT contain {Body}/{Phone}/{FilePath}-shape
+      // parameters. Trace+Debug allowed since they're opt-in for diagnostics.
+      [LoggerMessage(EventId = 334, Level = LogLevel.Trace,
+          Message = "Raw stdin line: {Line}")]
+      public static partial void RawStdinLine(ILogger logger, string line);
+  }
+  ```
+
+  When the event is naturally per-request, `BeginScope` from the calling site is preferred over passing scope-properties as template-args — see `JsonRpcClient.InvokeMethodAsync`'s `BeginScope(new Dictionary { ["RpcMethod"] = method, ["RpcRequestId"] = requestId })` which propagates to every downstream `JsonRpcClientLog.*` call within the scope. Adding a NEW scope-key joins the canonical set `{RpcMethod, RpcRequestId, SubscriptionId, Account}` — pin it in `ObservabilityPrivacyTests.MeterTagValues_AreOnlyKnownEnumLiterals` style if it'd flow to observability tags too.
+
+#### csproj / MSBuild conventions
+
+- **`Directory.Build.props` is shared canon** — `AnalysisLevel=latest-recommended`, `EnforceCodeStyleInBuild=true`, `<SignalCliPackageVersion>` (main lib + HealthChecks lockstep, per "Version-CHANGELOG lockstep"). Per-csproj `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>` overrides the prop's `false` default (main lib + test csproj opt in; ad-hoc/runtime projects stay opt-out).
+- **`<IsAotCompatible>true</IsAotCompatible>` only on `src/SignalCli/SignalCli.csproj`.** Adapter (`SignalCli.HealthChecks`) and runtime-packages don't ship AOT — they're host-side or build-time. Adding to other csproj would force the IL2026/IL3050 audit on dependencies that don't need it.
+- **`<PrivateAssets>all</PrivateAssets>` for build-time-only `PackageReference`s.** Canonical: `JetBrains.Annotations` (PublicAPI / NotNull hints — never leak into consumer dependency graph). If a package only feeds analyzers / source-gens / XMLDoc hints, mark it `PrivateAssets=all`. Failure mode: consumer's `<PackageReference>` resolution pulls our build-time-only dep, bloats their lock file.
+- **`<PackageReadmeFile>README.md</PackageReadmeFile>` + `<None Include="..\..\README.md" Pack="true" PackagePath="\" />` is paired** — both required, else NuGet warns "missing readme" and the README doesn't ship. Applied to both packable projects (`SignalCli.csproj` + `SignalCli.HealthChecks.csproj`). Pattern: repo-root README packed as-is; badges use absolute `raw.githubusercontent.com` URLs (per badge-url-fix capability) so they render outside github.com.
+- **`<EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>` only on main lib.** Per [MS Learn — Configuration source generator](https://learn.microsoft.com/dotnet/core/extensions/configuration-generator), this intercepts `OptionsBuilder.Bind` / `Configure<T>(IConfiguration)` call-sites at compile time and emits reflection-free binder code. Required for AOT-safe `AddSignalCli(IConfiguration)` overload. Don't enable on test/runtime/adapter csprojs — they don't bind configurations and the flag adds compile-time overhead for no benefit.
+- **Version goes through `$(SignalCliPackageVersion)`, never hardcoded.** `<Version>$(SignalCliPackageVersion)</Version>` + `<AssemblyVersion>$(SignalCliPackageVersion)</AssemblyVersion>` + `<FileVersion>$(SignalCliPackageVersion)</FileVersion>` in both packable csprojs. Hardcoded `<Version>X.Y.Z</Version>` is caught by `VersionLockstepTests` (RG07) at build time. See `Directory.Build.props:18`.
+- **`<GeneratePackageOnBuild>true</GeneratePackageOnBuild>` on packable projects only.** Triggers `dotnet pack` on every `dotnet build` — useful for local-feed testing without explicit pack step. Skip on Tests/Example/runtime-download projects (`IsPackable=false`).
 
 #### Background loops + time
 
@@ -196,7 +226,7 @@ The patterns below are not aspirational. They were rolled out across the codebas
 - **Test-local source-gen contexts** for test-only DTOs. `TestSerializationContext` in `Tests/SignalCli.Tests/TestSerializationContext.cs` registers `TestProbeRequest`/`TestProbeResponse` for `JsonRpcClientTests` — separate context, does NOT pollute production `SignalJsonContext`. Pattern: when a new test needs typed JSON probes, extend the test-local context, not the production one.
 - **Wrapper-record + custom `JsonConverter` for List-shaped responses.** `ListAccountsResponse`/`ListGroupsResponse` are `record(IReadOnlyList<T> Items) : IReadOnlyList<T>` with `[JsonConverter]` that reads/writes a flat JSON array (delegating to `JsonSerializer.Deserialize<List<T>>(ref reader, JsonTypeInfo<List<T>>)`). Both the wrapper type AND `List<T>` MUST be in source-gen context. See `Models/Signal/Accounts/ListAccountsResponse.cs` for canonical shape.
 - **`IHostedLifecycleService` + `IAsyncDisposable`** on `SignalCliHostedService` (post-`hosting-modernization` §8a.2/§8a.3). Phase-methods are no-op `Task.CompletedTask`; `DisposeAsync` drains `_operationLock.WaitAsync` with 2s `TimeProvider`-aware timeout, then runs shared `DisposeCore`. **Critical rule #9 enforced**: `Dispose()` is sync-only with its own implementation (NOT `DisposeAsync().GetAwaiter().GetResult()`).
-- **`AddSignalCli(IConfiguration)` overload is NOT AOT-safe** (partial fix shipped). `<EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>` is enabled in `SignalCli.csproj` and helps other source-gen-perceivable call-sites, but `OptionsBuilder.Bind<T>(IConfiguration)` itself is framework-annotated `[RequiresUnreferencedCode]`/`[RequiresDynamicCode]` у `Microsoft.Extensions.Options.ConfigurationExtensions` — source-gen НЕ перехоплює цей call-site. Both attributes lишилися на overload'і. AOT-targeting consumers MUST use `AddSignalCli(Action<SignalCliOptions>?)`. Full AOT-fix потребує rewrite away from `OptionsBuilder.Bind` (read section into dictionary, then call `services.Configure<T>`) — separate future change.
+- **`AddSignalCli(IConfiguration)` overload IS AOT-safe (4.0.1+).** `<EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>` was missing from `SignalCli.csproj` until 4.0.1 (`configuration-binder-aot-completion` capability); now present and source-gen intercepts `OptionsBuilderConfigurationExtensions.Bind` per [MS Learn](https://learn.microsoft.com/dotnet/core/extensions/configuration-generator). `[RequiresUnreferencedCode]`/`[RequiresDynamicCode]` attributes were removed from the overload. AOT-targeting consumers can use either `AddSignalCli(IConfiguration)` or `AddSignalCli(Action<SignalCliOptions>?)` — both warning-free. The original "partial fix" caveat from 3.0.0 is RESOLVED; if you find this paragraph still saying "NOT AOT-safe" anywhere, it's stale — verify against `src/SignalCli/Extensions/ServiceCollectionExtensions.cs`.
 - **`VerifyReferenceTrimCompatibility` / `VerifyReferenceAotCompatibility` are deliberately NOT enabled** in `SignalCli.csproj`. Both flags warn about transitive dependencies that lack `IsTrimmable`/`IsAotCompatible` metadata (Microsoft *Prepare .NET libraries for trimming*). Our two non-trivial transitive dependencies — `System.Reactive` (not `IsTrimmable`-annotated as of 6.0.1) and `JetBrains.Annotations` (build-time only, PrivateAssets="all") — would flood the build with warnings without aiding correctness. If a future minor of `System.Reactive` ships `IsTrimmable`, opt in.
 
 #### Regression guards (reflection-based defensive tests)
