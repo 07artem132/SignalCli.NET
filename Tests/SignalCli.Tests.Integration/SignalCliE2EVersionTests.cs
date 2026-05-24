@@ -31,7 +31,10 @@ public class SignalCliE2EVersionTests
 
         var hostBuilder = Host.CreateDefaultBuilder().ConfigureServices(services =>
         {
-            services.AddSignalCli(cfg =>
+            // Explicit Action<SignalCliOptions> — після §4.6/§4.7 у репі є два overload'и
+            // AddSignalCli (Action<SignalCliOptions> + [Obsolete] Action<Config>), і lambda
+            // з `cfg.AppHome = ...` ambiguous між ними.
+            services.AddSignalCli((SignalCli.Models.SignalCliOptions cfg) =>
             {
                 cfg.AppHome = baseDir;
 
@@ -130,8 +133,14 @@ public class SignalCliE2EVersionTests
             // щоб E2E-перевірка не покладалася на JsonRpcClientHostedService startup-ping
             // (та startup-ping уже сам по собі асерт — failed startup тут би й кидав).
             var client = host.Services.GetRequiredService<ISignalCliClient>();
-            var version = await client.InvokeMethodAsync<VersionParameters, VersionResponse>(
-                "version", new VersionParameters(), startCts.Token);
+            // post-modernize-tuning §6.7 (raund 14): AOT-safe overload вимагає
+            // JsonTypeInfo<TRequest> + JsonTypeInfo<TResponse> із SignalJsonContext.Default.
+            var version = await client.InvokeMethodAsync(
+                "version",
+                new VersionParameters(),
+                SignalCli.Serialization.SignalJsonContext.Default.VersionParameters,
+                SignalCli.Serialization.SignalJsonContext.Default.VersionResponse,
+                startCts.Token);
 
             Assert.NotNull(version);
             Assert.False(string.IsNullOrEmpty(version.Version), "version.Version має бути не-порожнім");

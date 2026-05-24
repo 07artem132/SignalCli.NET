@@ -43,6 +43,12 @@
             <_Parameter1>SignalCli.Tests</_Parameter1>
         </AssemblyAttribute>
 
+        <!-- E2E integration tests потребують прямого доступу до SignalJsonContext.Default.*
+             для AOT-safe викликів InvokeMethodAsync (після §6.7 redesign'у). -->
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+            <_Parameter1>SignalCli.Tests.Integration</_Parameter1>
+        </AssemblyAttribute>
+
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
             <_Parameter1>DynamicProxyGenAssembly2</_Parameter1>
         </AssemblyAttribute>

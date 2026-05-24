@@ -47,7 +47,15 @@ try {
     Invoke-WebRequest -Uri $Url -OutFile $archive
 
     Write-Host "Verifying SHA-256 ..."
-    $actualSha256 = (Get-FileHash -Path $archive -Algorithm SHA256).Hash
+    # Direct .NET API: cross-version-safe (PS 5.1, 7.x). Get-FileHash вимагає
+    # Microsoft.PowerShell.Utility module, який інколи не auto-import'иться на
+    # windows-latest GitHub-runner'і (рідкісна module-cache race).
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $fs = [System.IO.File]::OpenRead($archive)
+        try { $bytes = $sha.ComputeHash($fs) } finally { $fs.Dispose() }
+    } finally { $sha.Dispose() }
+    $actualSha256 = ([BitConverter]::ToString($bytes)).Replace("-","")
     if ($actualSha256 -ine $ExpectedSha256) {
         throw "SHA-256 mismatch! expected $ExpectedSha256 but got $actualSha256"
     }
