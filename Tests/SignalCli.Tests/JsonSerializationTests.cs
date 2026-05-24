@@ -190,23 +190,22 @@ public class JsonSerializationTests
     // audit v2.1 T03 / RG05 — positive guard для CLAUDE.md rule #18
     // (AllowDuplicateProperties = false). Підтверджено через MS Learn:
     // https://learn.microsoft.com/dotnet/api/system.text.json.jsonserializeroptions.allowduplicateproperties
-    // default = true; при set=false STJ кидає JsonException на duplicate-key
-    // (для reflection-based або source-gen Metadata mode).
+    // default = true; при set=false STJ кидає JsonException на duplicate-key.
     //
-    // КАВЕAT: source-gen Default fast-path (наш <see cref="SignalJsonContext"/> з
-    // GenerationMode = Default) ГЕНЕРУЄ свій reader і НЕ читає runtime-flag
-    // AllowDuplicateProperties із options. Щоб увімкнути захист і для source-gen,
-    // треба ще додатково виставити флаг у <c>[JsonSourceGenerationOptions(
-    // AllowDuplicateProperties = false)]</c> на контексті. Поки що цей рівень захисту
-    // НЕ ввімкнено — це окрема знахідка post-v2.1 worth proposed as a future capability.
+    // Після json-hardening-source-gen-attribute (post-audit-v2.1 OpenSpec change):
+    // guard працює на ТРЬОХ ортогональних рівнях:
+    //   (1) runtime-flag на SignalJson.Options — для reflection-based call-site'ів;
+    //   (2) JsonDocument-level API — підтверджує що .NET 10 framework сам по собі fail-loud'ить;
+    //   (3) source-gen attribute на SignalJsonContext — для production call-site'ів через
+    //       SignalJsonContext.Default.X (це те, чим реально користується JsonRpcClient).
+    // Видалення будь-якого з трьох рівнів surface'иться як failed regression test.
     // ─────────────────────────────────────────────────────────────────────────
 
     /// <summary>
     /// RG05 (частина 1) — пінує що <see cref="SignalJson.Options.AllowDuplicateProperties"/>
     /// = false, як цього вимагає CLAUDE.md rule #18 (JSON-RPC 2.0 spec violation →
     /// fail-loud). Без цього guard'а майбутній "options cleanup"-PR міг би видалити
-    /// flag тихо. Це АКТУАЛЬНА invariant — навіть якщо source-gen Default fast-path
-    /// її не консумує, флаг застосовується для будь-якого reflection-based call-site
+    /// flag тихо. Захист застосовується для будь-якого reflection-based call-site
     /// (наприклад, <see cref="SignalJson.OptionsForTests"/>).
     /// </summary>
     [Fact]
@@ -228,5 +227,22 @@ public class JsonSerializationTests
         const string duplicateKey = """{"id":"1","id":"2","jsonrpc":"2.0"}""";
         var opts = new JsonDocumentOptions { AllowDuplicateProperties = false };
         Assert.Throws<JsonException>(() => JsonDocument.Parse(duplicateKey, opts));
+    }
+
+    /// <summary>
+    /// RG05 (частина 3) — пінує що source-gen <see cref="SignalJsonContext"/> ТЕЖ
+    /// throw'ить на duplicate-key. Після json-hardening-source-gen-attribute гарантія
+    /// діє на production-шляху через <c>SignalJsonContext.Default.JsonRpcResponse</c>,
+    /// що його реально використовує <c>JsonRpcClient.ProcessMessageAsync</c>. До цього
+    /// атрибут <c>[JsonSourceGenerationOptions(AllowDuplicateProperties = false)]</c>
+    /// не був виставлений, тож source-gen Default fast-path обходив flag — і цей
+    /// самий тест був би RED. Тепер GREEN ⇒ атрибут дійсно ефективний.
+    /// </summary>
+    [Fact]
+    public void SignalJsonContext_AllowDuplicateProperties_ThrowsOnDuplicateKey()
+    {
+        const string duplicateKey = """{"id":"1","id":"2","jsonrpc":"2.0"}""";
+        Assert.Throws<JsonException>(() =>
+            JsonSerializer.Deserialize(duplicateKey, SignalJsonContext.Default.JsonRpcResponse));
     }
 }
