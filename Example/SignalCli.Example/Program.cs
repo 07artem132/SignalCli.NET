@@ -28,14 +28,10 @@ namespace SignalCli.Example
             using var host = Host.CreateDefaultBuilder(args)
                 .ConfigureServices(services =>
                 {
-                    // ✨ 2.1.0: типована конфігурація через SignalCliOptions + ValidateOnStart.
-                    // audit-followup-2026 (low-priority-polish): typed lambda parameter
-                    // (SignalCliOptions o) замість cast (Action<SignalCliOptions>) — і однозначно
-                    // disambiguate'ить overload resolution між AddSignalCli(Action<SignalCliOptions>?)
-                    // і AddSignalCli(Action<Config>?) (Config має ті ж AppHome/LibDirectory props,
-                    // тому без явного типу C# не може обрати overload), і читабельніше за cast.
-                    // Cast прибереться повністю у 4.0 (deprecated-shim-removal видаляє Config-overload).
-                    services.AddSignalCli((SignalCliOptions o) =>
+                    // Типована конфігурація через SignalCliOptions з [Required]/[Range]
+                    // валідацією на host.StartAsync() — помилки конфігу видно одразу,
+                    // а не на першому RPC-виклику.
+                    services.AddSignalCli(o =>
                     {
                         o.AppHome = AppDomain.CurrentDomain.BaseDirectory;
                         o.LibDirectory = "signal-cli/lib";
