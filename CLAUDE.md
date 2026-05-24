@@ -308,8 +308,8 @@ _(empty as of audit v2.1 — all previously-declared invariants now have tests; 
 
 ### Тестова база
 
-- Unit tests: **≥ 286** (поточна планка після audit v2.1 landing).
-- E2E tests: **≥ 1** (bundled-JRE, не потребує live Signal account).
+- Unit tests: **≥ 287** (поточна планка після `json-hardening-source-gen-attribute` landing).
+- E2E tests: **≥ 2** (bundled-JRE, не потребує live Signal account). Друга — `SignalCliE2EParallelRpcCorrelationTests.Process_ParallelVersionCalls_AllResolveToCorrectResponseById` — пінує CLAUDE.md "signal-cli protocol behavior we depend on" §3 (parallel request correlation by `id`) проти реального virtual-thread-dispatcher'а.
 - `dotnet build` з `TreatWarningsAsErrors=true` — **обидва** проекти (`src/SignalCli`, `Tests/SignalCli.Tests`); Integration слідує тому ж шляху коли стане доцільним.
 - Нуль `xUnit1031` violations (DoNotUseBlockingTaskOperationsInTestMethod). Якщо новий тест вимагає sync-blocking — додай `[SuppressMessage("xUnit", "xUnit1031", Justification="…")]` із поясненням, інакше build впаде.
 
