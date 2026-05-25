@@ -71,6 +71,15 @@ namespace SignalCli.Serialization;
 [JsonSerializable(typeof(UpdateConfigurationParameters))]
 [JsonSerializable(typeof(SetPinParameters))]
 [JsonSerializable(typeof(RemovePinParameters))]
+// Accounts — Wave 8 utility-rpc (signal-cli-api-coverage):
+// 3 нових методи. GetUserStatus — flat-array wrapper-record; SubmitRateLimitChallenge/
+// SendContacts — empty {} response → JsonElement.
+[JsonSerializable(typeof(GetUserStatusParameters))]
+[JsonSerializable(typeof(GetUserStatusResponse))]
+[JsonSerializable(typeof(List<JsonUserStatus>))]
+[JsonSerializable(typeof(JsonUserStatus))]
+[JsonSerializable(typeof(SubmitRateLimitChallengeParameters))]
+[JsonSerializable(typeof(SendContactsParameters))]
 // Devices
 [JsonSerializable(typeof(StartLinkParameters))]
 [JsonSerializable(typeof(StartLinkResponse))]

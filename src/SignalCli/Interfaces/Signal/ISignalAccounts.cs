@@ -116,4 +116,63 @@ public interface ISignalAccounts
     /// <remarks>signal-cli RPC mapping: see <c>RemovePinCommand.java</c> @ <c>bda4e7fc</c>.</remarks>
     /// <exception cref="InvalidOperationException">Якщо <c>EnableDestructiveOperations = false</c>.</exception>
     Task RemovePinAsync(string account, CancellationToken cancellationToken = default);
+
+    // ===== signal-cli-api-coverage Wave 8 (`utility-rpc`) — read-only + utility =====
+
+    /// <summary>
+    /// Перевіряє registration status для phone numbers AND/OR usernames. Read-only. CDSI lookup.
+    /// </summary>
+    /// <remarks>
+    /// signal-cli RPC mapping: see <c>GetUserStatusCommand.java</c> @ <c>bda4e7fc</c>.
+    /// <para>
+    /// <b>§F5 AND/OR merge:</b> обидва <paramref name="recipients"/> та <paramref name="usernames"/>
+    /// опційні; обидва можуть бути non-null одночасно (response merges entries).
+    /// Empty + empty → <c>GetUserStatusResponse</c> з порожнім Items.
+    /// </para>
+    /// </remarks>
+    /// <param name="account">E.164 номер caller'а.</param>
+    /// <param name="recipients">Phone numbers для перевірки (опційно).</param>
+    /// <param name="usernames">Usernames або username-links для перевірки (опційно).</param>
+    /// <param name="cancellationToken">Токен скасування.</param>
+    /// <exception cref="RateLimitException">CDSI throttled (<c>-5</c>).</exception>
+    Task<GetUserStatusResponse> GetUserStatusAsync(
+        string account,
+        IEnumerable<string>? recipients = null,
+        IEnumerable<string>? usernames = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Submit'ить captcha-solution для rate-limit challenge. Після success — наступні send-операції
+    /// проходять. §F24: <see cref="CaptchaRequiredException"/> при rejected captcha.
+    /// </summary>
+    /// <remarks>
+    /// signal-cli RPC mapping: see <c>SubmitRateLimitChallengeCommand.java</c> @ <c>bda4e7fc</c>.
+    /// <para>
+    /// <b>Workflow:</b> consumer отримує rate-limit error з <c>error.data</c> challenge-token,
+    /// розв'язує CAPTCHA на <see href="https://signalcaptchas.org/challenge/generate.html"/>,
+    /// викликає цей метод з token + captcha.
+    /// </para>
+    /// </remarks>
+    /// <param name="account">E.164 номер.</param>
+    /// <param name="challenge">Opaque challenge token з prior rate-limit error.</param>
+    /// <param name="captcha">Captcha solution token.</param>
+    /// <param name="cancellationToken">Токен скасування.</param>
+    /// <exception cref="ArgumentException">Якщо <paramref name="challenge"/> або <paramref name="captcha"/> порожні.</exception>
+    /// <exception cref="CaptchaRequiredException">Якщо upstream rejects captcha (<c>-6</c>).</exception>
+    /// <exception cref="JsonRpcException">Інші помилки (<c>-3 IoError</c>).</exception>
+    Task SubmitRateLimitChallengeAsync(
+        string account,
+        string challenge,
+        string captcha,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Push local contact list до linked devices через SyncMessage.Contacts. <b>One-way push</b>
+    /// — inverse direction: для FETCH use <see cref="SyncAccountAsync"/>.
+    /// </summary>
+    /// <remarks>signal-cli RPC mapping: see <c>SendContactsCommand.java</c> @ <c>bda4e7fc</c>.</remarks>
+    /// <param name="account">E.164 номер.</param>
+    /// <param name="cancellationToken">Токен скасування.</param>
+    /// <exception cref="JsonRpcException"><c>-3 IoError</c> при send failure (no linked devices / network).</exception>
+    Task SendContactsAsync(string account, CancellationToken cancellationToken = default);
 }

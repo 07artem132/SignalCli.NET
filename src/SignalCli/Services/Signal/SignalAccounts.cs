@@ -276,4 +276,69 @@ internal sealed class SignalAccounts(
 
         SignalAccountsLog.RemovePinOk(_logger);
     }
+
+    // ===== signal-cli-api-coverage Wave 8 (utility-rpc) — read-only + non-destructive =====
+
+    /// <inheritdoc/>
+    public async Task<GetUserStatusResponse> GetUserStatusAsync(
+        string account,
+        IEnumerable<string>? recipients = null,
+        IEnumerable<string>? usernames = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(account);
+
+        var response = await _signalCliClient
+            .InvokeMethodAsync(
+                "getUserStatus",
+                new GetUserStatusParameters(account, recipients, usernames),
+                SignalJsonContext.Default.GetUserStatusParameters,
+                SignalJsonContext.Default.GetUserStatusResponse,
+                cancellationToken).ConfigureAwait(false);
+
+        if (response == null)
+            throw new InvalidOperationException("Отримано нульову відповідь від сервера");
+
+        SignalAccountsLog.GetUserStatusOk(_logger, response.Count);
+        return response;
+    }
+
+    /// <inheritdoc/>
+    public async Task SubmitRateLimitChallengeAsync(
+        string account,
+        string challenge,
+        string captcha,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(account);
+        ArgumentException.ThrowIfNullOrEmpty(challenge);
+        ArgumentException.ThrowIfNullOrEmpty(captcha);
+
+        await _signalCliClient
+            .InvokeMethodAsync(
+                "submitRateLimitChallenge",
+                new SubmitRateLimitChallengeParameters(account, challenge, captcha),
+                SignalJsonContext.Default.SubmitRateLimitChallengeParameters,
+                SignalJsonContext.Default.JsonElement,
+                cancellationToken).ConfigureAwait(false);
+
+        // Privacy: НЕ логуємо challenge/captcha — opaque secret tokens.
+        SignalAccountsLog.SubmitRateLimitChallengeOk(_logger);
+    }
+
+    /// <inheritdoc/>
+    public async Task SendContactsAsync(string account, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(account);
+
+        await _signalCliClient
+            .InvokeMethodAsync(
+                "sendContacts",
+                new SendContactsParameters(account),
+                SignalJsonContext.Default.SendContactsParameters,
+                SignalJsonContext.Default.JsonElement,
+                cancellationToken).ConfigureAwait(false);
+
+        SignalAccountsLog.SendContactsOk(_logger);
+    }
 }

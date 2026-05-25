@@ -936,6 +936,55 @@
             <remarks>signal-cli RPC mapping: see <c>RemovePinCommand.java</c> @ <c>bda4e7fc</c>.</remarks>
             <exception cref="T:System.InvalidOperationException">Якщо <c>EnableDestructiveOperations = false</c>.</exception>
         </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalAccounts.GetUserStatusAsync(System.String,System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Threading.CancellationToken)">
+            <summary>
+            Перевіряє registration status для phone numbers AND/OR usernames. Read-only. CDSI lookup.
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see <c>GetUserStatusCommand.java</c> @ <c>bda4e7fc</c>.
+            <para>
+            <b>§F5 AND/OR merge:</b> обидва <paramref name="recipients"/> та <paramref name="usernames"/>
+            опційні; обидва можуть бути non-null одночасно (response merges entries).
+            Empty + empty → <c>GetUserStatusResponse</c> з порожнім Items.
+            </para>
+            </remarks>
+            <param name="account">E.164 номер caller'а.</param>
+            <param name="recipients">Phone numbers для перевірки (опційно).</param>
+            <param name="usernames">Usernames або username-links для перевірки (опційно).</param>
+            <param name="cancellationToken">Токен скасування.</param>
+            <exception cref="T:SignalCli.Exceptions.RateLimitException">CDSI throttled (<c>-5</c>).</exception>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalAccounts.SubmitRateLimitChallengeAsync(System.String,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Submit'ить captcha-solution для rate-limit challenge. Після success — наступні send-операції
+            проходять. §F24: <see cref="T:SignalCli.Exceptions.CaptchaRequiredException"/> при rejected captcha.
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see <c>SubmitRateLimitChallengeCommand.java</c> @ <c>bda4e7fc</c>.
+            <para>
+            <b>Workflow:</b> consumer отримує rate-limit error з <c>error.data</c> challenge-token,
+            розв'язує CAPTCHA на <see href="https://signalcaptchas.org/challenge/generate.html"/>,
+            викликає цей метод з token + captcha.
+            </para>
+            </remarks>
+            <param name="account">E.164 номер.</param>
+            <param name="challenge">Opaque challenge token з prior rate-limit error.</param>
+            <param name="captcha">Captcha solution token.</param>
+            <param name="cancellationToken">Токен скасування.</param>
+            <exception cref="T:System.ArgumentException">Якщо <paramref name="challenge"/> або <paramref name="captcha"/> порожні.</exception>
+            <exception cref="T:SignalCli.Exceptions.CaptchaRequiredException">Якщо upstream rejects captcha (<c>-6</c>).</exception>
+            <exception cref="T:SignalCli.Exceptions.JsonRpcException">Інші помилки (<c>-3 IoError</c>).</exception>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalAccounts.SendContactsAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Push local contact list до linked devices через SyncMessage.Contacts. <b>One-way push</b>
+            — inverse direction: для FETCH use <see cref="M:SignalCli.Interfaces.Signal.ISignalAccounts.SyncAccountAsync(System.Threading.CancellationToken)"/>.
+            </summary>
+            <remarks>signal-cli RPC mapping: see <c>SendContactsCommand.java</c> @ <c>bda4e7fc</c>.</remarks>
+            <param name="account">E.164 номер.</param>
+            <param name="cancellationToken">Токен скасування.</param>
+            <exception cref="T:SignalCli.Exceptions.JsonRpcException"><c>-3 IoError</c> при send failure (no linked devices / network).</exception>
+        </member>
         <member name="T:SignalCli.Interfaces.Signal.ISignalContacts">
             <summary>
             Сервіс для роботи з контактами та identity-keys у Signal (signal-cli-api-coverage Wave 3).
@@ -2679,6 +2728,140 @@
         <member name="P:SignalCli.Models.Signal.Accounts.FinishChangeNumberParameters.Pin">
             <summary>Registration-lock PIN нового номера (nullable).</summary>
         </member>
+        <member name="T:SignalCli.Models.Signal.Accounts.GetUserStatusParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>getUserStatus</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 8. Pinned до
+            <c>GetUserStatusCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>§F5 AND/OR merge:</b> обидва списки опційні, не mutually exclusive. Empty + empty → <c>[]</c>.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Recipients">Phone numbers для lookup'у.</param>
+            <param name="Usernames">Usernames (or username-links) для lookup'у.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.GetUserStatusParameters.#ctor(System.String,System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String})">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>getUserStatus</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 8. Pinned до
+            <c>GetUserStatusCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>§F5 AND/OR merge:</b> обидва списки опційні, не mutually exclusive. Empty + empty → <c>[]</c>.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Recipients">Phone numbers для lookup'у.</param>
+            <param name="Usernames">Usernames (or username-links) для lookup'у.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.GetUserStatusParameters.Account">
+            <summary>E.164 номер акаунту.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.GetUserStatusParameters.Recipients">
+            <summary>Phone numbers для lookup'у.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.GetUserStatusParameters.Usernames">
+            <summary>Usernames (or username-links) для lookup'у.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Accounts.GetUserStatusResponse">
+            <summary>
+            Відповідь на <c>getUserStatus</c> — flat JSON-масив <see cref="T:SignalCli.Models.Signal.Accounts.JsonUserStatus"/>-записів.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 8. Wrapper-record + custom converter per CLAUDE.md
+            "AOT readiness" pattern (як <see cref="T:SignalCli.Models.Signal.Accounts.ListAccountsResponse"/>).
+            </remarks>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.GetUserStatusResponse.#ctor(System.Collections.Generic.IReadOnlyList{SignalCli.Models.Signal.Accounts.JsonUserStatus})">
+            <summary>
+            Відповідь на <c>getUserStatus</c> — flat JSON-масив <see cref="T:SignalCli.Models.Signal.Accounts.JsonUserStatus"/>-записів.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 8. Wrapper-record + custom converter per CLAUDE.md
+            "AOT readiness" pattern (як <see cref="T:SignalCli.Models.Signal.Accounts.ListAccountsResponse"/>).
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.GetUserStatusResponse.Count">
+            <summary>Кількість записів.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.GetUserStatusResponse.Item(System.Int32)">
+            <summary>Доступ за індексом.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.GetUserStatusResponse.GetEnumerator">
+            <inheritdoc/>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Accounts.GetUserStatusResponseConverter">
+            <summary>Конвертер, що читає/пише <see cref="T:SignalCli.Models.Signal.Accounts.GetUserStatusResponse"/> як плоский JSON-масив.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Accounts.JsonUserStatus">
+            <summary>
+            Один user-status запис у відповіді <c>getUserStatus</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 8 (utility-rpc). Pinned до
+            <c>src/main/java/org/asamk/signal/commands/GetUserStatusCommand.java:119-125 @ bda4e7fc</c>
+            (private <c>JsonUserStatus</c> record).
+            <para>
+            <b>Discriminator:</b> кожен row походить АБО з <c>recipient</c>-input (then <see cref="P:SignalCli.Models.Signal.Accounts.JsonUserStatus.Number"/>
+            заповнено), АБО з <c>username</c>-input (then <see cref="P:SignalCli.Models.Signal.Accounts.JsonUserStatus.Username"/> заповнено). Поля mutex
+            per row, але обидва inputs можуть бути merged у одній response array (§F5).
+            </para>
+            <para>
+            <b>Quirk:</b> <see cref="P:SignalCli.Models.Signal.Accounts.JsonUserStatus.Uuid"/> appears as JSON <c>null</c> when not registered (NOT omitted);
+            <see cref="P:SignalCli.Models.Signal.Accounts.JsonUserStatus.Number"/>/<see cref="P:SignalCli.Models.Signal.Accounts.JsonUserStatus.Username"/> omitted from JSON when null (Jackson
+            <c>@JsonInclude(NON_NULL)</c>).
+            </para>
+            </remarks>
+            <param name="Recipient">Raw input string (phone or username/link).</param>
+            <param name="Number">Canonicalised E.164 (тільки для recipient-input rows + successful parse).</param>
+            <param name="Username">Username (тільки для username-input rows).</param>
+            <param name="Uuid">Signal account UUID — <c>null</c> якщо не registered.</param>
+            <param name="IsRegistered">Derived: <c>Uuid != null</c>. Always present.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.JsonUserStatus.#ctor(System.String,System.String,System.String,System.String,System.Boolean)">
+            <summary>
+            Один user-status запис у відповіді <c>getUserStatus</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 8 (utility-rpc). Pinned до
+            <c>src/main/java/org/asamk/signal/commands/GetUserStatusCommand.java:119-125 @ bda4e7fc</c>
+            (private <c>JsonUserStatus</c> record).
+            <para>
+            <b>Discriminator:</b> кожен row походить АБО з <c>recipient</c>-input (then <see cref="P:SignalCli.Models.Signal.Accounts.JsonUserStatus.Number"/>
+            заповнено), АБО з <c>username</c>-input (then <see cref="P:SignalCli.Models.Signal.Accounts.JsonUserStatus.Username"/> заповнено). Поля mutex
+            per row, але обидва inputs можуть бути merged у одній response array (§F5).
+            </para>
+            <para>
+            <b>Quirk:</b> <see cref="P:SignalCli.Models.Signal.Accounts.JsonUserStatus.Uuid"/> appears as JSON <c>null</c> when not registered (NOT omitted);
+            <see cref="P:SignalCli.Models.Signal.Accounts.JsonUserStatus.Number"/>/<see cref="P:SignalCli.Models.Signal.Accounts.JsonUserStatus.Username"/> omitted from JSON when null (Jackson
+            <c>@JsonInclude(NON_NULL)</c>).
+            </para>
+            </remarks>
+            <param name="Recipient">Raw input string (phone or username/link).</param>
+            <param name="Number">Canonicalised E.164 (тільки для recipient-input rows + successful parse).</param>
+            <param name="Username">Username (тільки для username-input rows).</param>
+            <param name="Uuid">Signal account UUID — <c>null</c> якщо не registered.</param>
+            <param name="IsRegistered">Derived: <c>Uuid != null</c>. Always present.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.JsonUserStatus.Recipient">
+            <summary>Raw input string (phone or username/link).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.JsonUserStatus.Number">
+            <summary>Canonicalised E.164 (тільки для recipient-input rows + successful parse).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.JsonUserStatus.Username">
+            <summary>Username (тільки для username-input rows).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.JsonUserStatus.Uuid">
+            <summary>Signal account UUID — <c>null</c> якщо не registered.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.JsonUserStatus.IsRegistered">
+            <summary>Derived: <c>Uuid != null</c>. Always present.</summary>
+        </member>
         <member name="T:SignalCli.Models.Signal.Accounts.ListAccountsParameters">
             <summary>
             Параметри для запиту списку облікових записів Signal.
@@ -2777,6 +2960,37 @@
             <param name="Account">E.164 номер.</param>
         </member>
         <member name="P:SignalCli.Models.Signal.Accounts.RemovePinParameters.Account">
+            <summary>E.164 номер.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Accounts.SendContactsParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>sendContacts</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 8. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/SendContactsCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>One-way push</b> до linked devices через <c>SyncMessage.Contacts</c>. НЕ fetch'ить —
+            inverse direction; для fetch use <see cref="M:SignalCli.Interfaces.Signal.ISignalAccounts.SyncAccountAsync(System.Threading.CancellationToken)"/>.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.SendContactsParameters.#ctor(System.String)">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>sendContacts</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 8. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/SendContactsCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>One-way push</b> до linked devices через <c>SyncMessage.Contacts</c>. НЕ fetch'ить —
+            inverse direction; для fetch use <see cref="M:SignalCli.Interfaces.Signal.ISignalAccounts.SyncAccountAsync(System.Threading.CancellationToken)"/>.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.SendContactsParameters.Account">
             <summary>E.164 номер.</summary>
         </member>
         <member name="T:SignalCli.Models.Signal.Accounts.SetPinParameters">
@@ -2883,6 +3097,57 @@
         </member>
         <member name="P:SignalCli.Models.Signal.Accounts.StartChangeNumberParameters.Captcha">
             <summary>Captcha token (nullable).</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Accounts.SubmitRateLimitChallengeParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>submitRateLimitChallenge</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 8. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/SubmitRateLimitChallengeCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>Workflow:</b> challenge token приходить з <c>error.data</c> попереднього <c>send</c> що
+            failed з code <c>-5 RateLimit</c>; consumer розв'язує CAPTCHA на
+            <see href="https://signalcaptchas.org/challenge/generate.html"/> і submit'ить token+captcha.
+            </para>
+            <para>
+            <b>§F24:</b> CaptchaRejected (<c>-6</c>) — <see cref="T:SignalCli.Exceptions.CaptchaRequiredException"/>
+            уже dispatch'иться через <see cref="T:SignalCli.Services.Rpc.JsonRpcClient"/> з Wave 1.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер.</param>
+            <param name="Challenge">Opaque challenge token з prior rate-limit error.</param>
+            <param name="Captcha">Captcha solution token.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.SubmitRateLimitChallengeParameters.#ctor(System.String,System.String,System.String)">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>submitRateLimitChallenge</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 8. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/SubmitRateLimitChallengeCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>Workflow:</b> challenge token приходить з <c>error.data</c> попереднього <c>send</c> що
+            failed з code <c>-5 RateLimit</c>; consumer розв'язує CAPTCHA на
+            <see href="https://signalcaptchas.org/challenge/generate.html"/> і submit'ить token+captcha.
+            </para>
+            <para>
+            <b>§F24:</b> CaptchaRejected (<c>-6</c>) — <see cref="T:SignalCli.Exceptions.CaptchaRequiredException"/>
+            уже dispatch'иться через <see cref="T:SignalCli.Services.Rpc.JsonRpcClient"/> з Wave 1.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер.</param>
+            <param name="Challenge">Opaque challenge token з prior rate-limit error.</param>
+            <param name="Captcha">Captcha solution token.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.SubmitRateLimitChallengeParameters.Account">
+            <summary>E.164 номер.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.SubmitRateLimitChallengeParameters.Challenge">
+            <summary>Opaque challenge token з prior rate-limit error.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.SubmitRateLimitChallengeParameters.Captcha">
+            <summary>Captcha solution token.</summary>
         </member>
         <member name="T:SignalCli.Models.Signal.Accounts.SyncAccountsParameters">
             <summary>
@@ -8626,6 +8891,21 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.GetUserStatusParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.GetUserStatusResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonUserStatus">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.ListAccountsParameters">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
@@ -8641,12 +8921,22 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.SendContactsParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.SetPinParameters">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.StartChangeNumberParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.SubmitRateLimitChallengeParameters">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -9217,6 +9507,11 @@
             </summary>
         </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.ListAccount">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListJsonUserStatus">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -9917,6 +10212,15 @@
             <inheritdoc/>
         </member>
         <member name="M:SignalCli.Services.Signal.SignalAccounts.RemovePinAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalAccounts.GetUserStatusAsync(System.String,System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalAccounts.SubmitRateLimitChallengeAsync(System.String,System.String,System.String,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalAccounts.SendContactsAsync(System.String,System.Threading.CancellationToken)">
             <inheritdoc/>
         </member>
         <member name="T:SignalCli.Services.Signal.SignalContacts">

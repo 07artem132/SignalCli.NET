@@ -3,6 +3,76 @@
 Формат заснований на [Keep a Changelog](https://keepachangelog.com/),
 проєкт дотримується [семантичного версіонування](https://semver.org/lang/uk/).
 
+## [4.8.0] — 2026-05-25
+
+Minor-реліз. 🎯 **Final wave** signal-cli-api-coverage — `ISignalAccounts` отримує 3 utility methods (registration-status lookup, rate-limit challenge submit, push contacts до linked devices). **54/54 = 100% JSON-RPC method coverage** (send-side). Backward-compatible.
+
+### ✨ Нове
+
+- **`ISignalAccounts` +3 utility methods:**
+  ```csharp
+  // GetUserStatus — registration-status check для phones/usernames (§F5 AND/OR merge)
+  var statuses = await signalAccounts.GetUserStatusAsync(account,
+      recipients: ["+380501234567"],
+      usernames: ["alice.42"]);
+  foreach (var s in statuses) {
+      // s.Number filled only for recipient-input rows; s.Username — for username rows
+      Console.WriteLine($"{s.Recipient}: registered={s.IsRegistered}, uuid={s.Uuid}");
+  }
+
+  // SubmitRateLimitChallenge — після rate-limit error solver workflow
+  // 1. Send fails з -5 RateLimit + error.data containing challenge token.
+  // 2. Open https://signalcaptchas.org/challenge/generate.html у browser, solve.
+  // 3. Submit.
+  try { await signalAccounts.SubmitRateLimitChallengeAsync(account, challengeToken, captchaToken); }
+  catch (CaptchaRequiredException) { /* captcha rejected — try again */ }
+
+  // SendContacts — push local contact list до всіх linked devices (Signal Desktop тощо)
+  // One-way push; для FETCH use SyncAccountAsync.
+  await signalAccounts.SendContactsAsync(account);
+  ```
+
+- **`JsonUserStatus` element type** — `Recipient`, optional `Number`/`Username` (discriminator per row), nullable `Uuid`, derived `IsRegistered`. Wire-quirks pinned: `number`/`username` omitted у JSON (Jackson `@JsonInclude(NON_NULL)`); `uuid` always present (JSON `null` для unregistered).
+
+### 🛠 Інше
+
+- **§F5 AND/OR merge:** обидва `recipients` AND `usernames` параметри опційні; обидва можуть бути non-null одночасно — upstream merges entries у одну response array. Empty + empty → empty `GetUserStatusResponse` (не error).
+
+- **§F24 SubmitRateLimitChallenge → `CaptchaRequiredException`.** Code `-6` (CaptchaRejected) уже dispatch'иться через `JsonRpcClient` з Wave 1; consumer catches typed exception.
+
+- **§F25 Empty `{}` responses** для `SubmitRateLimitChallenge` + `SendContacts` — service-методи повертають `Task` (не `Task<T>`), використовуючи `JsonElement` як pass-through. Upstream emit'ить literal `{}` per `SignalJsonRpcCommandHandler.java:281` — НЕ `null`.
+
+- **`SendContactsAsync` — one-way push.** Документує inverse-direction від `SyncAccountAsync` (який FETCH'ить). Consumers easily confuse — XMLDoc explicit warning.
+
+- **Wave-8 methods — NOT destructive.** Працюють із default `EnableDestructiveOperations = false`. Lookup-style operations не потребують opt-in.
+
+- **SignalAccountsLog** +3 [LoggerMessage] у block **879-881** (within shared 800-899). Privacy: жодних phone/username/challenge-token у Information+ шаблонах.
+
+### 🛡️ Захист від регресій
+
+- **`UtilityRpcSerializationTests` — 5 тестів** пінять wire-shape: GetUserStatusResponse flat-array deserialization (mix recipient + username + unregistered rows), empty-array case, GetUserStatusParameters two-list shape, SubmitRateLimitChallengeParameters 3-field shape, SendContactsParameters only-account-field invariant.
+
+- **`SignalAccountsUtilityTests` — 7 service-level тестів:** GetUserStatus works з default options (non-destructive), arg-validation для empty account/challenge/captcha, RPC dispatch для всіх 3-х методів.
+
+- **`SignalCliE2EUtilityRpcTests.GetUserStatus_Self_ReturnsRegistered`** — env-gated E2E проти живого signal-cli. Pin'ить що registered account повертає self як `IsRegistered=true` з non-null UUID.
+
+### 📊 Тестова статистика
+
+- Unit: 474 → **486** (+12 unit тестів).
+- Integration: 11 → **12** (+1 env-gated E2E GetUserStatus).
+- Public API baseline: 2300 → ~2400 lines (+~100 entries: 3 methods + 6 DTOs + 1 wrapper-record).
+- Build на src/ + Tests/: 0 warnings, 0 errors з `TreatWarningsAsErrors=true`.
+
+### 📦 Coverage progress — 🎯 GOAL REACHED
+
+9 + 4 + 3 + 9 + 6 + 4 + 8 + 8 + 3 = **54 з ~54 = 100%** signal-cli JSON-RPC API send-side coverage.
+
+**Open work:**
+- **Wave 7b** (receive-side event decoders для PollCreate/Vote/Terminate/Payment/Pin/Unpin/AdminDelete events) — deferred per Wave 7a scope decision. SignalEventService dispatch refactor + 7 нових event-streams + RG06 update. **4.7.1 patch release** коли затребувано.
+- **`receive` polling RPC** — застаріле; `subscribeReceive` (event-driven) є кращою альтернативою. Залишається out-of-scope (proposal §Out of scope).
+
+---
+
 ## [4.7.0] — 2026-05-25
 
 Minor-реліз. **`ISignalMessage` отримує 8 нових power-user methods** (polls, admin-delete, pin/unpin, message-request response, payment notification). Send-side only — receive-side decoders для PollCreate/Vote/Terminate/Pin/Unpin/AdminDelete/Payment events deferred to **Wave 7b → 4.7.1** (бо вимагають SignalEventService dispatch refactor + 7 нових event-streams + RG06 update). Backward-compatible.

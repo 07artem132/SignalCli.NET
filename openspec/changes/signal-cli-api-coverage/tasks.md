@@ -267,15 +267,15 @@ Decision (2026-05-25, per user scope choice "Send-side only"): receive-side deco
   - `GetUserStatusParameters/Response.cs` + `GetUserStatusOptions` (account, **`Recipients` AND `Usernames` arrays — NOT mutually exclusive** per §F5). Upstream `GetUserStatusCommand.java:66-81 @ bda4e7fc` merges both via `Stream.concat`; response is a flat list of `JsonUserStatus { recipient, number?, username?, uuid?, isRegistered }` where `recipient` echoes the caller's input, `number` is populated only for phone inputs, `username` only for username inputs, `isRegistered` derived as `uuid != null`. Wrapper-record + `[JsonConverter]` pattern (per critical rule #N10) for the top-level array response. `SubmitRateLimitChallengeParameters/Response.cs` — params `{challenge, captcha}` both required (upstream NPE → `-32603` if missing per §F-supplement, not `-32602`); response empty `{}`.
   - `SendContactsParameters/Response.cs` — empty params shape (just account); empty `{}` response.
 - [ ] 8.2 Register у `SignalJsonContext`.
-- [ ] 8.3 `ISignalAccounts` — додати 3 utility-методи (non-destructive — без gating).
-- [ ] 8.4 `SignalAccounts.cs` — implementations.
-- [ ] 8.5 `SignalAccountsLog.cs` — +9 `[LoggerMessage]` (still block 450-499).
-- [ ] 8.6 Tests (~9 unit).
-- [ ] 8.7 E2E: `SignalCliE2EUserStatusTests.cs.GetUserStatus_KnownRegistered_ReturnsTrue` — env-gated через `TestAccountFixture.GetOrSkip()`; передає self-номер як queryRecipient (always Registered=true).
-- [ ] 8.8 Update `SignalCli.public-api.txt` baseline (last update).
-- [ ] 8.9 Build + test (~488 → ~497 unit + 4 E2E).
-- [ ] 8.10 Bump 4.7.0 → 4.8.0 + CHANGELOG.
-- [ ] 8.11 Commit `feat(4.8.0): utility RPC — getUserStatus, submitRateLimitChallenge, sendContacts`, push, merge, tag.
+- [x] 8.3 `ISignalAccounts` — додано 3 utility-методи (non-destructive — без gating).
+- [x] 8.4 `SignalAccounts.cs` — implementations. §F5 AND/OR pass-through, §F24 CaptchaRequired auto-dispatch через JsonRpcClient (Wave-1 infra), §F25 empty {} → JsonElement reuse.
+- [x] 8.5 `SignalAccountsLog.cs` — +3 `[LoggerMessage]` у block **879-881** (within shared 800-899; **task plan мав помилку — 450-499 (JsonRpcClientHostedServiceLog)**, виправлено).
+- [x] 8.6 Tests: 5 serialization + 7 service = **12 unit**.
+- [x] 8.7 E2E: `SignalCliE2EUtilityRpcTests.GetUserStatus_Self_ReturnsRegistered` — env-gated.
+- [x] 8.8 Update `SignalCli.public-api.txt` baseline: 2300 → **2359** lines (+59 entries).
+- [x] 8.9 Build + test: 474 → **486** (+12 unit, +1 E2E).
+- [x] 8.10 Bump 4.7.0 → 4.8.0 + CHANGELOG (consumer-first з 🎯 GOAL REACHED milestone).
+- [ ] 8.11 Commit `feat(4.8.0): utility RPC — getUserStatus, submitRateLimitChallenge, sendContacts`. (Local-only.)
 
 ## 9. Final cleanup
 

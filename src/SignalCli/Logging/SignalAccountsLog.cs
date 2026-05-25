@@ -74,4 +74,16 @@ internal static partial class SignalAccountsLog
     [LoggerMessage(EventId = 878, Level = LogLevel.Warning,
         Message = "Registration-lock PIN видалено — account security weakened")]
     public static partial void RemovePinOk(ILogger logger);
+
+    // signal-cli-api-coverage Wave 8 (utility-rpc). Block 879-889. Privacy: жодних
+    // phone/username/challenge-token у Information+ шаблонах.
+
+    [LoggerMessage(EventId = 879, Level = LogLevel.Information, Message = "GetUserStatus отримано. Count={Count}")]
+    public static partial void GetUserStatusOk(ILogger logger, int count);
+
+    [LoggerMessage(EventId = 880, Level = LogLevel.Information, Message = "RateLimit challenge submitted")]
+    public static partial void SubmitRateLimitChallengeOk(ILogger logger);
+
+    [LoggerMessage(EventId = 881, Level = LogLevel.Information, Message = "Contacts synced до linked devices")]
+    public static partial void SendContactsOk(ILogger logger);
 }
