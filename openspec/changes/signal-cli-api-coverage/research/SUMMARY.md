@@ -136,6 +136,50 @@ Across the 4 Wave-1 send commands, IOException maps to **different RPC error cod
 
 This is upstream signal-cli inconsistency, not a wrapper bug. .NET XMLDoc on each method should reflect the actual mapping; consumers should not be told "IOExceptions are always -32603."
 
+## 🔬 Secondary implementation findings (F11-F25) — promoted into tasks.md per user review 2026-05-25
+
+Wave research files contained ~15 additional findings that did NOT rise to F1-F10
+plan-breaking severity but DO affect concrete DTO/service-method implementation
+decisions. After user review, all 15 were promoted into `tasks.md` as inline
+`§FN reminder:` annotations next to the relevant task (mirroring F6-F10 pattern).
+Listed here as a registry; details + citations live in `wave-N-….md` files.
+
+### 🔴 HIGH severity — production-break-without-handling
+
+- **F11 — Wave 5: `addDevice` `pub_key` base64 is stripped of `=` padding** (`DeviceLinkUrl.java:48 @ bda4e7fc`). `Convert.FromBase64String` у .NET throws `FormatException` without restored padding. Implementation MUST restore padding before decoding. Surfaced in `tasks.md §5.4`.
+
+- **F12 — Wave 5: `updateDevice.deviceName` is encrypted server-side and MUST NOT be logged above Trace** (Critical rule #1 implication). `SignalDevicesLog` `UpdateDevice*` templates exclude `{DeviceName}` parameter at `Information+` level. Surfaced in `tasks.md §5.5`.
+
+### 🟡 MEDIUM severity — semantic divergence requiring DTO/API design choice
+
+- **F13 — Wave 2: `joinGroup.onlyRequested` is dimorphic** — present+true OR completely absent (NEVER `false`). `JoinGroupResponse.OnlyRequested` MUST be `bool?` (nullable), not `bool` defaulting to false; absent = direct join, true = pending admin approval. Surfaced in `tasks.md §2.1`.
+
+- **F14 — Wave 2: `updateGroup` with `groupId == null` triggers CREATE-then-update** (`UpdateGroupCommand.java`). Same RPC method has dual semantic. .NET API may want to split into explicit `CreateGroupAsync(CreateGroupOptions)` + `UpdateGroupAsync(UpdateGroupOptions)` for clarity, OR document the dual-mode on a single method. Surfaced in `tasks.md §2.1`.
+
+- **F15 — Wave 7: `sendPollCreate` has baked-in validation constants** — 2-10 options array length, ≤100 chars per option (`MAX_POLL_OPTIONS = 10`, `MAX_POLL_OPTION_LENGTH = 100`). `PollCreateOptions.Builder` MUST validate client-side via `Build()` throwing `ArgumentException`. Surfaced in `tasks.md §7.1`.
+
+- **F16 — Wave 7: `pinDurationSeconds` type asymmetry** — `int` on send wire, `long` on receive wire. .NET DTOs MUST use `long` on both sides (widest type) to avoid silent truncation. Surfaced in `tasks.md §7.2` + `§7.8.1`.
+
+- **F17 — Wave 7: 5 of 7 receive-side Json* records carry `@Deprecated targetAuthor`/`author` legacy-identifier fields** that signal-cli still serializes for backward-compat. .NET DTOs MUST mirror with `[Obsolete]` markers + still serialize them (forward-compat with old wire payloads). Surfaced in `tasks.md §7.8.1`.
+
+- **F18 — Wave 3: `updateProfile.Avatar` vs `RemoveAvatar` XOR** — same XOR pattern as F9 (RemoveContact). `UpdateProfileOptions.Builder` MUST validate XOR client-side; wire silently accepts both with first-wins behavior otherwise. Surfaced in `tasks.md §3.1`.
+
+- **F19 — Wave 4: `getAvatar.Contact`/`Profile`/`GroupId` 3-way XOR** — `GetAvatarOptions.Builder` MUST validate exactly-one-of-three set; wire enforces argparse-only. Surfaced in `tasks.md §4.1`.
+
+### 🟢 LOW severity — XMLDoc/divergence notes
+
+- **F20 — Wave 1: only `sendReaction` has `--notify-self` flag + catches `UnregisteredRecipientException` at top level**. Other 3 Wave-1 send methods lack both. XMLDoc on `SendReactionAsync` must call this out; uniform-API assumption is wrong. Surfaced in `tasks.md §1.2.1`.
+
+- **F21 — Wave 7: `sendPollCreate` CLI flag `--no-multi` vs internal `allowMultiple` polarity inversion**. .NET should expose positive polarity (`AllowMultipleVotes: bool = true`) to mirror internal API and avoid double-negative cognitive cost. Surfaced in `tasks.md §7.1`.
+
+- **F22 — Wave 7: `sendPollVote.option` is zero-based integer indexes, not strings**. DTO field is `IReadOnlyList<int>` of indexes into the original poll's options array. Easy to misimplement as `IReadOnlyList<string>`. Surfaced in `tasks.md §7.1`.
+
+- **F23 — Wave 7: `sendPinMessage.pinDuration = -1` is a sentinel value meaning "pin forever"**; positive = seconds. .NET design choice: expose as `TimeSpan?` (null = forever) for ergonomic ergonomics over int-sentinel. Surfaced in `tasks.md §7.2`.
+
+- **F24 — Wave 8: `submitRateLimitChallenge` missing-key throws NPE → `-32603 InternalError`** (not the typical `-32602 InvalidParams` for missing required field). Upstream `required(true)` on `Argument` is NOT enforced for JSON-RPC. Test must assert against `-32603`, not `-32602`. Surfaced in `tasks.md §8.1`.
+
+- **F25 — Empty responses (all Wave-8 commands + several others) are literal `{}` JSON object, not `null`**. DTO design: `record FooResponse()` with empty body, NOT `Task<Empty?>`. Source: `SignalJsonRpcCommandHandler.java:281` (`result[0] == null ? Map.of() : result[0]`). Surfaced in `tasks.md §8.1`.
+
 ## ✅ Findings that confirm the plan as-written
 
 - All 6 Wave-4 send-side sticker/binary-fetch methods exist as described in plan.
@@ -155,5 +199,6 @@ Across the 8 wave research files, agents read **127 distinct Java source files**
 2. **Before Wave 6 implementation:** edit `tasks.md` §6.2.1 per F3, F4.
 3. **Before Wave 7 implementation:** edit `tasks.md` §7.2 per F2 (and add §7.8 receive-side enum).
 4. **Before Wave 8 implementation:** edit `design.md` getUserStatus section per F5.
-5. **General:** add F6-F10 as implementation-note remarks in `tasks.md` next to the relevant tasks (no scope change, just discoverable on read-back).
-6. **Anti-hallucination protocol §0.5 stays mandatory** — this research surfaced 5 plan-breaking discrepancies in a corpus of 44 methods (≈11% wire-shape drift between task description and Java source). Implementing without source-reading would have shipped 5 broken DTO designs to production.
+5. ~~**General:** add F6-F10 as implementation-note remarks in `tasks.md` next to the relevant tasks~~ **DONE 2026-05-25** (commit `8582941`) — F1-F10 surfaced as inline `§FN reminder` annotations.
+6. ~~**Secondary surfacing:** promote F11-F25 from wave-N research files into `tasks.md`~~ **DONE 2026-05-25** (this commit) — all 15 secondary findings surfaced as inline `§FN reminder` annotations next to the relevant task.
+7. **Anti-hallucination protocol §0.5 stays mandatory** — this research surfaced 5 plan-breaking discrepancies (F1-F5) + 5 implementation-impacting findings (F6-F10) + 15 secondary findings (F11-F25) in a corpus of 44 methods. That's ≈25/44 = **57% of methods had at least one non-obvious discrepancy** between LLM-authored task description and actual signal-cli Java source. Implementing without source-reading would have shipped multiple broken DTO designs to production. RG10 (`SourceCitationConsistencyTests`) enforcement at Wave 1 makes this protocol structurally permanent.
