@@ -355,9 +355,14 @@ public class SignalCliE2EAdditionalTests
         var settings = new Dictionary<string, string?>
         {
             ["SignalCli:AppHome"] = baseDir,
-            ["SignalCli:LibDirectory"] = RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-                ? string.Empty
-                : "signal-cli/lib",
+            // LibDirectory тримаємо non-empty на всіх OS, щоб [Required(AllowEmptyStrings=false)]
+            // у SignalCliOptions пройшов validation. На Linux native-binary шлях йде через
+            // SignalCliExecutable (нижче), а LibDirectory тут — unused placeholder; решта
+            // E2E-тестів використовує ту саму "signal-cli/lib" константу через
+            // AddSignalCliWithBundledRuntimeDefaults default. Симетрія важлива, бо
+            // AddSignalCli(IConfiguration) overload не виконує auto-resolve LibDirectory,
+            // на відміну від bundled-defaults overload'у.
+            ["SignalCli:LibDirectory"] = "signal-cli/lib",
             ["SignalCli:RequestTimeoutSeconds"] = "30",
             ["SignalCli:StopTimeoutSeconds"] = "5",
             ["SignalCli:MaxRestartAttempts"] = "0",
