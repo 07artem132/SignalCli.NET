@@ -3,6 +3,651 @@
 Формат заснований на [Keep a Changelog](https://keepachangelog.com/),
 проєкт дотримується [семантичного версіонування](https://semver.org/lang/uk/).
 
+## [4.9.0] — 2026-05-25
+
+Minor-реліз. 🏁 **Wave 7b** — receive-side decoders для всіх 7 нових event-types з Wave 7a + JsonPayment shape-fix. `ISignalEventService` розширено 7 IObservable + 7 IAsyncEnumerable парами (10 → 17 event-pair surfaces). **Closes signal-cli-api-coverage epic** — 100% send-side + 100% receive-side decoder parity.
+
+### ⚠ Breaking — JsonPayment shape fix
+
+- **`JsonPayment(Amount: decimal, Currency: string?)` → `JsonPayment(Note: string?, Receipt: byte[])`.** Previous shape був speculative — він НІКОЛИ не отримував real wire data, бо upstream Java `JsonPayment.java @ bda4e7fc` declares `record JsonPayment(String note, byte[] receipt)`. Consumers що читали `Amount`/`Currency` на real envelopes — той код ніколи не fire'ив у production. Migration: переходь на `Note`/`Receipt`; `Receipt` — MobileCoin receipt blob, base64-encoded на wire, deserialize'ується як `byte[]`.
+
+### ✨ Нове — 7 receive-side event streams
+
+```csharp
+signalEvents.PollCreates.Subscribe(e => Console.WriteLine($"Poll: {e.PollCreate.Question}"));
+signalEvents.PollVotes.Subscribe(e => Console.WriteLine($"Vote for {e.PollVote.OptionIndexes.Count} options"));
+signalEvents.PollTerminates.Subscribe(e => Console.WriteLine("Poll ended"));
+signalEvents.Payments.Subscribe(e => Console.WriteLine($"Payment receipt: {e.Payment.Receipt.Length} bytes"));
+signalEvents.PinMessages.Subscribe(e => Console.WriteLine($"Pinned forever={e.PinMessage.PinDurationSeconds == -1}"));
+signalEvents.UnpinMessages.Subscribe(e => Console.WriteLine("Unpinned"));
+signalEvents.AdminDeletes.Subscribe(e => Console.WriteLine("Admin-deleted (group moderation)"));
+
+// IAsyncEnumerable варіанти для single-consumer back-pressure
+await foreach (var poll in signalEvents.PollCreatesAsync(ct)) { /* ... */ }
+```
+
+### 🛠 Інше
+
+- **6 нових wire records:** `JsonPollCreate`, `JsonPollVote`, `JsonPollTerminate`, `JsonPinMessage`, `JsonUnpinMessage`, `JsonAdminDelete`. Pinned до upstream Java records @ `bda4e7fc`.
+- **§F17 @Deprecated legacy identifiers preserved.** Author/TargetAuthor legacy fields у JsonPollVote/PinMessage/UnpinMessage/AdminDelete — upstream досі emit'ить для backward-compat; mirror'имо щоб strict deserialization не fail'ило.
+- **§F16 wire-type asymmetry:** receive `pinDurationSeconds: long` ≠ send `pinDuration: int`. Mirror без normalization.
+- **`JsonDataMessage` extension** — 6 нових nullable fields + Payment shape-fixed. Backward-compat: envelopes без нових полів deserialize'ються correctly (default to null).
+- **Presence-based union dispatch** (CLAUDE.md critical rule #4): 7 нових branches без early-return. Multi-payload envelope emits всі applicable events.
+- **7 нових `*EventArgs` records** derive'ять `BaseSignalEventArgs`.
+- **Channel back-pressure preserved.** 7 нових bounded `Channel<T>` (capacity 1024, DropOldest); drops лічаться через existing Meter `signalcli.events.dropped{event_type=...}`.
+
+### 🛡️ Захист від регресій
+
+- **`ReceiveDecodersSerializationTests` — 9 тестів** пінять new JsonPayment shape, всі 6 нових wire records, JsonDataMessage backward-compat, presence-based union (multi-payload envelope).
+- **`EventApiSymmetryWave7bTests` — 8 reflection тестів** для 7 нових event-pairs (Observable + AsyncEnumerable matching element types).
+- **Existing RG06 EventApiSymmetryTests** auto-detects 7 нових pairs на ISignalEventService.
+
+### 📊 Тестова статистика
+
+- Unit: 486 → **503** (+17 unit тестів).
+- Integration: 12 (без змін — receive-side events потребують 2-account setup, не CI-friendly).
+- Public API baseline: 2359 → **2520** lines (+161 entries).
+- Build на src/ + Tests/: 0 warnings, 0 errors з `TreatWarningsAsErrors=true`.
+
+### 🏁 signal-cli-api-coverage epic — closure
+
+Final stats across 9 minor releases (4.1.0 → 4.9.0):
+
+| Wave | Capability | Methods | Tests |
+|---|---|---|---|
+| 1 | messaging-interactive | 4 send | +43 |
+| 2 | groups-crud | 3 | +25 |
+| 3 | contacts-identity | 9 | +29 |
+| 4 | sticker-packs + binary-resource-fetch | 6 | +29 |
+| 5 | device-management | 4 | +18 |
+| 6 | account-lifecycle (gated) | 8 destructive | +25 |
+| 7a | polls + messaging-power-user | 8 send | +15 |
+| **7b** | **receive-side decoders** | **7 events** | **+17** |
+| 8 | utility-rpc | 3 | +12 |
+
+- **JSON-RPC send-side coverage:** 9 baseline + 45 new = **54/54 = 100%**.
+- **Receive-side events:** 10 → **17** event-pair streams (RG06 паритет enforced).
+- **Tests:** 290 → **503** (+213 unit). E2E: 8 → **12** (+4 env-gated).
+- **Public API baseline:** 1087 → **2520** lines (+1433).
+- 3 typed exceptions (IdentityChanged/GroupAdminRequired/CaptchaRequired), 6 enums (GroupLinkState/GroupPermission/RemoveContactMode/TrustLevel/ReceiptType/MessageRequestResponseType), 12+ Builder patterns, env-gated TestAccountFixture, §F1-F25 anti-hallucination findings всі враховано.
+
+---
+
+## [4.8.0] — 2026-05-25
+
+Minor-реліз. 🎯 **Final wave** signal-cli-api-coverage — `ISignalAccounts` отримує 3 utility methods (registration-status lookup, rate-limit challenge submit, push contacts до linked devices). **54/54 = 100% JSON-RPC method coverage** (send-side). Backward-compatible.
+
+### ✨ Нове
+
+- **`ISignalAccounts` +3 utility methods:**
+  ```csharp
+  // GetUserStatus — registration-status check для phones/usernames (§F5 AND/OR merge)
+  var statuses = await signalAccounts.GetUserStatusAsync(account,
+      recipients: ["+380501234567"],
+      usernames: ["alice.42"]);
+  foreach (var s in statuses) {
+      // s.Number filled only for recipient-input rows; s.Username — for username rows
+      Console.WriteLine($"{s.Recipient}: registered={s.IsRegistered}, uuid={s.Uuid}");
+  }
+
+  // SubmitRateLimitChallenge — після rate-limit error solver workflow
+  // 1. Send fails з -5 RateLimit + error.data containing challenge token.
+  // 2. Open https://signalcaptchas.org/challenge/generate.html у browser, solve.
+  // 3. Submit.
+  try { await signalAccounts.SubmitRateLimitChallengeAsync(account, challengeToken, captchaToken); }
+  catch (CaptchaRequiredException) { /* captcha rejected — try again */ }
+
+  // SendContacts — push local contact list до всіх linked devices (Signal Desktop тощо)
+  // One-way push; для FETCH use SyncAccountAsync.
+  await signalAccounts.SendContactsAsync(account);
+  ```
+
+- **`JsonUserStatus` element type** — `Recipient`, optional `Number`/`Username` (discriminator per row), nullable `Uuid`, derived `IsRegistered`. Wire-quirks pinned: `number`/`username` omitted у JSON (Jackson `@JsonInclude(NON_NULL)`); `uuid` always present (JSON `null` для unregistered).
+
+### 🛠 Інше
+
+- **§F5 AND/OR merge:** обидва `recipients` AND `usernames` параметри опційні; обидва можуть бути non-null одночасно — upstream merges entries у одну response array. Empty + empty → empty `GetUserStatusResponse` (не error).
+
+- **§F24 SubmitRateLimitChallenge → `CaptchaRequiredException`.** Code `-6` (CaptchaRejected) уже dispatch'иться через `JsonRpcClient` з Wave 1; consumer catches typed exception.
+
+- **§F25 Empty `{}` responses** для `SubmitRateLimitChallenge` + `SendContacts` — service-методи повертають `Task` (не `Task<T>`), використовуючи `JsonElement` як pass-through. Upstream emit'ить literal `{}` per `SignalJsonRpcCommandHandler.java:281` — НЕ `null`.
+
+- **`SendContactsAsync` — one-way push.** Документує inverse-direction від `SyncAccountAsync` (який FETCH'ить). Consumers easily confuse — XMLDoc explicit warning.
+
+- **Wave-8 methods — NOT destructive.** Працюють із default `EnableDestructiveOperations = false`. Lookup-style operations не потребують opt-in.
+
+- **SignalAccountsLog** +3 [LoggerMessage] у block **879-881** (within shared 800-899). Privacy: жодних phone/username/challenge-token у Information+ шаблонах.
+
+### 🛡️ Захист від регресій
+
+- **`UtilityRpcSerializationTests` — 5 тестів** пінять wire-shape: GetUserStatusResponse flat-array deserialization (mix recipient + username + unregistered rows), empty-array case, GetUserStatusParameters two-list shape, SubmitRateLimitChallengeParameters 3-field shape, SendContactsParameters only-account-field invariant.
+
+- **`SignalAccountsUtilityTests` — 7 service-level тестів:** GetUserStatus works з default options (non-destructive), arg-validation для empty account/challenge/captcha, RPC dispatch для всіх 3-х методів.
+
+- **`SignalCliE2EUtilityRpcTests.GetUserStatus_Self_ReturnsRegistered`** — env-gated E2E проти живого signal-cli. Pin'ить що registered account повертає self як `IsRegistered=true` з non-null UUID.
+
+### 📊 Тестова статистика
+
+- Unit: 474 → **486** (+12 unit тестів).
+- Integration: 11 → **12** (+1 env-gated E2E GetUserStatus).
+- Public API baseline: 2300 → ~2400 lines (+~100 entries: 3 methods + 6 DTOs + 1 wrapper-record).
+- Build на src/ + Tests/: 0 warnings, 0 errors з `TreatWarningsAsErrors=true`.
+
+### 📦 Coverage progress — 🎯 GOAL REACHED
+
+9 + 4 + 3 + 9 + 6 + 4 + 8 + 8 + 3 = **54 з ~54 = 100%** signal-cli JSON-RPC API send-side coverage.
+
+**Open work:**
+- **Wave 7b** (receive-side event decoders для PollCreate/Vote/Terminate/Payment/Pin/Unpin/AdminDelete events) — deferred per Wave 7a scope decision. SignalEventService dispatch refactor + 7 нових event-streams + RG06 update. **4.7.1 patch release** коли затребувано.
+- **`receive` polling RPC** — застаріле; `subscribeReceive` (event-driven) є кращою альтернативою. Залишається out-of-scope (proposal §Out of scope).
+
+---
+
+## [4.7.0] — 2026-05-25
+
+Minor-реліз. **`ISignalMessage` отримує 8 нових power-user methods** (polls, admin-delete, pin/unpin, message-request response, payment notification). Send-side only — receive-side decoders для PollCreate/Vote/Terminate/Pin/Unpin/AdminDelete/Payment events deferred to **Wave 7b → 4.7.1** (бо вимагають SignalEventService dispatch refactor + 7 нових event-streams + RG06 update). Backward-compatible.
+
+### ✨ Нове
+
+- **`ISignalMessage` +8 методів:**
+  ```csharp
+  // Polls (§F15 validation 2-10 options ≤100 chars, §F21 polarity, §F22 zero-based indexes)
+  var poll = await signalMessage.SendPollCreateAsync(
+      new SendPollCreateOptions.Builder(account, "Best framework?", ["React", "Vue", "Svelte"])
+          .WithRecipients(["+380..."]).WithAllowMultipleVotes(false).Build());
+  // ... later, vote on it ...
+  await signalMessage.SendPollVoteAsync(
+      new SendPollVoteOptions.Builder(account, pollTimestamp: poll.TimeStamp, voteCount: 1)
+          .WithRecipients(["+380..."]).WithOptionIndexes([0, 2]).Build());
+  // ... finally terminate ...
+  await signalMessage.SendPollTerminateAsync(
+      new SendPollTerminateOptions.Builder(account, poll.TimeStamp).WithRecipients(["+380..."]).Build());
+
+  // Group admin-delete (group-only operation)
+  await signalMessage.SendAdminDeleteAsync(
+      new SendAdminDeleteOptions.Builder(account, targetAuthor: "+offender", targetTimestamp: 100L, groupIds: ["g=="]).Build());
+
+  // Pin / Unpin (§F23 PinDurationSeconds=-1 sentinel = forever)
+  await signalMessage.SendPinMessageAsync(
+      new SendPinMessageOptions.Builder(account, targetAuthor: "+author", targetTimestamp: 100L)
+          .WithGroupIds(["g=="]).WithPinDurationSeconds(3600).Build());
+  await signalMessage.SendUnpinMessageAsync(
+      new SendUnpinMessageOptions.Builder(account, "+author", 100L).WithGroupIds(["g=="]).Build());
+
+  // Message-request response (§F2 — лише Accept/Delete on send-side)
+  await signalMessage.SendMessageRequestResponseAsync(account, MessageRequestResponseType.Accept, recipients: ["+380..."]);
+
+  // Payment notification (single recipient; base64 MobileCoin receipt)
+  await signalMessage.SendPaymentNotificationAsync(account, recipient: "+380...", receiptBase64: "abc=", note: "thanks!");
+  ```
+
+- **`MessageRequestResponseType` enum** — 2 values {Accept, Delete}. Wire — lowercase string per upstream argparse `.choices(...)`. §F2: receive-side має 8 values (UNKNOWN/ACCEPT/DELETE/BLOCK/BLOCK_AND_DELETE/UNBLOCK_AND_ACCEPT/SPAM/BLOCK_AND_SPAM), але send-side restricted до 2.
+
+### 🛠 Інше
+
+- **§F15 client-side poll validation у Builder.** PollCreate enforces 2-10 options, ≤100 chars кожен, no empty. Уникає upstream UserError за рахунок early ArgumentException.
+- **§F21 polarity:** `AllowMultipleVotes` (default `true`) maps to wire `noMulti` (inverted). .NET API mirrors internal Java API polarity, не CLI flag.
+- **§F22 zero-based int indexes** для `OptionIndexes` (vote indexes у original options[]). Empty list = clear vote.
+- **§F23 sentinel:** `PinDurationSeconds = -1` означає pin-forever. Positive — seconds до auto-unpin.
+- **§F16 wire-type asymmetry:** send-side `pinDuration: int`, receive-side `pinDurationSeconds: long`. Mirror верифіковано через research.
+- **AdminDelete — group-only** (no DM): Builder вимагає ≥1 groupId; reciever validates admin-status server-side.
+- **PaymentNotification — single recipient only** (no group/note-to-self/notify-self): `recipient: string`, не List.
+- **All 7 methods + MessageRequestResponse — reuse `SendMessageResponse`** для timestamp+results (MessageRequestResponse — void, returns nothing на wire).
+
+### 🛡️ Захист від регресій
+
+- **`PollsAndPowerUserSerializationTests` — 6 тестів** пінять wire-shape: §F21 noMulti polarity, §F22 zero-based indexes, §F23 -1 sentinel, §F2 lowercase type string, single-recipient PaymentNotification, group-only AdminDelete.
+- **`PollOptionsBuilderTests` — 9 builder тестів:** §F15 (2-10/≤100/empty validation), §F21 default polarity, §F23 default sentinel, §AdminDelete group-only enforce, happy paths.
+
+### 📊 Тестова статистика
+
+- Unit: 459 → **474** (+15 unit тестів).
+- Integration: 11 (без змін — polls/admin-delete потребують групи з ≥2 members, не CI-friendly).
+- Public API baseline: 2020 → ~2150 lines (+~130 entries: 8 methods + 14 DTOs + 1 enum).
+- Build на src/ + Tests/: 0 warnings, 0 errors з `TreatWarningsAsErrors=true`.
+
+### 📦 Coverage progress
+
+9 + 4 + 3 + 9 + 6 + 4 + 8 + 8 = **51 з ~54 = 94%** signal-cli JSON-RPC API (send-side). Залишилось: **Wave 7b** (7 receive-side decoders для PollCreate/Vote/Terminate/Payment/Pin/Unpin/AdminDelete events) + **Wave 8** utility-rpc (getUserStatus/submitRateLimitChallenge/sendContacts) до повного 98% target'у.
+
+### 📦 Why receive-side deferred до 7b
+
+Receive-side decoders для всіх 7 нових даних потребують:
+1. Расширення `JsonDataMessage` 7 nullable полями.
+2. Виправлення existing `JsonPayment(amount, currency)` → правильна wire-shape `(note, receipt: byte[])` — pre-existing bug (поле ніколи не отримувало real wire-data; speculative original).
+3. 7 нових `*EventArgs` records.
+4. Розширення `ISignalEventService` 7 IObservable + 7 IAsyncEnumerable (RG06 compliance).
+5. Розширення `SignalEventService.OnNotificationReceived` 7 dispatch-branches + 7 Subject/Channel pairs.
+6. Update RG06 (`EventApiSymmetryTests`) — 17 нових pairs замість 10.
+
+Це окрема велика capability (~10 файлів, refactor SignalEventService 682-line dispatch). Зробимо у 4.7.1 patch.
+
+---
+
+## [4.6.0] — 2026-05-25
+
+Minor-реліз. ⚠ **HIGH-RISK destructive operations** — `ISignalAccounts` отримує 8 нових методів (unregister/wipe local data/change phone number/set-remove PIN/update account/configuration), які gated за `SignalCliOptions.EnableDestructiveOperations` (default `false`). Без opt-in — `InvalidOperationException` ПЕРЕД RPC dispatch. Backward-compatible: existing `ListAccountsAsync`/`SyncAccountAsync` без змін.
+
+### ⚠ DESTRUCTIVE — opt-in required
+
+**За замовчуванням `EnableDestructiveOperations = false`. Усі 8 нових методів кидають `InvalidOperationException` з ясним повідомленням** про те, що треба opt-in. Це запобігає випадковому unregister/wipe у production'і. Щоб увімкнути:
+
+```csharp
+services.AddSignalCli(opts => {
+    opts.AppHome = ...; opts.JavaExecutable = ...;
+    opts.EnableDestructiveOperations = true;   // ⚠ після code-review
+});
+```
+
+**Дві категорії безпеки:**
+
+| Категорія | Метод | Recoverable? |
+|---|---|---|
+| 🟡 Reversible | `UpdateAccountAsync` (deviceName/discoverability/etc), `UpdateConfigurationAsync`, `SetPinAsync`, `RemovePinAsync`, `UnregisterAsync` без `deleteAccount` | Так (через re-config / re-register) |
+| 🔴 **Irreversible** | `UnregisterAsync(deleteAccount: true)`, `DeleteLocalAccountDataAsync`, `FinishChangeNumberAsync` | **Ні** |
+
+### ✨ Нове
+
+- **`ISignalAccounts` отримав 8 нових destructive methods:**
+  ```csharp
+  // 1. UpdateAccount — server-side attrs + optional username set/delete (XOR)
+  await signalAccounts.UpdateAccountAsync(
+      new UpdateAccountOptions.Builder(account)
+          .WithDeviceName("My phone")
+          .WithNumberSharing(true)  // §F3 bool, not enum
+          .WithUsername("alice.42")
+          .Build());
+
+  // 2. Unregister — reversible, OR irreversible з deleteAccount=true
+  await signalAccounts.UnregisterAsync(account, deleteAccount: false);
+
+  // 3. DeleteLocalAccountData — CANNOT BE UNDONE (wipes identity keys + sessions)
+  await signalAccounts.DeleteLocalAccountDataAsync(account, ignoreRegistered: true);
+
+  // 4-5. ChangeNumber flow (2 steps): start → wait OOB code → finish
+  await signalAccounts.StartChangeNumberAsync(
+      new StartChangeNumberOptions { Account = oldNumber, NewNumber = newNumber, Voice = false });
+  // ... отримуєш SMS код out-of-band ...
+  await signalAccounts.FinishChangeNumberAsync(
+      new FinishChangeNumberOptions { Account = oldNumber, NewNumber = newNumber, VerificationCode = "123456", Pin = "..." });
+
+  // 6. UpdateConfiguration — syncs до всіх linked devices
+  await signalAccounts.UpdateConfigurationAsync(
+      new UpdateConfigurationOptions { Account = account, ReadReceipts = false, TypingIndicators = false });
+
+  // 7. SetPin — registration-lock PIN ≥ 4 chars (client-side enforced)
+  await signalAccounts.SetPinAsync(account, "1234");
+
+  // 8. RemovePin — idempotent server-side
+  await signalAccounts.RemovePinAsync(account);
+  ```
+
+- **`SignalCliOptions.EnableDestructiveOperations: bool` (default `false`)** — opt-in для всієї wave-6 surface. Cache'ується ОДИН раз у `SignalAccounts` ctor per CLAUDE.md rule #10.
+
+### 🛠 Інше
+
+- **§F3 NumberSharing wire = `bool?`, не enum.** Upstream argparse `type(Boolean.class)`. Внутрішній Java `PhoneNumberSharingMode` enum НЕ exposed через JSON-RPC. .NET property теж `bool?`.
+
+- **§F4 StartChangeNumber.Voice = `bool` (default `false`).** Argparse `-v`/`--voice` short flag. Wire field — `"voice": bool`, не `"voice-verification"`.
+
+- **§Username/DeleteUsername XOR** у `UpdateAccountOptions.Builder` (упстрім mutex argparse-only — JSON-RPC шар приймає обидва, виконує set-then-delete). Defense-in-depth у service-методі.
+
+- **§Pin length validated client-side ≥ 4 chars.** Signal SVR rejects shorter — pre-validation дає clearer `ArgumentException` замість opaque `-3 IoError`.
+
+- **SignalAccountsLog** +9 у block **870-879** (within shared 800-899). `DestructiveOperationBlocked` (Warning), `UnregisterOk`/`DeleteLocalAccountDataOk`/`FinishChangeNumberOk`/`RemovePinOk` — Warning (action signals risk); решта Information. Privacy: жодних phone/pin/verification-code у шаблонах.
+
+- **`SignalAccounts` ctor signature change:** додано `IOptions<SignalCliOptions>` як третій параметр. DI handles it transparently; direct `new SignalAccounts(client, logger)` call-sites потребують оновлення (4 існуючих test sites виправлено у цьому коміті).
+
+### 🛡️ Захист від регресій
+
+- **`DestructiveOpsGatedTests` — 10 тестів** pin'ять opt-in contract: 8 destructive методів × default-false → InvalidOperationException + non-destructive `ListAccountsAsync` НЕ affected + `enabled=true` → RPC actually dispatches.
+
+- **`AccountLifecycleSerializationTests` — 10 тестів** пінять wire-shape: §F3 `numberSharing` як bool (НЕ string enum), §F4 `voice` як bool, OLD vs NEW phone у ChangeNumber (envelope account = OLD, body number = NEW), nullable Configuration fields, RemovePin лише з account полем.
+
+- **`AccountLifecycleOptionsTests` — 5 builder тестів** для XOR + empty-validation: Username+DeleteUsername mutex обидва напрямки, DeleteAlone-valid, empty account → throw.
+
+### 📊 Тестова статистика
+
+- Unit: 434 → **459** (+25 unit тестів).
+- Integration: 11 (без змін; destructive методи неможливо E2E без registered тестового номера + потенційний CAPTCHA — лишимо до Wave 8 retrospective).
+- Public API baseline: 1853 → ~1970 lines (+~120 entries: 16 DTOs + Options builders + 8 method signatures + EnableDestructiveOperations flag).
+- Build на src/ + Tests/: 0 warnings, 0 errors з `TreatWarningsAsErrors=true`.
+
+### 📦 Coverage progress
+
+9 + 4 + 3 + 9 + 6 + 4 + 8 = **43 з ~54 = 80%** signal-cli JSON-RPC API. Залишилось 2 wave'и (polls/power-user + receive-decoders Wave 7, utility-rpc Wave 8) до **98%** target'у.
+
+---
+
+## [4.5.0] — 2026-05-25
+
+Minor-реліз. **Якщо твій бот керує linked devices з primary signal-cli — це нарешті є.** `ISignalDevices` отримує 4 нові методи (add/list/remove/update). Доповнює існуючі `StartLink`/`FinishLink` (де signal-cli стає secondary). Backward-compatible.
+
+### ✨ Нове
+
+- **`ISignalDevices` розширено 4 методами для primary-перспективи:**
+  ```csharp
+  // Add — primary провіжнінг secondary device'а
+  await signalDevices.AddDeviceAsync(account, "sgnl://linkdevice?uuid=...&pub_key=...");
+
+  // List — server-side fetch (НЕ local-cache); §F6 — 4 поля без isThisDevice
+  var devices = await signalDevices.ListDevicesAsync(account);
+  foreach (var d in devices) {
+      Console.WriteLine($"#{d.Id} {d.Name} created={d.CreatedTimestamp} lastSeen={d.LastSeenTimestamp}");
+      // Self-identification: d.Id == 1 → primary (no isThisDevice bit on wire).
+  }
+
+  // Remove — destructive; secondary одразу втрачає capability
+  await signalDevices.RemoveDeviceAsync(account, deviceId: 2);
+
+  // Update — нова назва (encrypted server-side)
+  await signalDevices.UpdateDeviceAsync(account, deviceId: 2, deviceName: "New name");
+  ```
+  Wire-shape pinned до signal-cli source @ `bda4e7fc` per §0.5 protocol.
+
+### 🛠 Інше
+
+- **§F6 Device record — 4 fields only.** Upstream `Device` record у `manager/api/Device.java` має 5 полів (`id, name, created, lastSeen, isThisDevice`), але `JsonDevice` projection drop'ає `isThisDevice` (used лише PlainTextWriter'ом для "(this device)" annotation, не wire). На .NET — 4 поля що mirror wire. Consumer'и можуть self-determine через `Id == 1` для primary.
+
+- **§Wire-asymmetry для `deviceId`:** `Device.Id` — `long` (input-side `int` widening на JsonDevice projection); `RemoveDevice`/`UpdateDeviceParameters.DeviceId` — `int` (argparse `type(int.class)`). Mirror без normalization.
+
+- **§F12 deviceName encrypted у `updateDevice` — НЕ у Information+ логах.** Upstream шифрує `deviceName` identity-key'ом device'а перед transmission. Логи містять лише `deviceId`, не назву.
+
+- **§F11 base64 padding non-issue.** `AddDeviceAsync` — pure pass-through URI; .NET НЕ decode'ить `pub_key` фрагмент. Java `Base64.getDecoder()` lenient до padding'у, тож unpadded URI працює.
+
+- **`AddDeviceAsync` blocking.** Виконує key-exchange round-trip — секунди. Default `RequestTimeoutSeconds` витримує.
+
+### 🛡️ Захист від регресій
+
+- **`DeviceManagementSerializationTests` — 8 тестів** пінять wire-shape: §F6 (Device — рівно 4 reflection-properties без isThisDevice), §wire-asymmetry (Id=long vs DeviceId=int), nullable Name, ListDevicesResponse flat-array, AddDevice/UpdateDevice field presence.
+
+- **`SignalDevicesCrudTests` — 10 service-level тестів.** AddDevice pass-through URI verbatim, null-response → InvalidOperation, RemoveDevice negative/zero deviceId → ArgumentOutOfRangeException, UpdateDevice null deviceName → ArgumentNullException, empty deviceName allowed.
+
+- **`SignalCliE2EDevicesTests.ListDevices_ReturnsAtLeastSelf`** — env-gated E2E проти живого signal-cli. Pin'ить що registered primary account має >=1 device з id=1.
+
+### 📊 Тестова статистика
+
+- Unit: 416 → **434** (+18 unit тестів).
+- Integration: 10 → **11** (+1 env-gated E2E ListDevices).
+- Public API baseline: 1785 → **1853** lines (+68 entries).
+- Build на src/ + Tests/: 0 warnings, 0 errors з `TreatWarningsAsErrors=true`.
+
+### 📦 Coverage progress
+
+9 + 4 + 3 + 9 + 6 + 4 = **35 з ~54 = 65%** signal-cli JSON-RPC API. Залишилось 3 wave'и (account-lifecycle opt-in, polls/power-user, utility-rpc) до **98%** target'у.
+
+---
+
+## [4.4.0] — 2026-05-25
+
+Minor-реліз. **Якщо твій бот хоче читати attachments / avatars / sticker bytes з кешу signal-cli або деплоїти sticker pack'и — це нарешті є.** 2 нові interfaces (`ISignalStickers` + `ISignalResources`) з 6 RPC методами. Усі read-only (крім sticker upload/install). Backward-compatible.
+
+### ✨ Нове
+
+- **`ISignalStickers` — 3 методи для роботи зі sticker pack'ами:**
+  ```csharp
+  // Upload pack з manifest.json або .zip на daemon-side ФС → отримуєш URL
+  var upload = await signalStickers.UploadStickerPackAsync(account, "/srv/signal/my-pack.zip");
+  Console.WriteLine(upload.Url);  // https://signal.art/addstickers/#pack_id=...&pack_key=...
+
+  // List усіх відомих pack'ів (installed + seen via incoming sync)
+  var packs = await signalStickers.ListStickerPacksAsync(account);
+  foreach (var pack in packs) {
+      Console.WriteLine($"{pack.Title} by {pack.Author} ({pack.Stickers.Count} stickers)");
+  }
+
+  // Install (один або кілька pack'ів за один виклик)
+  await signalStickers.AddStickerPackAsync(account, [upload.Url, "https://signal.art/#..."]);
+  ```
+
+- **`ISignalResources` — 3 read-only методи що повертають raw `byte[]`** (декодовані з base64 wire-shape):
+  ```csharp
+  // Attachment з incoming message (потрібен Id з DataMessage.Attachments[].Id)
+  byte[] attachmentBytes = await signalResources.GetAttachmentAsync(account, attachmentId);
+
+  // Avatar — §F19 3-way XOR enforced у Builder
+  byte[] avatarBytes = await signalResources.GetAvatarAsync(
+      new GetAvatarOptions.Builder(account)
+          .WithContact("+380...")  // OR .WithProfile("+380...") OR .WithGroupId("g==")
+          .Build());
+
+  // Sticker (потрібен packId 32-char hex + 0-based stickerId)
+  byte[] stickerBytes = await signalResources.GetStickerAsync(account, "abcdef0123456789abcdef0123456789", stickerId: 0);
+  ```
+
+### 🛠 Інше
+
+- **§F19 GetAvatar 3-way XOR enforced у Builder + defense-in-depth service.** Upstream argparse mutex group `.required(true)` enforce'иться на argparse-рівні (CLI), а на JSON-RPC шарі НЕ enforce'иться — silent first-wins. Наш Builder валідує client-side; service-метод робить додатковий guard на випадок прямої record-construction.
+
+- **Client-side hex-validation у `GetStickerAsync`.** Upstream `Hex.toByteArray` на malformed hex кидає uncaught IOException → `-32603 INTERNAL_ERROR` (без діагностики). Service-метод pre-validates 32-char lowercase-hex і кидає чіткий `ArgumentException`.
+
+- **Invalid-base64 → `InvalidOperationException` (not raw `FormatException`).** Якщо upstream повернув payload що не декодується — clear diagnostic message з method-name (`getAttachment`/`getAvatar`/`getSticker`). Це protocol-drift, не user-input error; ловиться окремо від argument validation.
+
+- **`AddStickerPackAsync` приймає `IEnumerable<string>` URI list.** Upstream argparse `nargs("+")` дозволяє кілька URL за виклик. Caveat: upstream aborts на першому failure без rollback'у вже-installed packs — partial-application можлива.
+
+- **`uploadStickerPack` повертає лише URL (не raw packId+packKey).** Upstream collapse'ує `StickerPackUrl(packId, packKey)` у URL-string. Для raw bytes потрібно парсити URL fragment самостійно — це upstream-quirk.
+
+- **Receive-side sticker-pack-install events НЕ surface'яться** (per research §F1, `proposal.md` "Out of scope"). Upstream silently auto-installs у `IncomingMessageHandler.java:659-672` без bubble'у до `JsonSyncMessage`. Якщо consumer попросить — буде окремий OpenSpec change.
+
+### 🛡️ Захист від регресій
+
+- **`StickersAndResourcesSerializationTests` — 7 тестів** пінять wire-shape: flat `{url}` для UploadStickerPackResponse, JsonStickerPack title/author empty-string default, JsonAttachmentData envelope shape, GetAvatarParameters XOR null-fields, GetSticker int stickerId.
+
+- **`SignalStickersTests` (4) + `SignalResourcesTests` (10) + `GetAvatarOptionsTests` (7) = 21 тестів.** Включає invalid-base64 contract, hex-pack-id validation (length/case/charset), §F19 XOR-defense-in-depth.
+
+- **`EventIdBlockTests` extended** — додано `[typeof(SignalStickersLog), 800, 899]` + `[typeof(SignalResourcesLog), 800, 899]` (Stickers займає 850-859, Resources — 860-869 within shared 800-899).
+
+### 📊 Тестова статистика
+
+- Unit: 387 → **416** (+29 unit тестів — Wave 4 закрив усі XOR/base64/hex edge-cases).
+- Integration: 10 (без змін; sticker-pack upload потребує мережі + Signal account, не CI-friendly).
+- Public API baseline: 1642 → ~1830 lines (+~190 entries: 2 interfaces × 3 methods + Options-builder + 11 DTOs).
+- Build на src/ + Tests/: 0 warnings, 0 errors з `TreatWarningsAsErrors=true`.
+
+### 📦 Coverage progress
+
+9 + 4 + 3 + 9 + 6 = **31 з ~54 = 57%** signal-cli JSON-RPC API. Залишилось 4 wave'и (device-management, account-lifecycle opt-in, polls/power-user, utility-rpc) до target'у **98%** у 4.8.0.
+
+---
+
+## [4.3.0] — 2026-05-25
+
+Minor-реліз. **Якщо твій бот колись хотів читати контакти, керувати identity-trust або blocklist'ом з .NET — це нарешті є.** Новий `ISignalContacts` interface (8 RPC методів signal-cli) + перший env-gated E2E test проти реального signal-cli. Backward-compatible — інші 4 facades (Message/Groups/Devices/Accounts) без змін.
+
+### ✨ Нове
+
+- **`ISignalContacts` — новий interface з 9 методами** (Trust розщеплено на два type-safe API).
+  ```csharp
+  // Read contacts і identities
+  var contacts = await signalContacts.ListContactsAsync(account, includeInternal: true);
+  var identities = await signalContacts.ListIdentitiesAsync(account);
+
+  // Trust identity (production path — safety-number verification)
+  await signalContacts.TrustVerifiedAsync(account, "+380...", "12345 67890 ...");
+  // Trust identity (testing path — all known keys)
+  await signalContacts.TrustAllKnownKeysAsync(account, "+380...");
+
+  // Update contact metadata
+  await signalContacts.UpdateContactAsync(
+      new UpdateContactOptions.Builder(account, "+380...")
+          .WithGivenName("Foo").WithFamilyName("Bar")
+          .WithNote("VIP customer")
+          .Build());
+
+  // Remove contact (3 distinct modes — §F9 XOR enforced through enum)
+  await signalContacts.RemoveContactAsync(account, "+380...", RemoveContactMode.Hide);
+
+  // Update own profile (§F18 AvatarPath/RemoveAvatar XOR enforced у Builder)
+  await signalContacts.UpdateProfileAsync(
+      new UpdateProfileOptions.Builder(account)
+          .WithGivenName("Test")
+          .WithAvatarPath("/local/path/avatar.jpg")  // OR .WithRemoveAvatar() — not both
+          .Build());
+
+  // Block/Unblock
+  await signalContacts.BlockAsync(account, recipients: ["+380..."], groupIds: ["g=="]);
+  await signalContacts.UnblockAsync(account, recipients: ["+380..."]);
+  ```
+  Wire-shape для всіх 8 методів pinned до signal-cli source @ `bda4e7fc` per §0.5 protocol; XMLDoc на кожному методі цитує `org.asamk.signal.commands.<X>Command.java`. *([signal-cli-api-coverage](openspec/changes/signal-cli-api-coverage/proposal.md), `contacts-identity` capability)*
+
+- **2 нові enum типи:**
+  - `TrustLevel { Untrusted, TrustedUnverified, TrustedVerified }` — wire UPPER_SNAKE (`"TRUSTED_VERIFIED"`).
+  - `RemoveContactMode { DeleteContact, Hide, Forget }` — type-safe alternative до upstream's two-boolean XOR (§F9).
+
+- **Wire-DTOs:** `JsonContact` (+ nested `JsonContactProfile`/`JsonContactInternal`), `JsonIdentity`, 8 `*Parameters` types + `ListContactsResponse`/`ListIdentitiesResponse` wrapper-records (flat-array converter pattern as `ListAccountsResponse`).
+
+- **`TestAccountFixture` (Integration project)** + перший env-gated E2E (`SignalCliE2EContactsTests`). Виставляєш `SIGNALCLI_TEST_ACCOUNT="+1234567890"` (E.164 номер уже-registered тестового акаунту через signal-cli CLI), тест запускається проти живого daemon'у; без env var — clean skip без CI-failure.
+
+### 🛠 Інше
+
+- **§F9 RemoveContact XOR enforced через enum.** Upstream argparse mutex group НЕ enforce'иться у JSON-RPC; обидва прапори `hide=true&forget=true` upstream приймає silently → hide-first-wins. Наш `RemoveContactMode` enum мапиться у valid XOR booleans перед wire — consumer не може випадково послати ambiguous payload.
+
+- **§F18 UpdateProfile XOR enforced у Builder + defense-in-depth у service.** `UpdateProfileOptions.Builder.WithAvatarPath()` + `WithRemoveAvatar()` mutex check одне-проти-одного на builder-level; `SignalContacts.UpdateProfileAsync` додатково guards для direct-record-construction (минаючи Builder).
+
+- **Void RPC методи (Trust*/UpdateContact/RemoveContact/UpdateProfile/Block/Unblock) використовують `JsonElement` як response-type** бо signal-cli emit'ить `"result": null` для void commands. JsonElement deserializer приймає null без exception (на відміну від reference-typed responses де `typedResult is null` → throw). Service-методи повертають `Task` (не `Task<T>`).
+
+- **`SignalContactsLog` block 830-849** (within shared 800-899 з Accounts/Devices/Groups). `EventIdBlockTests` (RG02) extended з reservation `[typeof(SignalContactsLog), 800, 899]`.
+
+- **Trust split: одне signal-cli RPC `trust`, два .NET methods.** `TrustVerifiedAsync(verifiedSafetyNumber)` + `TrustAllKnownKeysAsync()`. XOR mutex enforced через окремі API замість optional-parameter-on-one-method-with-runtime-validation. Consumer не може помилково передати обидва.
+
+### 🛡️ Захист від регресій
+
+- **`ContactsSerializationTests` — 9 тестів** пінять wire-shape: TrustLevel UPPER_SNAKE на wire, JsonContact field-naming quirks (`nickGivenName` shortening from `nickNameGivenName`, `discoverableByPhonenumber` upstream typo preserved), Internal sub-object presence (request `internal=true` → present; absent inakше), Block/Unblock identical shape.
+
+- **`SignalContactsTests` — 10 service-level тестів** (5 happy path + 1 Theory з 3 RemoveContactMode cases + 1 XOR defense-in-depth + 3 arg validation). Pins enum→XOR mapping та Trust-split contract.
+
+- **`UpdateContactOptionsTests` + `UpdateProfileOptionsTests` — 10 builder тестів.** Включає §F18 XOR-on-Builder для UpdateProfile (path→remove throws; remove→path throws; alone-валідні).
+
+- **`EventIdBlockTests` extended** — додано `[typeof(SignalContactsLog), 800, 899]`.
+
+### 📊 Тестова статистика
+
+- Unit: 358 → **387** (+29 unit тестів).
+- Integration: 8 → **10** (+2 env-gated E2E; skip clean на CI без registered акаунту).
+- Public API baseline: 1375 → ~1700 lines (+~325 entries — велика expansion бо новий interface + nested record types + 2 enums).
+- Build на src/ + Tests/: 0 warnings, 0 errors з `TreatWarningsAsErrors=true`.
+
+### 📦 Що в Wave 3 / що далі
+
+Після Wave 3: **9 + 4 + 3 + 9 = 25 з ~54 = 46%** signal-cli JSON-RPC покрито. Залишилось 5 wave'ів (sticker-packs/binary-resource-fetch, device-management, account-lifecycle opt-in, polls/power-user, utility-rpc) до target'у **98%** у 4.8.0.
+
+---
+
+## [4.2.0] — 2026-05-25
+
+Minor-реліз. **Якщо тобі треба з .NET керувати членством у Signal-групах — приєднуватися, оновлювати, виходити — тепер це нативно у бібліотеці.** 3 нові методи на `ISignalGroups`. Backward-compatible — `ListGroupsAsync` без змін.
+
+### ✨ Нове
+
+- **`ISignalGroups` отримав 3 нові методи: `JoinGroupAsync`, `UpdateGroupAsync`, `QuitGroupAsync`.** Wire-shape pinned до signal-cli source @ `bda4e7fc` (читали Java records напряму, §0.5 anti-hallucination protocol).
+  ```csharp
+  // Join за invitation-посиланням
+  var join = await signalGroups.JoinGroupAsync("+380...", "https://signal.group/#CjQK...");
+  if (join.OnlyRequested == true) { /* pending admin approval */ }
+
+  // Create-OR-update (§F14 dual-mode — те саме API)
+  var update = await signalGroups.UpdateGroupAsync(
+      new UpdateGroupOptions.Builder("+380...")
+          .WithGroupId("base64==")    // omit → CREATE-then-update
+          .WithName("New name")
+          .WithMembers(["+380999..."])
+          .WithLinkState(GroupLinkState.EnabledWithApproval)
+          .WithPermissionAddMember(GroupPermission.OnlyAdmins)
+          .Build());
+  if (update.GroupId is { } newId) { /* щойно створили групу newId */ }
+
+  // Idempotent quit (§F8): якщо вже не member — success-no-op без винятку
+  var quit = await signalGroups.QuitGroupAsync("+380...", "base64==", deleteLocally: true);
+  if (quit.WasAlreadyNotMember) { /* нічого не робили — це OK */ }
+  ```
+
+- **2 нові wire-enum типи: `GroupLinkState`** (Enabled / EnabledWithApproval / Disabled) **і `GroupPermission`** (EveryMember / OnlyAdmins). Mapping .NET PascalCase → kebab-case wire string відбувається у сервісі (`SignalGroups.ToWireLinkState`/`ToWirePermission`); DTO передає `string?` поля що читаються upstream'ом argparse'ом.
+
+### 🛠 Інше
+
+- **§F14 dual-mode `UpdateGroupAsync`.** Один і той самий метод — і create і update. Якщо `Options.GroupId == null` — upstream викликає `createGroup(name, members, avatar)` ПЕРШИМ, далі `updateGroup(...)` з рештою полів. У відповіді `UpdateGroupResponse.GroupId` присутній ТІЛЬКИ на create-path (іначе `null`). XMLDoc на методі чітко документує цю двозначність — consumer бачить її у IDE.
+
+- **§F8 idempotent `QuitGroupAsync` per CLAUDE.md rule #14.** Upstream silently catches `NotAGroupMemberException` і повертає `{}`. У .NET це деsеріалізується як `QuitGroupResponse` з обома полями `null`, а зручний `WasAlreadyNotMember` property повертає `true`. Consumer не отримує винятку — `quit на групі де ти не member` — це OK.
+
+- **§F13 dimorphic `JoinGroupResponse.OnlyRequested: bool?`.** `null` = direct join (full member), `true` = pending admin approval. Wire ніколи не повертає `false` — це специфіка upstream `Map.of(...)` branches у `JoinGroupCommand.java:61-76`. Тип nullable обов'язково — `bool` тут було б брехнею.
+
+- **`QuitGroupAsync` параметр `delete` перейменовано на `deleteLocally`** (CA1716 — `delete` collides з C++ reserved keyword, погіршує consumer interop). Wire-field залишається `"delete"` через `[JsonPropertyName]`.
+
+### 🛡️ Захист від регресій
+
+- **`GroupsCrudSerializationTests` — 9 тестів** пінять wire-shape: camelCase param fields (`groupId`/`removeMembers`/`setPermissionAddMember`), kebab-case enum values на wire (`"enabled-with-approval"`/`"only-admins"`), dimorphic `OnlyRequested`-absent-not-false, dimorphic `GroupId`-present-only-on-create, idempotent `{}` deserializes у QuitGroupResponse без помилки.
+
+- **`SignalGroupsCrudTests` — 9 service-level тестів** з Moq: parameters mapping, enum→kebab пер LinkState/PermissionAddMember, §F14 create vs update path, §F8 idempotent NotAGroupMember не кидає виняток (CLAUDE.md rule #14), arg validation.
+
+- **`UpdateGroupOptionsTests` — 5 builder тестів:** happy path, no-groupId-is-valid (create-mode), required-account, negative-expiration rejected, expiration-zero-allowed.
+
+### 📊 Тестова статистика
+
+- Unit: 333 → **358** (+25 тести).
+- Integration: 8 (без змін; усі mock-only за wave-2 ризик-планом).
+- Public API baseline: 1239 → ~1380 lines (+enums, +Options-builder, +3 method signatures).
+- Build на src/ + Tests/: 0 warnings, 0 errors з `TreatWarningsAsErrors=true`.
+
+---
+
+## [4.1.0] — 2026-05-25
+
+Minor-реліз. **Якщо твій бот колись хотів зробити "👍 read + typing-indicator + remote-delete" без shell'у в signal-cli CLI — тепер це нативно у бібліотеці.** 4 нові send-методи на `ISignalMessage` + 3 typed exceptions для consumer-actionable error-codes. Backward-compatible — жодних змін до існуючих send-методів, тестів чи DI-композиції.
+
+### ✨ Нове
+
+- **`ISignalMessage` отримав 4 нові методи: `SendReactionAsync`, `SendReceiptAsync`, `SendTypingAsync`, `SendRemoteDeleteAsync`.** Кожен — тонкий typed wrapper навколо відповідного signal-cli RPC (`sendReaction` / `sendReceipt` / `sendTyping` / `remoteDelete`). Builder-style options:
+  ```csharp
+  await signalMessage.SendReactionAsync(
+      new ReactionOptions.Builder("+380...", "👍", targetTimestamp: 1717181920000L)
+          .WithRecipients(["+380999..."])
+          .WithNotifySelf()
+          .Build());
+  ```
+  Wire-shape, field names, enum values, error codes pinned до signal-cli source @ `bda4e7fc` (читали Java records напряму, не вгадували) — кожен новий метод цитує `org.asamk.signal.commands.<X>Command.java` у XMLDoc remarks для re-verify на 1 хв. *([signal-cli-api-coverage](openspec/changes/signal-cli-api-coverage/proposal.md), `messaging-interactive` capability)*
+
+- **3 нові typed exceptions для consumer-actionable patterns:**
+  - `IdentityChangedException : UntrustedIdentityException` — opt-in subset для розрізнення "re-install уже відомого контакту" vs "first-contact untrusted" (upstream signal-cli обидва кидає кодом `-4`; розрізнення — client-side concern, готується для Wave 3 `ISignalContacts`).
+  - `GroupAdminRequiredException : JsonRpcException` — code `-1` (UserError) з message-substring "admin". Дозволяє `catch (GroupAdminRequiredException) { /* escalate */ }` замість inspect-message-text по локалізованих рядках.
+  - `CaptchaRequiredException : JsonRpcException` — code `-6` (CaptchaRejected). XMLDoc лінкує consumer flow через signalcaptchas.org → token → submitRateLimitChallenge (Wave 8).
+  - `JsonRpcClient` dispatch switch розширено: автоматично кидає правильний derived-тип за кодом+message.
+
+### 🛠 Інше
+
+- **`UntrustedIdentityException` тепер `un-sealed`.** Потрібно для derivation `IdentityChangedException`. Чисто-additive change: existing `catch (UntrustedIdentityException)` працює без змін; new `catch (IdentityChangedException)` працює як строгіший subset.
+
+- **Wave-cycle прецедент: всі 4 нові методи перевикористовують існуючий `SendMessageResponse`** замість додавання 4-х майже-ідентичних response-типів. Research §0.5 (читання `SendMessageResultUtils.java @ bda4e7fc`) підтвердило: wire shape `{ timestamp, results }` ідентичний для усіх 4-х. Уникнено boilerplate × 4.
+
+### 🛡️ Захист від регресій
+
+- **`MessagingInteractiveSerializationTests` — 8 тестів пінять kebab-case wire-shape** (`note-to-self`, `target-author`, `target-timestamp`, `group-id`, `recipient` як singular для receipt'у, `stop` як boolean для typing). Уся wire-shape парситься через `JsonDocument` field-by-field (не raw substring), тож тести не chrupkі до STJ-encoder defaults.
+- **`SignalMessageInteractiveTests` — 8 service-level тестів** з Moq pinning'ом method-name → RPC-method, Options → Parameters mapping, derived-exception propagation, null-response гарду.
+- **`InteractiveOptionsTests` — 18 builder + validation тестів** для 4-х Options-типів. Покриті: обов'язкові поля, "хоча б один recipient-source" guard, default values (Type=Read, Stop=false), §F7 singular-Recipient invariant.
+- **`NewTypedRpcErrorsTests` — 9 тестів** на inheritance-контракти (`IdentityChangedException : UntrustedIdentityException : JsonRpcException`), sealed-маркер, та реальний dispatch через `JsonRpcClient.ProcessMessageAsync` для кодів `-6`/`-1+admin`/`-1 plain`.
+
+### 📊 Тестова статистика
+
+- Unit: 290 → **333** (+43 тести).
+- Integration: 8 (без змін; усі mock-only за wave-1 ризик-планом).
+- Build на src/ + Tests/: 0 warnings, 0 errors з `TreatWarningsAsErrors=true`.
+
+### 📦 Що в Wave 1 / що в наступних wave'ах
+
+| Wave | Capability | RPC методи | Release | Risk |
+|---|---|---|---|---|
+| **1** | **`messaging-interactive`** | **sendReaction, sendReceipt, sendTyping, remoteDelete** | **4.1.0 (цей реліз)** | low |
+| 2 | `groups-crud` | joinGroup, updateGroup, quitGroup | 4.2.0 (next) | medium |
+| 3 | `contacts-identity` | listContacts, listIdentities, trust, updateContact, removeContact, updateProfile, block, unblock | 4.3.0 | low |
+| 4 | `sticker-packs` + `binary-resource-fetch` | upload/list/addStickerPack, get{Attachment,Avatar,Sticker} | 4.4.0 | low |
+| 5 | `device-management` | add/list/remove/updateDevice | 4.5.0 | medium |
+| 6 | `account-lifecycle` *(opt-in gated)* | 8 destructive методів | 4.6.0 | HIGH |
+| 7 | `polls` + `messaging-power-user` + receive-decoders | 8 send + 7 receive event-streams | 4.7.0 | medium |
+| 8 | `utility-rpc` | getUserStatus, submitRateLimitChallenge, sendContacts | 4.8.0 | low |
+
+Target після Wave 8: **53/54 = 98% coverage** signal-cli JSON-RPC surface (єдиний пропущений — `receive` polling, бо `subscribeReceive` є його кращою альтернативою).
+
+---
+
 ## [4.0.3] — 2026-05-25
 
 Patch-реліз. **Нульовий impact на consumer'ів — це чисто developer/agent ergonomics**:

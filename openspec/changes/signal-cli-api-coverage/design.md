@@ -304,13 +304,13 @@ CI на public runners (без registered тестового номера) пр�
 - Wave 1: +12 unit + 0 E2E (всі mutating)
 - Wave 2: +9 unit + 0 E2E
 - Wave 3: +24 unit + 2 E2E (listContacts, listIdentities)
-- Wave 4: +18 unit + 0 E2E
+- Wave 4: +15 unit + 0 E2E *(was +18 before `sticker-pack-install` event decoder removal — see `research/SUMMARY.md` §F1)*
 - Wave 5: +12 unit + 1 E2E (listDevices)
 - Wave 6: +24 unit + 0 E2E + opt-in-flag tests
 - Wave 7: +24 unit + 0 E2E
 - Wave 8: +9 unit + 1 E2E (getUserStatus)
 
-**Total: +132 unit + 4 E2E**. Поточна планка 287 → ~419 unit; E2E 2 → 6.
+**Total: +129 unit + 4 E2E** *(was +132 — Wave 4 lost 3 tests after `sticker-pack-install` event decoder drop, see §F1)*. Поточна планка 290 → ~419 unit; E2E 2 → 6.
 
 ### 1.9 Receive-side event decoding — sourced from signal-cli's Java records
 
@@ -328,8 +328,8 @@ signal-cli `master` branch (verified at 2026-05-25) ships stable Jackson Java re
 | `JsonPinMessage.java` | `JsonPinMessage` (new) | pin-message event |
 | `JsonUnpinMessage.java` | `JsonUnpinMessage` (new) | unpin-message event |
 | `JsonAdminDelete.java` | `JsonAdminDelete` (new) | admin-delete event |
-| `JsonSyncMessage.java` *(extended sticker-pack-operation field)* | extend existing `JsonSyncMessage` | sticker-pack-install sync event |
-| `JsonSyncMessage.sentMessage` *(message-request-response sub-field)* | extend existing | message-request-response sync event |
+
+> **2026-05-25 research correction** (see `research/SUMMARY.md` §F1, §F2): `JsonSyncMessage.java @ bda4e7fc` has no `stickerPackOperations` field, and `messageRequestResponse` sync-event uses an 8-value enum while the send-side Wave-7 enum has 2. Both sync-side rows previously listed here are **moved out of scope** — see `proposal.md` "Out of scope". Below table currently reflects 7 data-message decoders only; Wave 4 ships zero receive-side decoders.
 
 **`Envelope.cs` extension shape** (Wave 7 — додає 7 nullable record fields у `JsonDataMessage`):
 
@@ -363,7 +363,7 @@ IAsyncEnumerable<PollVoteEventArgs> PollVotesAsync(CancellationToken ct = defaul
 // ... etc ...
 ```
 
-**Wave 4 окремо** — додає `IObservable<StickerPackInstallEventArgs> StickerPackInstalls` + `StickerPackInstallsAsync` через extension `JsonSyncMessage.StickerPackOperations: IReadOnlyList<JsonStickerPackOperation>?`.
+~~**Wave 4 окремо** — додає `IObservable<StickerPackInstallEventArgs> StickerPackInstalls` + `StickerPackInstallsAsync` через extension `JsonSyncMessage.StickerPackOperations: IReadOnlyList<JsonStickerPackOperation>?`.~~ **Removed 2026-05-25** — `JsonSyncMessage.java @ bda4e7fc` has no such field; upstream silently auto-installs without bubbling to JSON-RPC layer. See `proposal.md` "Out of scope" + `research/SUMMARY.md` §F1. Wave 4 ships ONLY 6 send-side methods (sticker/binary-fetch), zero receive-side decoders.
 
 **`SignalEventService.DispatchDataMessage` extension** — додає 7 нових `if`-emissions у same presence-based union pattern (critical rule #4: `DataMessage` — presence-based union; жодного early `return` між payload checks; кожен payload emit'ить і IObservable і paired Channel):
 
@@ -573,7 +573,7 @@ public interface ISignalMessage
 }
 ```
 
-Builder pattern для `PollCreateOptions` (question + 2-10 options + allow-multiple-votes). `MessageRequestResponseOptions` має enum `MessageRequestResponseType { Accept, Delete, Block, BlockAndDelete, Unblock }`.
+Builder pattern для `PollCreateOptions` (question + 2-10 options + allow-multiple-votes). `MessageRequestResponseOptions` має enum `MessageRequestResponseType { Accept, Delete }` — **тільки 2 values** на send-side per upstream `src/main/java/org/asamk/signal/commands/MessageRequestResponseType.java @ bda4e7fc`. Receive-side sync-message decoding використовує окремий 8-value enum (`MessageEnvelope.Sync.MessageRequestResponse.Type`), але receive-side `messageRequestResponse` event декодер винесено у "Out of scope" (`proposal.md` + `research/SUMMARY.md` §F2). Якщо знадобиться — окремий OpenSpec change з 8-value `MessageRequestResponseSyncType`.
 
 ### Wave 8 — `utility-rpc` (4.8.0)
 
@@ -590,7 +590,7 @@ public interface ISignalAccounts
 }
 ```
 
-`GetUserStatusOptions` — list of phone numbers OR usernames, returns per-recipient `Registered: bool` map. Safe для E2E (read-only).
+`GetUserStatusOptions` — list of phone numbers AND/OR usernames (NOT mutually exclusive — upstream `GetUserStatusCommand.java:66-81 @ bda4e7fc` merges both arrays via `Stream.concat` and returns one `JsonUserStatus` row per input, tagged by `recipient`/`username` field). Response is `IReadOnlyList<UserStatusEntry>` where each entry has `Recipient`, `Number?`, `Username?`, `Uuid?`, `IsRegistered: bool` (derived as `Uuid != null`). Safe для E2E (read-only). See `research/wave-8-utility-rpc.md` for full wire shape + `research/SUMMARY.md` §F5.
 
 ## 3. Edge cases + open questions
 

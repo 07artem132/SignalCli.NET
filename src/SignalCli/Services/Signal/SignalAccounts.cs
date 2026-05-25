@@ -1,7 +1,11 @@
+using System.Runtime.CompilerServices;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SignalCli.Interfaces.Signal;
 using SignalCli.Interfaces.SignalCli;
 using SignalCli.Logging;
+using SignalCli.Models;
 using SignalCli.Models.Signal.Accounts;
 using SignalCli.Serialization;
 
@@ -9,13 +13,19 @@ namespace SignalCli.Services.Signal;
 
 // A.13: IDisposable прибрано — клас не тримає жодних ресурсів, порожній Dispose() лише плутав.
 // post-modernize-tuning §8c.14 (audit N17): sealed — інхеріт не підтримується.
+//
+// signal-cli-api-coverage Wave 6: + IOptions<SignalCliOptions> для destructive-ops gate.
+// _destructiveOpsEnabled читається ОДИН раз у ctor per CLAUDE.md rule #10.
 internal sealed class SignalAccounts(
     ISignalCliClient signalCliClient,
-    ILogger<SignalAccounts> logger)
+    ILogger<SignalAccounts> logger,
+    IOptions<SignalCliOptions> options)
     : ISignalAccounts
 {
     private readonly ISignalCliClient _signalCliClient = signalCliClient ?? throw new ArgumentNullException(nameof(signalCliClient));
     private readonly ILogger<SignalAccounts> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    private readonly bool _destructiveOpsEnabled =
+        (options ?? throw new ArgumentNullException(nameof(options))).Value.EnableDestructiveOperations;
 
     public async Task<ListAccountsResponse> ListAccountsAsync(CancellationToken cancellationToken = default)
     {
@@ -78,4 +88,257 @@ internal sealed class SignalAccounts(
         return response;
     }
 
+    // ===== signal-cli-api-coverage Wave 6 (account-lifecycle, DESTRUCTIVE, opt-in gated) =====
+
+    /// <summary>
+    /// Гейтер для всіх destructive-методів. Кидає <see cref="InvalidOperationException"/> ПЕРЕД
+    /// RPC-dispatch якщо <see cref="SignalCliOptions.EnableDestructiveOperations"/> = false.
+    /// </summary>
+    private void EnsureDestructiveAllowed([CallerMemberName] string? method = null)
+    {
+        if (!_destructiveOpsEnabled)
+        {
+            SignalAccountsLog.DestructiveOperationBlocked(_logger, method ?? "<unknown>");
+            throw new InvalidOperationException(
+                $"Destructive operation '{method}' заблоковано — set SignalCliOptions.EnableDestructiveOperations = true для opt-in. " +
+                "⚠ ці operations не можна скасувати: irreversibly unregister/wipe local data/change phone number.");
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task<UpdateAccountResponse> UpdateAccountAsync(UpdateAccountOptions options, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        EnsureDestructiveAllowed();
+
+        // §F3: NumberSharing pass-through bool? (не enum). §XOR: Builder уже enforce'нув;
+        // defense-in-depth для direct record-construction.
+        if (options.Username is not null && options.DeleteUsername)
+            throw new ArgumentException("Username та DeleteUsername — взаємовиключні.", nameof(options));
+
+        var parameters = new UpdateAccountParameters(
+            Account: options.Account,
+            DeviceName: options.DeviceName,
+            UnrestrictedUnidentifiedSender: options.UnrestrictedUnidentifiedSender,
+            DiscoverableByNumber: options.DiscoverableByNumber,
+            NumberSharing: options.NumberSharing,
+            Username: options.Username,
+            DeleteUsername: options.DeleteUsername);
+
+        var response = await _signalCliClient
+            .InvokeMethodAsync(
+                "updateAccount",
+                parameters,
+                SignalJsonContext.Default.UpdateAccountParameters,
+                SignalJsonContext.Default.UpdateAccountResponse,
+                cancellationToken).ConfigureAwait(false);
+
+        // updateAccount response — non-null навіть для attribute-only updates ({}), але обидва
+        // поля можуть бути null. Не throw — це валідна form.
+        var result = response ?? new UpdateAccountResponse(null, null);
+        SignalAccountsLog.UpdateAccountOk(_logger, usernameChanged: result.Username is not null);
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public async Task UnregisterAsync(string account, bool deleteAccount = false, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(account);
+        EnsureDestructiveAllowed();
+
+        await _signalCliClient
+            .InvokeMethodAsync(
+                "unregister",
+                new UnregisterParameters(account, deleteAccount),
+                SignalJsonContext.Default.UnregisterParameters,
+                SignalJsonContext.Default.JsonElement,
+                cancellationToken).ConfigureAwait(false);
+
+        SignalAccountsLog.UnregisterOk(_logger, deleteAccount);
+    }
+
+    /// <inheritdoc/>
+    public async Task DeleteLocalAccountDataAsync(string account, bool ignoreRegistered = false, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(account);
+        EnsureDestructiveAllowed();
+
+        await _signalCliClient
+            .InvokeMethodAsync(
+                "deleteLocalAccountData",
+                new DeleteLocalAccountDataParameters(account, ignoreRegistered),
+                SignalJsonContext.Default.DeleteLocalAccountDataParameters,
+                SignalJsonContext.Default.JsonElement,
+                cancellationToken).ConfigureAwait(false);
+
+        SignalAccountsLog.DeleteLocalAccountDataOk(_logger, ignoreRegistered);
+    }
+
+    /// <inheritdoc/>
+    public async Task StartChangeNumberAsync(StartChangeNumberOptions options, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        EnsureDestructiveAllowed();
+
+        await _signalCliClient
+            .InvokeMethodAsync(
+                "startChangeNumber",
+                new StartChangeNumberParameters(
+                    Account: options.Account,
+                    Number: options.NewNumber,
+                    Voice: options.Voice,
+                    Captcha: options.Captcha),
+                SignalJsonContext.Default.StartChangeNumberParameters,
+                SignalJsonContext.Default.JsonElement,
+                cancellationToken).ConfigureAwait(false);
+
+        SignalAccountsLog.StartChangeNumberOk(_logger, options.Voice);
+    }
+
+    /// <inheritdoc/>
+    public async Task FinishChangeNumberAsync(FinishChangeNumberOptions options, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        EnsureDestructiveAllowed();
+
+        await _signalCliClient
+            .InvokeMethodAsync(
+                "finishChangeNumber",
+                new FinishChangeNumberParameters(
+                    Account: options.Account,
+                    Number: options.NewNumber,
+                    VerificationCode: options.VerificationCode,
+                    Pin: options.Pin),
+                SignalJsonContext.Default.FinishChangeNumberParameters,
+                SignalJsonContext.Default.JsonElement,
+                cancellationToken).ConfigureAwait(false);
+
+        SignalAccountsLog.FinishChangeNumberOk(_logger);
+    }
+
+    /// <inheritdoc/>
+    public async Task UpdateConfigurationAsync(UpdateConfigurationOptions options, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        EnsureDestructiveAllowed();
+
+        await _signalCliClient
+            .InvokeMethodAsync(
+                "updateConfiguration",
+                new UpdateConfigurationParameters(
+                    Account: options.Account,
+                    ReadReceipts: options.ReadReceipts,
+                    UnidentifiedDeliveryIndicators: options.UnidentifiedDeliveryIndicators,
+                    TypingIndicators: options.TypingIndicators,
+                    LinkPreviews: options.LinkPreviews),
+                SignalJsonContext.Default.UpdateConfigurationParameters,
+                SignalJsonContext.Default.JsonElement,
+                cancellationToken).ConfigureAwait(false);
+
+        SignalAccountsLog.UpdateConfigurationOk(_logger);
+    }
+
+    /// <inheritdoc/>
+    public async Task SetPinAsync(string account, string pin, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(account);
+        ArgumentException.ThrowIfNullOrEmpty(pin);
+        // Signal SVR rejects PIN'и шорше 4 chars (server-side). Pre-validate для clearer error.
+        if (pin.Length < 4)
+            throw new ArgumentException("PIN має бути ≥ 4 chars (Signal SVR requirement).", nameof(pin));
+        EnsureDestructiveAllowed();
+
+        await _signalCliClient
+            .InvokeMethodAsync(
+                "setPin",
+                new SetPinParameters(account, pin),
+                SignalJsonContext.Default.SetPinParameters,
+                SignalJsonContext.Default.JsonElement,
+                cancellationToken).ConfigureAwait(false);
+
+        // Privacy: НЕ логуємо pin — це secret value.
+        SignalAccountsLog.SetPinOk(_logger);
+    }
+
+    /// <inheritdoc/>
+    public async Task RemovePinAsync(string account, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(account);
+        EnsureDestructiveAllowed();
+
+        await _signalCliClient
+            .InvokeMethodAsync(
+                "removePin",
+                new RemovePinParameters(account),
+                SignalJsonContext.Default.RemovePinParameters,
+                SignalJsonContext.Default.JsonElement,
+                cancellationToken).ConfigureAwait(false);
+
+        SignalAccountsLog.RemovePinOk(_logger);
+    }
+
+    // ===== signal-cli-api-coverage Wave 8 (utility-rpc) — read-only + non-destructive =====
+
+    /// <inheritdoc/>
+    public async Task<GetUserStatusResponse> GetUserStatusAsync(
+        string account,
+        IEnumerable<string>? recipients = null,
+        IEnumerable<string>? usernames = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(account);
+
+        var response = await _signalCliClient
+            .InvokeMethodAsync(
+                "getUserStatus",
+                new GetUserStatusParameters(account, recipients, usernames),
+                SignalJsonContext.Default.GetUserStatusParameters,
+                SignalJsonContext.Default.GetUserStatusResponse,
+                cancellationToken).ConfigureAwait(false);
+
+        if (response == null)
+            throw new InvalidOperationException("Отримано нульову відповідь від сервера");
+
+        SignalAccountsLog.GetUserStatusOk(_logger, response.Count);
+        return response;
+    }
+
+    /// <inheritdoc/>
+    public async Task SubmitRateLimitChallengeAsync(
+        string account,
+        string challenge,
+        string captcha,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(account);
+        ArgumentException.ThrowIfNullOrEmpty(challenge);
+        ArgumentException.ThrowIfNullOrEmpty(captcha);
+
+        await _signalCliClient
+            .InvokeMethodAsync(
+                "submitRateLimitChallenge",
+                new SubmitRateLimitChallengeParameters(account, challenge, captcha),
+                SignalJsonContext.Default.SubmitRateLimitChallengeParameters,
+                SignalJsonContext.Default.JsonElement,
+                cancellationToken).ConfigureAwait(false);
+
+        // Privacy: НЕ логуємо challenge/captcha — opaque secret tokens.
+        SignalAccountsLog.SubmitRateLimitChallengeOk(_logger);
+    }
+
+    /// <inheritdoc/>
+    public async Task SendContactsAsync(string account, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(account);
+
+        await _signalCliClient
+            .InvokeMethodAsync(
+                "sendContacts",
+                new SendContactsParameters(account),
+                SignalJsonContext.Default.SendContactsParameters,
+                SignalJsonContext.Default.JsonElement,
+                cancellationToken).ConfigureAwait(false);
+
+        SignalAccountsLog.SendContactsOk(_logger);
+    }
 }

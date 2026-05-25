@@ -265,6 +265,11 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<ISignalDevices, SignalDevices>();
         services.TryAddSingleton<ISignalAccounts, SignalAccounts>();
         services.TryAddSingleton<ISignalGroups, SignalGroups>();
+        // signal-cli-api-coverage Wave 3 (contacts-identity): новий facade.
+        services.TryAddSingleton<ISignalContacts, SignalContacts>();
+        // signal-cli-api-coverage Wave 4 (sticker-packs + binary-resource-fetch): 2 нові facades.
+        services.TryAddSingleton<ISignalStickers, SignalStickers>();
+        services.TryAddSingleton<ISignalResources, SignalResources>();
 
         // HealthMonitor (також як HostedService)
         services.TryAddSingleton<SignalCliHealthMonitor>();

@@ -28,7 +28,9 @@ public class PrivacyLoggingTests
 
         var logger = new Mock<ILogger<SignalAccounts>>();
         logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
-        var sut = new SignalAccounts(client.Object, logger.Object);
+        var sut = new SignalAccounts(client.Object, logger.Object,
+            Microsoft.Extensions.Options.Options.Create(new SignalCli.Models.SignalCliOptions
+            { AppHome = "/tmp", LibDirectory = "lib", JavaExecutable = "/usr/bin/java" }));
 
         await sut.ListAccountsAsync();
 

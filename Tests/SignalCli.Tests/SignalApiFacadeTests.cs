@@ -24,7 +24,9 @@ public class SignalApiFacadeTests
         client.Setup(c => c.InvokeMethodAsync<ListAccountsParameters, ListAccountsResponse>("listAccounts", It.IsAny<ListAccountsParameters>(), It.IsAny<JsonTypeInfo<ListAccountsParameters>>(), It.IsAny<JsonTypeInfo<ListAccountsResponse>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expected);
 
-        var result = await new SignalAccounts(client.Object, Mock.Of<ILogger<SignalAccounts>>()).ListAccountsAsync();
+        var result = await new SignalAccounts(client.Object, Mock.Of<ILogger<SignalAccounts>>(),
+    Microsoft.Extensions.Options.Options.Create(new SignalCli.Models.SignalCliOptions
+    { AppHome = "/tmp", LibDirectory = "lib", JavaExecutable = "/usr/bin/java" })).ListAccountsAsync();
 
         Assert.Same(expected, result);
     }
@@ -37,7 +39,9 @@ public class SignalApiFacadeTests
             .ReturnsAsync((ListAccountsResponse)null!);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => new SignalAccounts(client.Object, Mock.Of<ILogger<SignalAccounts>>()).ListAccountsAsync());
+            () => new SignalAccounts(client.Object, Mock.Of<ILogger<SignalAccounts>>(),
+    Microsoft.Extensions.Options.Options.Create(new SignalCli.Models.SignalCliOptions
+    { AppHome = "/tmp", LibDirectory = "lib", JavaExecutable = "/usr/bin/java" })).ListAccountsAsync());
     }
 
     // ---- SignalDevices ----
@@ -124,7 +128,9 @@ public class SignalApiFacadeTests
         client.Setup(c => c.InvokeMethodAsync<SyncAccountsParameters, SyncAccountsResponse>("sendSyncRequest", It.IsAny<SyncAccountsParameters>(), It.IsAny<JsonTypeInfo<SyncAccountsParameters>>(), It.IsAny<JsonTypeInfo<SyncAccountsResponse>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SyncAccountsResponse());
 
-        var result = await new SignalAccounts(client.Object, Mock.Of<ILogger<SignalAccounts>>()).SyncAccountAsync();
+        var result = await new SignalAccounts(client.Object, Mock.Of<ILogger<SignalAccounts>>(),
+    Microsoft.Extensions.Options.Options.Create(new SignalCli.Models.SignalCliOptions
+    { AppHome = "/tmp", LibDirectory = "lib", JavaExecutable = "/usr/bin/java" })).SyncAccountAsync();
 
         Assert.NotNull(result);
     }

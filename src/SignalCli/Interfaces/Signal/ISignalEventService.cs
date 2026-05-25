@@ -156,4 +156,41 @@ public interface ISignalEventService : IHostedService
 
     /// <summary>Async-stream-варіант <see cref="RemoteDeletes"/> (exclusive consumption).</summary>
     IAsyncEnumerable<RemoteDeleteEventArgs> RemoteDeletesAsync(CancellationToken cancellationToken = default);
+
+    // ===== signal-cli-api-coverage Wave 7b: 7 нових event-streams =====
+
+    /// <summary>Wave 7b: poll-create receive events.</summary>
+    IObservable<PollCreateEventArgs> PollCreates { get; }
+    /// <summary>Async-stream варіант <see cref="PollCreates"/>.</summary>
+    IAsyncEnumerable<PollCreateEventArgs> PollCreatesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Wave 7b: poll-vote receive events.</summary>
+    IObservable<PollVoteEventArgs> PollVotes { get; }
+    /// <summary>Async-stream варіант <see cref="PollVotes"/>.</summary>
+    IAsyncEnumerable<PollVoteEventArgs> PollVotesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Wave 7b: poll-terminate receive events.</summary>
+    IObservable<PollTerminateEventArgs> PollTerminates { get; }
+    /// <summary>Async-stream варіант <see cref="PollTerminates"/>.</summary>
+    IAsyncEnumerable<PollTerminateEventArgs> PollTerminatesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Wave 7b: payment-notification receive events (JsonPayment shape-fixed у цьому wave).</summary>
+    IObservable<PaymentEventArgs> Payments { get; }
+    /// <summary>Async-stream варіант <see cref="Payments"/>.</summary>
+    IAsyncEnumerable<PaymentEventArgs> PaymentsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Wave 7b: pin-message receive events.</summary>
+    IObservable<PinMessageEventArgs> PinMessages { get; }
+    /// <summary>Async-stream варіант <see cref="PinMessages"/>.</summary>
+    IAsyncEnumerable<PinMessageEventArgs> PinMessagesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Wave 7b: unpin-message receive events.</summary>
+    IObservable<UnpinMessageEventArgs> UnpinMessages { get; }
+    /// <summary>Async-stream варіант <see cref="UnpinMessages"/>.</summary>
+    IAsyncEnumerable<UnpinMessageEventArgs> UnpinMessagesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Wave 7b: admin-delete receive events (group moderation signal).</summary>
+    IObservable<AdminDeleteEventArgs> AdminDeletes { get; }
+    /// <summary>Async-stream варіант <see cref="AdminDeletes"/>.</summary>
+    IAsyncEnumerable<AdminDeleteEventArgs> AdminDeletesAsync(CancellationToken cancellationToken = default);
 }
