@@ -67,12 +67,12 @@
 
 - [ ] 1.2.1 `src/SignalCli/Models/Signal/Message/ReactionOptions.cs` — `sealed record` + nested `Builder`, поля: Account, Recipients/GroupIds, Emoji, TargetAuthor, TargetTimestamp, Remove.
 - [ ] 1.2.2 `src/SignalCli/Models/Signal/Message/SendReactionParameters.cs` + `SendReactionResponse.cs`.
-- [ ] 1.2.3 Repeat 1.2.1+1.2.2 pattern для `ReceiptOptions` / `SendReceiptParameters` / `SendReceiptResponse`. `ReceiptType` enum: `Read` | `Viewed`.
+- [ ] 1.2.3 Repeat 1.2.1+1.2.2 pattern для `ReceiptOptions` / `SendReceiptParameters` / `SendReceiptResponse`. `ReceiptType` enum: `Read` | `Viewed`. **§F7 reminder:** `SendReceiptCommand.java:25 @ bda4e7fc` registers `addArgument("recipient")` **singular** (no `.nargs(...)`) — `ReceiptOptions.Recipient: string`, NOT `Recipients: IReadOnlyList<string>` (the other 3 Wave-1 send methods use lists). Diverges from default plural-pattern; do not auto-pluralize via convention. Wire stays `"recipient": "+1..."` not `"recipients": [...]`.
 - [ ] 1.2.4 Repeat для `TypingOptions` / `SendTypingParameters` / `SendTypingResponse`. Поле `Stop: bool` (default false = start typing).
 - [ ] 1.2.5 Repeat для `RemoteDeleteOptions` / `RemoteDeleteParameters` / `RemoteDeleteResponse`.
 - [ ] 1.2.6 Register 8 нових DTOs у `Serialization/SignalJsonContext.cs`.
 - [ ] 1.2.7 `src/SignalCli/Interfaces/Signal/ISignalMessage.cs` — додати 4 нові методи з XMLDoc.
-- [ ] 1.2.8 `src/SignalCli/Services/Signal/SignalMessage.cs` — реалізувати 4 нові методи, дотримуючись existing pattern (`InvokeMethodAsync` + null-check + log).
+- [ ] 1.2.8 `src/SignalCli/Services/Signal/SignalMessage.cs` — реалізувати 4 нові методи, дотримуючись existing pattern (`InvokeMethodAsync` + null-check + log). **§F10 reminder:** upstream IOException error-code mapping is INCONSISTENT across the 4 commands: `sendReaction` → `-32603 InternalError`, `sendTyping` → `-1 UserError`, `remoteDelete` → `-32603`, `sendReceipt` → no catch path. XMLDoc on each method MUST reflect actual mapping; do NOT generalize "IOException is -32603." See `research/wave-1-messaging-interactive.md` Cross-method conventions section.
 - [ ] 1.2.9 `src/SignalCli/Logging/SignalMessageLog.cs` — додати 12 нових `[LoggerMessage]` методів (3 per RPC method: Requested, NullResponse, ValidationFailed) у EventId block 400-449.
 
 ### 1.3 Tests
@@ -99,7 +99,7 @@
   - `QuitGroupParameters.cs` + `QuitGroupBehavior` enum
 - [ ] 2.2 Register 6 нових DTOs у `SignalJsonContext`.
 - [ ] 2.3 `ISignalGroups` — 3 нові методи + XMLDoc.
-- [ ] 2.4 `SignalGroups.cs` — implementations.
+- [ ] 2.4 `SignalGroups.cs` — implementations. **§F8 reminder:** `QuitGroupCommand.java:59 @ bda4e7fc` silently catches `NotAGroupMemberException` and returns empty success. Per CLAUDE.md rule #14 (idempotent state errors), `QuitGroupAsync` SHOULD also be idempotent — calling for a group you're not in returns success, NOT an exception. XMLDoc must say "idempotent — returns success even if the account is not a member of the group". See `research/wave-2-groups-crud.md`.
 - [ ] 2.5 `SignalGroupsLog.cs` — 9 нових `[LoggerMessage]` методів у block 550-599.
 - [ ] 2.6 Serialization tests + service tests + options-validation tests (~15 unit + 3 builder tests).
 - [ ] 2.7 Update `SignalCli.public-api.txt` baseline.
@@ -114,7 +114,7 @@
   - `ListIdentitiesParameters/Response.cs` + nested `Identity` record (number, fingerprint, safety-number, scannableSafetyNumber, trustLevel, addedTimestamp)
   - `TrustParameters` + `TrustOptions` (sealed record) + `TrustMode` enum (`TrustAllKnown` | `VerifiedSafetyNumber`)
   - `UpdateContactParameters` + `UpdateContactOptions`
-  - `RemoveContactParameters` + `RemoveContactBehavior` enum (`Hide` | `Forget`)
+  - `RemoveContactParameters` + `RemoveContactBehavior` enum (`Hide` | `Forget`). **§F9 reminder:** `RemoveContactCommand.java:23 @ bda4e7fc` uses `addMutuallyExclusiveGroup()` but the mutex is enforced ONLY at argparse4j CLI level — JSON-RPC clients can set BOTH `hide=true` and `forget=true` simultaneously, and upstream then executes `hide` first-wins. The .NET `RemoveContactOptions` Builder MUST validate XOR client-side (throw `ArgumentException` if both flags set) so wire never receives an ambiguous payload. See `research/wave-3-contacts-identity.md`.
   - `UpdateProfileParameters` + `UpdateProfileOptions` (sealed record, nullable: GivenName, FamilyName, About, AboutEmoji, MobileCoinAddress, AvatarPath, RemoveAvatar)
   - `BlockParameters` + `UnblockParameters` (shape identical, separate types для type-safety)
 - [ ] 3.2 Register 16 нових DTOs у `SignalJsonContext` (+ `List<Contact>`, `List<Identity>` wrapper-collections per critical rule N10).
@@ -143,23 +143,16 @@
 - [ ] 4.6 Serialization + service + base64-decoding tests (~18 unit), включаючи edge case "invalid base64 payload → throw".
 - [ ] 4.7 Update `SignalCli.public-api.txt` baseline.
 - [ ] 4.8 Update `R02` — додати reservations 650-679, 680-699.
-- [ ] 4.9 Build + test (count ~378 → ~396).
-- [ ] 4.10 Receive-side sticker-pack-install event decoder (design §1.9):
-  - Extend `Envelope.cs` `JsonSyncMessage` 1-м nullable полем: `StickerPackOperations: IReadOnlyList<JsonStickerPackOperation>?`.
-  - Re-engineer `JsonStickerPackOperation` з `org.asamk.signal.json.JsonSyncMessage.java @ <pinned-sha>` (per §0.5 protocol).
-  - New `StickerPackInstallEventArgs` у `Events/`.
-  - Register у `SignalJsonContext`.
-  - Add `IObservable<StickerPackInstallEventArgs> StickerPackInstalls` + `StickerPackInstallsAsync` пара до `ISignalEventService`. RG06 enforce.
-  - Emission block у `SignalEventService.DispatchSyncMessage` (existing sync-event dispatch path).
-  - Serialization-roundtrip test + 1 union test.
+- [ ] 4.9 Build + test (count ~378 → ~393, +15 unit).
+- [ ] ~~4.10 Receive-side sticker-pack-install event decoder~~ **REMOVED 2026-05-25** — research at `bda4e7fc` shows `JsonSyncMessage.java` has no `stickerPackOperations` field; upstream silently auto-installs without bubbling to JSON-RPC layer (`IncomingMessageHandler.java:659-672`). Moved to `proposal.md` "Out of scope" until upstream adds the field or a consumer requests a storage-layer-wrapping change. See `research/SUMMARY.md` §F1.
 - [ ] 4.11 Bump 4.3.0 → 4.4.0 + CHANGELOG.
-- [ ] 4.12 Commit `feat(4.4.0): sticker packs + binary resource fetch + sticker-pack-install receive event`, push, merge, tag.
+- [ ] 4.12 Commit `feat(4.4.0): sticker packs + binary resource fetch`, push, merge, tag.
 
 ## 5. Wave 5 — `device-management` *(4.5.0)*
 
 - [ ] 5.1 `src/SignalCli/Models/Signal/Devices/`:
   - `AddDeviceParameters.cs` (просто account + URI)
-  - `ListDevicesParameters/Response.cs` + nested `Device` record (id, name, created, lastSeen)
+  - `ListDevicesParameters/Response.cs` + nested `Device` record — **4 fields only**: `id: long`, `name: string`, `createdTimestamp: long`, `lastSeenTimestamp: long`. **§F6 reminder:** upstream `Device` record у `manager/api/Device.java` has a 5th `isThisDevice: boolean` field but `ListDevicesCommand.java:67 @ bda4e7fc` drops it from the JSON projection (consumed only by PlainText writer for `" (this device)"` annotation). DO NOT add `IsThisDevice` to the .NET `Device` record — would lie about wire shape. If consumers need self-id, expose via separate API. See `research/wave-5-device-management.md`.
   - `RemoveDeviceParameters.cs`
   - `UpdateDeviceParameters.cs` (account, deviceId, deviceName)
 - [ ] 5.2 Register у `SignalJsonContext` + `List<Device>` wrapper.
@@ -187,13 +180,13 @@
 
 ### 6.2 RPC methods + DTOs
 
-- [ ] 6.2.1 `src/SignalCli/Models/Signal/Accounts/` — 16 нових DTOs (8 methods × 2):
-  - `UpdateAccountParameters/Response.cs` + `UpdateAccountOptions` (Builder; DeviceName, DiscoverableByNumber, UnrestrictedUnidentifiedSender, NumberSharingMode)
+- [ ] 6.2.1 `src/SignalCli/Models/Signal/Accounts/` — 16 нових DTOs (8 methods × 2). Wire-shape corrections from `research/SUMMARY.md` applied below:
+  - `UpdateAccountParameters/Response.cs` + `UpdateAccountOptions` (Builder; DeviceName, DiscoverableByNumber, UnrestrictedUnidentifiedSender, **`NumberSharing: bool?`** — per §F3, upstream `UpdateAccountCommand.java:37-39 @ bda4e7fc` registers `--number-sharing` as `type(Boolean.class)`; NOT an enum. Internal `PhoneNumberSharingMode` enum exists у `manager/api/` але **не** експонується через JSON-RPC). XMLDoc lists username/delete-username as optional too — see `research/wave-6-account-lifecycle.md`.
   - `UpdateConfigurationParameters/Response.cs` + `UpdateConfigurationOptions` (4 nullable bool: ReadReceipts, UnidentifiedDeliveryIndicators, TypingIndicators, LinkPreviews)
   - `SetPinParameters/Response.cs`, `RemovePinParameters/Response.cs`
   - `UnregisterParameters/Response.cs` (поле `delete: bool`)
   - `DeleteLocalAccountDataParameters/Response.cs` (поле `ignoreRegistered: bool`)
-  - `StartChangeNumberParameters/Response.cs` + `StartChangeNumberOptions` (NewNumber, VoiceVerification, Captcha)
+  - `StartChangeNumberParameters/Response.cs` + `StartChangeNumberOptions` (NewNumber, **`Voice: bool`** with `[JsonPropertyName("voice")]` — per §F4, upstream `StartChangeNumberCommand.java:33 @ bda4e7fc` registers `"-v", "--voice"`; .NET property name MAY stay `VoiceVerification` if `[JsonPropertyName("voice")]` aligns the wire), Captcha)
   - `FinishChangeNumberParameters/Response.cs` + `FinishChangeNumberOptions` (NewNumber, VerificationCode, Pin)
 - [ ] 6.2.2 Register у `SignalJsonContext`.
 - [ ] 6.2.3 `ISignalAccounts` — додати 8 нових destructive методів.
@@ -229,7 +222,7 @@
 ## 7. Wave 7 — `polls` + `messaging-power-user` *(4.7.0)*
 
 - [ ] 7.1 Polls DTOs (6 new): `PollCreateOptions` (Builder; question, options array 2-10, allowMultipleVotes) + `SendPollCreateParameters/Response.cs`. Repeat для `PollVote`, `PollTerminate`.
-- [ ] 7.2 Power-user DTOs (10 new): SendAdminDeleteParameters/Response + AdminDeleteOptions; SendPinMessageParameters/Response + PinMessageOptions; SendUnpinMessageParameters/Response + UnpinMessageOptions; SendMessageRequestResponseParameters/Response + MessageRequestResponseOptions + `MessageRequestResponseType` enum (Accept, Delete, Block, BlockAndDelete, Unblock); SendPaymentNotificationParameters/Response + PaymentNotificationOptions.
+- [ ] 7.2 Power-user DTOs (10 new): SendAdminDeleteParameters/Response + AdminDeleteOptions; SendPinMessageParameters/Response + PinMessageOptions; SendUnpinMessageParameters/Response + UnpinMessageOptions; SendMessageRequestResponseParameters/Response + MessageRequestResponseOptions + `MessageRequestResponseType` enum **`{ Accept, Delete }` — 2 values only** per §F2, upstream `src/main/java/org/asamk/signal/commands/MessageRequestResponseType.java @ bda4e7fc` declares lone `ACCEPT`/`DELETE`. Java `.toString()` returns lowercase (`"accept"`/`"delete"`) — pin wire casing via `[JsonStringEnumConverter(JsonNamingPolicy.CamelCase)]` or explicit `[JsonStringEnumMemberName("accept")]` after verifying real wire payload. The 8-value enum (Unknown, Accept, Delete, Block, BlockAndDelete, UnblockAndAccept, Spam, BlockAndSpam) lives у `MessageEnvelope.Sync.MessageRequestResponse.Type` and is **receive-side only** — out of scope here (`research/SUMMARY.md` §F2); SendPaymentNotificationParameters/Response + PaymentNotificationOptions.
 - [ ] 7.3 Register 16 DTOs у `SignalJsonContext`.
 - [ ] 7.4 `ISignalMessage` — додати 8 нових методів (3 polls + 5 power-user).
 - [ ] 7.5 `SignalMessage.cs` — implementations.
@@ -268,9 +261,8 @@
 ## 8. Wave 8 — `utility-rpc` *(4.8.0)*
 
 - [ ] 8.1 Нова папка `src/SignalCli/Models/Signal/Utility/` — 6 DTOs (3 methods × 2):
-  - `GetUserStatusParameters/Response.cs` + `GetUserStatusOptions` (account, recipients array OR usernames array; mutually exclusive).
-  - `SendContactsParameters/Response.cs` — empty params shape (just account).
-  - `SubmitRateLimitChallengeParameters/Response.cs`.
+  - `GetUserStatusParameters/Response.cs` + `GetUserStatusOptions` (account, **`Recipients` AND `Usernames` arrays — NOT mutually exclusive** per §F5). Upstream `GetUserStatusCommand.java:66-81 @ bda4e7fc` merges both via `Stream.concat`; response is a flat list of `JsonUserStatus { recipient, number?, username?, uuid?, isRegistered }` where `recipient` echoes the caller's input, `number` is populated only for phone inputs, `username` only for username inputs, `isRegistered` derived as `uuid != null`. Wrapper-record + `[JsonConverter]` pattern (per critical rule #N10) for the top-level array response. `SubmitRateLimitChallengeParameters/Response.cs` — params `{challenge, captcha}` both required (upstream NPE → `-32603` if missing per §F-supplement, not `-32602`); response empty `{}`.
+  - `SendContactsParameters/Response.cs` — empty params shape (just account); empty `{}` response.
 - [ ] 8.2 Register у `SignalJsonContext`.
 - [ ] 8.3 `ISignalAccounts` — додати 3 utility-методи (non-destructive — без gating).
 - [ ] 8.4 `SignalAccounts.cs` — implementations.
