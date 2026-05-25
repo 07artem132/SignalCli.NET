@@ -6,7 +6,7 @@ Guidance for AI coding agents (Claude Code, Copilot, etc.) working in this repos
 
 **SignalCli.NET** — a .NET wrapper around [`signal-cli`](https://github.com/AsamK/signal-cli) (a Java app) that exposes a typed API for the Signal messenger. The library launches and supervises `signal-cli` in JSON-RPC mode over stdin/stdout, correlates requests/responses, and surfaces incoming events through **two parallel surfaces**: `IObservable<T>` (Rx, for fan-out/broadcast) and `IAsyncEnumerable<T>` (Channels, default for `await foreach`).
 
-- Target framework: **net10.0 (LTS)**, language **C# 14**. Package version **4.0.2**.
+- Target framework: **net10.0 (LTS)**, language **C# 14**. Package version **4.0.3**.
 - Requires **JDK 25+** (signal-cli 0.14.3's `Main` is class-file version 69.0 = Java 25) and **signal-cli 0.14.3** (downloaded by the `SignalCli.Runtime` package at build time). Java is **not** required with the native package (`SignalCli.Runtime.Native`, Linux x64) or the bundled-JRE packages (`SignalCli.Runtime.Jre.win-x64`, `SignalCli.Runtime.Jre.osx-arm64`).
 
 ## Build & test
@@ -88,7 +88,7 @@ Path-scoped agent instructions live in `.claude/rules/` (load conditionally when
 
 ### Тестова база
 
-- Unit tests: **≥ 287** (поточна планка після `json-hardening-source-gen-attribute` landing; bumps to ≥ 290 once `claude-md-rules-restructure` lands RG08 +3 facts).
+- Unit tests: **≥ 290** (поточна планка після `claude-md-rules-restructure` landing RG08 +3 facts).
 - E2E tests: **≥ 2** (bundled-JRE, не потребує live Signal account). Друга — `SignalCliE2EParallelRpcCorrelationTests.Process_ParallelVersionCalls_AllResolveToCorrectResponseById` — пінує `.claude/rules/signal-cli-protocol.md` §3 (parallel request correlation by `id`) проти реального virtual-thread-dispatcher'а.
 - `dotnet build` з `TreatWarningsAsErrors=true` — **обидва** проекти (`src/SignalCli`, `Tests/SignalCli.Tests`); Integration слідує тому ж шляху коли стане доцільним.
 - Нуль `xUnit1031` violations (DoNotUseBlockingTaskOperationsInTestMethod). Якщо новий тест вимагає sync-blocking — додай `[SuppressMessage("xUnit", "xUnit1031", Justification="…")]` із поясненням, інакше build впаде.
@@ -142,8 +142,10 @@ Historical reference (do not re-open — all in `openspec/changes/archive/2026-0
 - `deprecated-shim-removal` (**4.0.0**) — BREAKING: deleted `Config` + 6 `[Obsolete]` shims. Migration table in CHANGELOG.
 - `json-hardening-source-gen-attribute` (**4.0.2**) — closes Critical rule #18 dead-flag prog with `[JsonSourceGenerationOptions(AllowDuplicateProperties = false)]` on the source-gen context.
 - `e2e-coverage-expansion` (**4.0.2**) — `SignalCliE2EParallelRpcCorrelationTests` pins protocol fact §3 (parallel correlation by `id`) against real upstream.
+- `claude-md-pattern-additions` (**4.0.3**) — 4 doc additions: DI registration idioms (TryAddSingleton vs AddSingleton, one-instance-two-roles, sentinel-marker idempotency), namespace hierarchy + DTO/EventArgs/test-class naming, exception derivation heuristic, README voice + drift rules.
+- `claude-md-rules-restructure` (**4.0.3**) — Anthropic-aligned split: root CLAUDE.md 592 → 150 lines + 9 path-scoped topic files under `.claude/rules/` with `paths:` frontmatter. New RG08 (`ClaudeMdSplitConsistencyTests`) pins split shape (root size cap, frontmatter validity, numeric `Critical rule #N` anchors only in root).
 
-**Pending changes:** _(none)_ — `openspec/changes/` має лише `archive/` subdirectory; start a new change to add work.
+**Pending changes:** `claude-md-pattern-additions`, `claude-md-rules-restructure` (in `openspec/changes/`; archive after PR merges per `.claude/rules/openspec-workflow.md` § Post-merge archive workflow).
 
 ## Git
 
