@@ -59,6 +59,18 @@ namespace SignalCli.Serialization;
 [JsonSerializable(typeof(Account))]
 [JsonSerializable(typeof(SyncAccountsParameters))]
 [JsonSerializable(typeof(SyncAccountsResponse))]
+// Accounts — Wave 6 account-lifecycle (signal-cli-api-coverage, DESTRUCTIVE):
+// 8 нових методів gated by SignalCliOptions.EnableDestructiveOperations.
+// updateAccount має typed response (Username/UsernameLink); решта 7 — void → JsonElement.
+[JsonSerializable(typeof(UpdateAccountParameters))]
+[JsonSerializable(typeof(UpdateAccountResponse))]
+[JsonSerializable(typeof(UnregisterParameters))]
+[JsonSerializable(typeof(DeleteLocalAccountDataParameters))]
+[JsonSerializable(typeof(StartChangeNumberParameters))]
+[JsonSerializable(typeof(FinishChangeNumberParameters))]
+[JsonSerializable(typeof(UpdateConfigurationParameters))]
+[JsonSerializable(typeof(SetPinParameters))]
+[JsonSerializable(typeof(RemovePinParameters))]
 // Devices
 [JsonSerializable(typeof(StartLinkParameters))]
 [JsonSerializable(typeof(StartLinkResponse))]

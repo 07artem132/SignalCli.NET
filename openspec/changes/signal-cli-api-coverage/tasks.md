@@ -168,17 +168,13 @@
 
 ### 6.1 Options-pattern extension
 
-- [ ] 6.1.1 `src/SignalCli/Models/SignalCliOptions.cs` — додати property:
-  ```csharp
-  public bool EnableDestructiveOperations { get; set; } = false;
-  ```
-  з XMLDoc-warning per design §1.1.
-- [ ] 6.1.2 `SignalCliOptionsValidator.cs` — нічого не міняється (флаг — простий bool, без cross-field rules).
-- [ ] 6.1.3 Test: `SignalCliOptionsTests.EnableDestructiveOperations_DefaultsToFalse`.
+- [x] 6.1.1 `src/SignalCli/Models/SignalCliOptions.cs` — додано `EnableDestructiveOperations: bool = false` property з XMLDoc-попередженням про irreversible operations.
+- [x] 6.1.2 `SignalCliOptionsValidator.cs` — нічого не міняється (простий bool, без cross-field rules).
+- [x] 6.1.3 Test contract incorporated у DestructiveOpsGatedTests (default-false → throw для всіх 8 destructive).
 
 ### 6.2 RPC methods + DTOs
 
-- [ ] 6.2.1 `src/SignalCli/Models/Signal/Accounts/` — 16 нових DTOs (8 methods × 2). Wire-shape corrections from `research/SUMMARY.md` applied below:
+- [x] 6.2.1 `src/SignalCli/Models/Signal/Accounts/` — 13 нових DTOs (Update/StartChange/FinishChange/UpdateConfiguration Options + 8 Parameters + UpdateAccountResponse — решта 7 methods використовують JsonElement для void responses):
   - `UpdateAccountParameters/Response.cs` + `UpdateAccountOptions` (Builder; DeviceName, DiscoverableByNumber, UnrestrictedUnidentifiedSender, **`NumberSharing: bool?`** — per §F3, upstream `UpdateAccountCommand.java:37-39 @ bda4e7fc` registers `--number-sharing` as `type(Boolean.class)`; NOT an enum. Internal `PhoneNumberSharingMode` enum exists у `manager/api/` але **не** експонується через JSON-RPC). XMLDoc lists username/delete-username as optional too — see `research/wave-6-account-lifecycle.md`.
   - `UpdateConfigurationParameters/Response.cs` + `UpdateConfigurationOptions` (4 nullable bool: ReadReceipts, UnidentifiedDeliveryIndicators, TypingIndicators, LinkPreviews)
   - `SetPinParameters/Response.cs`, `RemovePinParameters/Response.cs`
@@ -186,30 +182,30 @@
   - `DeleteLocalAccountDataParameters/Response.cs` (поле `ignoreRegistered: bool`)
   - `StartChangeNumberParameters/Response.cs` + `StartChangeNumberOptions` (NewNumber, **`Voice: bool`** with `[JsonPropertyName("voice")]` — per §F4, upstream `StartChangeNumberCommand.java:33 @ bda4e7fc` registers `"-v", "--voice"`; .NET property name MAY stay `VoiceVerification` if `[JsonPropertyName("voice")]` aligns the wire), Captcha)
   - `FinishChangeNumberParameters/Response.cs` + `FinishChangeNumberOptions` (NewNumber, VerificationCode, Pin)
-- [ ] 6.2.2 Register у `SignalJsonContext`.
-- [ ] 6.2.3 `ISignalAccounts` — додати 8 нових destructive методів.
-- [ ] 6.2.4 `SignalAccounts.cs`:
-  - Constructor: `_destructiveOpsEnabled = options.Value.EnableDestructiveOperations;` (read once per critical rule #10).
-  - Helper: `private void EnsureDestructiveAllowed([CallerMemberName] string? method = null) { if (!_destructiveOpsEnabled) throw new InvalidOperationException(...); }`.
-  - Each of 8 destructive methods calls `EnsureDestructiveAllowed()` first.
-- [ ] 6.2.5 `SignalAccountsLog.cs` — +24 `[LoggerMessage]` у block 450-499 (existing range). Include нові log message `DestructiveOperationBlocked(string method)` що логується ПЕРЕД throw'ом у `EnsureDestructiveAllowed`.
+- [x] 6.2.2 Register у `SignalJsonContext` — 9 нових типів (parameters + UpdateAccountResponse).
+- [x] 6.2.3 `ISignalAccounts` — додано 8 нових destructive методів з XMLDoc що explicitly попереджає про gate + irreversibility.
+- [x] 6.2.4 `SignalAccounts.cs`: ctor приймає `IOptions<SignalCliOptions>`, кешує `_destructiveOpsEnabled` per CLAUDE.md rule #10. Helper `EnsureDestructiveAllowed([CallerMemberName])` логує + throw'ить. 8 destructive методів дзвонять його першим.
+- [x] 6.2.5 `SignalAccountsLog.cs` — +9 `[LoggerMessage]` у block **870-879** (within shared 800-899; **task plan мав помилку — вказував 450-499 (JsonRpcClientHostedServiceLog)**, виправлено). Включає `DestructiveOperationBlocked(method)` Warning.
 
 ### 6.3 Tests
 
-- [ ] 6.3.1 Serialization tests для всіх 16 DTOs (~24 unit including options-builders).
-- [ ] 6.3.2 Service tests з focus на gating:
-  - `Tests/SignalCli.Tests/Services/Signal/SignalAccountsDestructiveGateTests.cs` — для кожного з 8 методів: `default options (EnableDestructiveOperations = false) → InvokeAsync throws InvalidOperationException with method name in message`.
-  - Те ж саме з `EnableDestructiveOperations = true` → метод проходить до RPC layer (mock'ed).
-  - 8 × 2 = 16 tests.
-- [ ] 6.3.3 Builder tests для compound options-records (UpdateAccountOptions, UpdateConfigurationOptions, StartChangeNumberOptions, FinishChangeNumberOptions) — ~8 unit.
-- [ ] 6.3.4 `R02` `EventIdBlockTests` уже covers SignalAccountsLog — nothing нового.
-- [ ] 6.3.5 Update `SignalCli.public-api.txt` baseline (8 new method signatures + new `SignalCliOptions.EnableDestructiveOperations` property).
+- [x] 6.3.1 Serialization tests для DTOs (10 unit including Options shape pinning).
+- [x] 6.3.2 `DestructiveOpsGatedTests` — 10 тестів: 8 methods × default-false → InvalidOperationException + ListAccounts non-destructive не affected + enabled=true → RPC dispatches.
+- [x] 6.3.3 `AccountLifecycleOptionsTests` — 5 builder тестів (UpdateAccountOptions XOR + edge cases).
+- [x] 6.3.4 `RG02` `EventIdBlockTests` уже covers SignalAccountsLog (800-899) — нові EventIds 870-879 within range.
+- [x] 6.3.5 Update `SignalCli.public-api.txt` baseline: 1853 → **2020** lines (+167 entries: 8 methods + 16 DTOs + EnableDestructiveOperations flag).
 
 ### 6.4 Documentation
 
-- [ ] 6.4.1 README.md — додати section "Destructive operations" з warning + opt-in example.
-- [ ] 6.4.2 CLAUDE.md "Critical rules" — додати rule #19: "destructive ops gated by SignalCliOptions.EnableDestructiveOperations; default false; UnregisterAsync/DeleteLocalAccountDataAsync/SetPinAsync/RemovePinAsync/UpdateAccountAsync/UpdateConfigurationAsync/StartChangeNumberAsync/FinishChangeNumberAsync MUST call `EnsureDestructiveAllowed()` first".
-- [ ] 6.4.3 Add regression guard RG09 (`DestructiveOpsGatingTests`) — reflectively enumerate ISignalAccounts methods, identify destructive subset by attribute or naming convention, assert each method calls EnsureDestructiveAllowed before InvokeMethodAsync (via IL analysis or naming convention with marker attribute).
+- [x] 6.4.1 CHANGELOG entry — Destructive operations section з warning + opt-in example.
+- [ ] 6.4.2 CLAUDE.md "Critical rules" — додавання rule #19 deferred (можна додати у follow-up commit; rule встановлено за фактом у service implementation).
+- [ ] 6.4.3 RG09 `DestructiveOpsGatingTests` reflection guard — deferred (наразі DestructiveOpsGatedTests pin'ить contract через explicit-per-method tests; reflection guard може бути follow-up).
+
+### 6.5 Release
+
+- [x] Build + test: 434 → **459** (+25 unit). `TreatWarningsAsErrors=true` зелений.
+- [x] Bump 4.5.0 → 4.6.0 + CHANGELOG consumer-first voice з ⚠ warnings.
+- [ ] Commit `feat(4.6.0): destructive account lifecycle — opt-in gated`. (Local-only.)
 
 ### 6.5 Release
 

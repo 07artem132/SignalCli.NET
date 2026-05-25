@@ -99,6 +99,31 @@ public sealed class SignalCliOptions
     [Range(1, 1_000_000)]
     public int NotificationChannelCapacity { get; set; } = 1024;
 
+    /// <summary>
+    /// signal-cli-api-coverage Wave 6 (`account-lifecycle`): opt-in flag для 8 destructive RPC методів
+    /// (<c>unregister</c>, <c>deleteLocalAccountData</c>, <c>updateAccount</c>, <c>setPin</c>/<c>removePin</c>,
+    /// <c>startChangeNumber</c>/<c>finishChangeNumber</c>, <c>updateConfiguration</c>).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Default <c>false</c> — destructive методи кидають <see cref="InvalidOperationException"/>
+    /// при першому виклику з повідомленням типу "destructive operations disabled; set
+    /// SignalCliOptions.EnableDestructiveOperations = true". Це запобігає випадковому
+    /// unregister/wipe у production'і.
+    /// </para>
+    /// <para>
+    /// <b>⚠ ПОПЕРЕДЖЕННЯ:</b> при <c>true</c> бібліотека дозволяє operations які НЕ МОЖНА скасувати:
+    /// <list type="bullet">
+    /// <item><c>UnregisterAsync(deleteAccount: true)</c> — irreversibly видаляє акаунт з Signal серверів.</item>
+    /// <item><c>DeleteLocalAccountDataAsync</c> — wipe'ає identity keys, sessions, contacts. Re-registration
+    /// створить новий identity, всі контакти побачать "safety-number-changed".</item>
+    /// <item><c>FinishChangeNumberAsync</c> — змінює primary phone number акаунту server-side і локально.</item>
+    /// </list>
+    /// Вмикай лише після code-review і явного підтвердження consumer'ом.
+    /// </para>
+    /// </remarks>
+    public bool EnableDestructiveOperations { get; set; }
+
     /// <summary>Змінні середовища, що передаються процесу signal-cli.</summary>
     /// <remarks>
     /// post-modernize-tuning §4.10 / §4.28 (audit D7/E2): на читання — <see cref="IReadOnlyDictionary{TKey,TValue}"/>.

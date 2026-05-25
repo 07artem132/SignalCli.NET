@@ -15,7 +15,7 @@
          VersionLockstepTests.MainLibAndHealthChecksAdapter_ShareExactSameAssemblyVersion.
          CLAUDE.md "Version-CHANGELOG lockstep" — bump цього property у тому ж коміті
          що й нова `## [X.Y.Z] — YYYY-MM-DD` секція у CHANGELOG.md. -->
-    <SignalCliPackageVersion>4.5.0</SignalCliPackageVersion>
+    <SignalCliPackageVersion>4.6.0</SignalCliPackageVersion>
   </PropertyGroup>
 
 </Project>

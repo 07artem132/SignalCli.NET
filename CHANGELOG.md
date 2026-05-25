@@ -3,6 +3,101 @@
 Формат заснований на [Keep a Changelog](https://keepachangelog.com/),
 проєкт дотримується [семантичного версіонування](https://semver.org/lang/uk/).
 
+## [4.6.0] — 2026-05-25
+
+Minor-реліз. ⚠ **HIGH-RISK destructive operations** — `ISignalAccounts` отримує 8 нових методів (unregister/wipe local data/change phone number/set-remove PIN/update account/configuration), які gated за `SignalCliOptions.EnableDestructiveOperations` (default `false`). Без opt-in — `InvalidOperationException` ПЕРЕД RPC dispatch. Backward-compatible: existing `ListAccountsAsync`/`SyncAccountAsync` без змін.
+
+### ⚠ DESTRUCTIVE — opt-in required
+
+**За замовчуванням `EnableDestructiveOperations = false`. Усі 8 нових методів кидають `InvalidOperationException` з ясним повідомленням** про те, що треба opt-in. Це запобігає випадковому unregister/wipe у production'і. Щоб увімкнути:
+
+```csharp
+services.AddSignalCli(opts => {
+    opts.AppHome = ...; opts.JavaExecutable = ...;
+    opts.EnableDestructiveOperations = true;   // ⚠ після code-review
+});
+```
+
+**Дві категорії безпеки:**
+
+| Категорія | Метод | Recoverable? |
+|---|---|---|
+| 🟡 Reversible | `UpdateAccountAsync` (deviceName/discoverability/etc), `UpdateConfigurationAsync`, `SetPinAsync`, `RemovePinAsync`, `UnregisterAsync` без `deleteAccount` | Так (через re-config / re-register) |
+| 🔴 **Irreversible** | `UnregisterAsync(deleteAccount: true)`, `DeleteLocalAccountDataAsync`, `FinishChangeNumberAsync` | **Ні** |
+
+### ✨ Нове
+
+- **`ISignalAccounts` отримав 8 нових destructive methods:**
+  ```csharp
+  // 1. UpdateAccount — server-side attrs + optional username set/delete (XOR)
+  await signalAccounts.UpdateAccountAsync(
+      new UpdateAccountOptions.Builder(account)
+          .WithDeviceName("My phone")
+          .WithNumberSharing(true)  // §F3 bool, not enum
+          .WithUsername("alice.42")
+          .Build());
+
+  // 2. Unregister — reversible, OR irreversible з deleteAccount=true
+  await signalAccounts.UnregisterAsync(account, deleteAccount: false);
+
+  // 3. DeleteLocalAccountData — CANNOT BE UNDONE (wipes identity keys + sessions)
+  await signalAccounts.DeleteLocalAccountDataAsync(account, ignoreRegistered: true);
+
+  // 4-5. ChangeNumber flow (2 steps): start → wait OOB code → finish
+  await signalAccounts.StartChangeNumberAsync(
+      new StartChangeNumberOptions { Account = oldNumber, NewNumber = newNumber, Voice = false });
+  // ... отримуєш SMS код out-of-band ...
+  await signalAccounts.FinishChangeNumberAsync(
+      new FinishChangeNumberOptions { Account = oldNumber, NewNumber = newNumber, VerificationCode = "123456", Pin = "..." });
+
+  // 6. UpdateConfiguration — syncs до всіх linked devices
+  await signalAccounts.UpdateConfigurationAsync(
+      new UpdateConfigurationOptions { Account = account, ReadReceipts = false, TypingIndicators = false });
+
+  // 7. SetPin — registration-lock PIN ≥ 4 chars (client-side enforced)
+  await signalAccounts.SetPinAsync(account, "1234");
+
+  // 8. RemovePin — idempotent server-side
+  await signalAccounts.RemovePinAsync(account);
+  ```
+
+- **`SignalCliOptions.EnableDestructiveOperations: bool` (default `false`)** — opt-in для всієї wave-6 surface. Cache'ується ОДИН раз у `SignalAccounts` ctor per CLAUDE.md rule #10.
+
+### 🛠 Інше
+
+- **§F3 NumberSharing wire = `bool?`, не enum.** Upstream argparse `type(Boolean.class)`. Внутрішній Java `PhoneNumberSharingMode` enum НЕ exposed через JSON-RPC. .NET property теж `bool?`.
+
+- **§F4 StartChangeNumber.Voice = `bool` (default `false`).** Argparse `-v`/`--voice` short flag. Wire field — `"voice": bool`, не `"voice-verification"`.
+
+- **§Username/DeleteUsername XOR** у `UpdateAccountOptions.Builder` (упстрім mutex argparse-only — JSON-RPC шар приймає обидва, виконує set-then-delete). Defense-in-depth у service-методі.
+
+- **§Pin length validated client-side ≥ 4 chars.** Signal SVR rejects shorter — pre-validation дає clearer `ArgumentException` замість opaque `-3 IoError`.
+
+- **SignalAccountsLog** +9 у block **870-879** (within shared 800-899). `DestructiveOperationBlocked` (Warning), `UnregisterOk`/`DeleteLocalAccountDataOk`/`FinishChangeNumberOk`/`RemovePinOk` — Warning (action signals risk); решта Information. Privacy: жодних phone/pin/verification-code у шаблонах.
+
+- **`SignalAccounts` ctor signature change:** додано `IOptions<SignalCliOptions>` як третій параметр. DI handles it transparently; direct `new SignalAccounts(client, logger)` call-sites потребують оновлення (4 існуючих test sites виправлено у цьому коміті).
+
+### 🛡️ Захист від регресій
+
+- **`DestructiveOpsGatedTests` — 10 тестів** pin'ять opt-in contract: 8 destructive методів × default-false → InvalidOperationException + non-destructive `ListAccountsAsync` НЕ affected + `enabled=true` → RPC actually dispatches.
+
+- **`AccountLifecycleSerializationTests` — 10 тестів** пінять wire-shape: §F3 `numberSharing` як bool (НЕ string enum), §F4 `voice` як bool, OLD vs NEW phone у ChangeNumber (envelope account = OLD, body number = NEW), nullable Configuration fields, RemovePin лише з account полем.
+
+- **`AccountLifecycleOptionsTests` — 5 builder тестів** для XOR + empty-validation: Username+DeleteUsername mutex обидва напрямки, DeleteAlone-valid, empty account → throw.
+
+### 📊 Тестова статистика
+
+- Unit: 434 → **459** (+25 unit тестів).
+- Integration: 11 (без змін; destructive методи неможливо E2E без registered тестового номера + потенційний CAPTCHA — лишимо до Wave 8 retrospective).
+- Public API baseline: 1853 → ~1970 lines (+~120 entries: 16 DTOs + Options builders + 8 method signatures + EnableDestructiveOperations flag).
+- Build на src/ + Tests/: 0 warnings, 0 errors з `TreatWarningsAsErrors=true`.
+
+### 📦 Coverage progress
+
+9 + 4 + 3 + 9 + 6 + 4 + 8 = **43 з ~54 = 80%** signal-cli JSON-RPC API. Залишилось 2 wave'и (polls/power-user + receive-decoders Wave 7, utility-rpc Wave 8) до **98%** target'у.
+
+---
+
 ## [4.5.0] — 2026-05-25
 
 Minor-реліз. **Якщо твій бот керує linked devices з primary signal-cli — це нарешті є.** `ISignalDevices` отримує 4 нові методи (add/list/remove/update). Доповнює існуючі `StartLink`/`FinishLink` (де signal-cli стає secondary). Backward-compatible.

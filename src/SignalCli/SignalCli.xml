@@ -874,6 +874,68 @@
             <exception cref="T:SignalCli.Exceptions.JsonRpcException">Виникає при помилці JSON-RPC запиту.</exception>
             <exception cref="T:System.OperationCanceledException">Виникає, якщо операцію скасовано.</exception>
         </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalAccounts.UpdateAccountAsync(SignalCli.Models.Signal.Accounts.UpdateAccountOptions,System.Threading.CancellationToken)">
+            <summary>
+            DESTRUCTIVE. Оновлює server-side attribute'и акаунту (deviceName, unidentified-sender policy,
+            discoverability, number-sharing) і опційно set/delete username.
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see <c>UpdateAccountCommand.java</c> @ <c>bda4e7fc</c>.
+            <para><b>§F3 NumberSharing</b> — bool, не enum (upstream argparse <c>type(Boolean.class)</c>).</para>
+            </remarks>
+            <exception cref="T:System.InvalidOperationException">Якщо <c>SignalCliOptions.EnableDestructiveOperations = false</c>.</exception>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalAccounts.UnregisterAsync(System.String,System.Boolean,System.Threading.CancellationToken)">
+            <summary>
+            DESTRUCTIVE. Unregister акаунт. З <paramref name="deleteAccount"/>=<c>true</c> — <b>irreversibly</b>
+            deletes account з Signal серверів.
+            </summary>
+            <remarks>signal-cli RPC mapping: see <c>UnregisterCommand.java</c> @ <c>bda4e7fc</c>.</remarks>
+            <exception cref="T:System.InvalidOperationException">Якщо <c>EnableDestructiveOperations = false</c>.</exception>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalAccounts.DeleteLocalAccountDataAsync(System.String,System.Boolean,System.Threading.CancellationToken)">
+            <summary>
+            DESTRUCTIVE — <b>CANNOT BE UNDONE</b>. Wipe'ає local account directory.
+            </summary>
+            <remarks>signal-cli RPC mapping: see <c>DeleteLocalAccountDataCommand.java</c> @ <c>bda4e7fc</c>.</remarks>
+            <exception cref="T:System.InvalidOperationException">Якщо <c>EnableDestructiveOperations = false</c>.</exception>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalAccounts.StartChangeNumberAsync(SignalCli.Models.Signal.Accounts.StartChangeNumberOptions,System.Threading.CancellationToken)">
+            <summary>
+            DESTRUCTIVE. Розпочинає phone-number-change flow. §F4 <c>Voice</c> — bool (default false=SMS).
+            </summary>
+            <remarks>signal-cli RPC mapping: see <c>StartChangeNumberCommand.java</c> @ <c>bda4e7fc</c>.</remarks>
+            <exception cref="T:System.InvalidOperationException">Якщо <c>EnableDestructiveOperations = false</c>.</exception>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalAccounts.FinishChangeNumberAsync(SignalCli.Models.Signal.Accounts.FinishChangeNumberOptions,System.Threading.CancellationToken)">
+            <summary>
+            DESTRUCTIVE. Завершує phone-number change. OLD number більше не associated.
+            </summary>
+            <remarks>signal-cli RPC mapping: see <c>FinishChangeNumberCommand.java</c> @ <c>bda4e7fc</c>.</remarks>
+            <exception cref="T:System.InvalidOperationException">Якщо <c>EnableDestructiveOperations = false</c>.</exception>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalAccounts.UpdateConfigurationAsync(SignalCli.Models.Signal.Accounts.UpdateConfigurationOptions,System.Threading.CancellationToken)">
+            <summary>
+            DESTRUCTIVE. Оновлює per-account configuration (4 nullable bool flags); syncs до linked devices.
+            </summary>
+            <remarks>signal-cli RPC mapping: see <c>UpdateConfigurationCommand.java</c> @ <c>bda4e7fc</c>.</remarks>
+            <exception cref="T:System.InvalidOperationException">Якщо <c>EnableDestructiveOperations = false</c>.</exception>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalAccounts.SetPinAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            DESTRUCTIVE. Sets Signal registration-lock PIN через Secure Value Recovery.
+            </summary>
+            <remarks>signal-cli RPC mapping: see <c>SetPinCommand.java</c> @ <c>bda4e7fc</c>. Client-side enforce: pin ≥4 chars.</remarks>
+            <exception cref="T:System.InvalidOperationException">Якщо <c>EnableDestructiveOperations = false</c>.</exception>
+            <exception cref="T:System.ArgumentException">Якщо <paramref name="pin"/> має менше 4 chars.</exception>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalAccounts.RemovePinAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            DESTRUCTIVE. Removes registration-lock PIN. Idempotent server-side.
+            </summary>
+            <remarks>signal-cli RPC mapping: see <c>RemovePinCommand.java</c> @ <c>bda4e7fc</c>.</remarks>
+            <exception cref="T:System.InvalidOperationException">Якщо <c>EnableDestructiveOperations = false</c>.</exception>
+        </member>
         <member name="T:SignalCli.Interfaces.Signal.ISignalContacts">
             <summary>
             Сервіс для роботи з контактами та identity-keys у Signal (signal-cli-api-coverage Wave 3).
@@ -2098,6 +2160,31 @@
             За замовчуванням 1024.
             </remarks>
         </member>
+        <member name="P:SignalCli.Models.SignalCliOptions.EnableDestructiveOperations">
+            <summary>
+            signal-cli-api-coverage Wave 6 (`account-lifecycle`): opt-in flag для 8 destructive RPC методів
+            (<c>unregister</c>, <c>deleteLocalAccountData</c>, <c>updateAccount</c>, <c>setPin</c>/<c>removePin</c>,
+            <c>startChangeNumber</c>/<c>finishChangeNumber</c>, <c>updateConfiguration</c>).
+            </summary>
+            <remarks>
+            <para>
+            Default <c>false</c> — destructive методи кидають <see cref="T:System.InvalidOperationException"/>
+            при першому виклику з повідомленням типу "destructive operations disabled; set
+            SignalCliOptions.EnableDestructiveOperations = true". Це запобігає випадковому
+            unregister/wipe у production'і.
+            </para>
+            <para>
+            <b>⚠ ПОПЕРЕДЖЕННЯ:</b> при <c>true</c> бібліотека дозволяє operations які НЕ МОЖНА скасувати:
+            <list type="bullet">
+            <item><c>UnregisterAsync(deleteAccount: true)</c> — irreversibly видаляє акаунт з Signal серверів.</item>
+            <item><c>DeleteLocalAccountDataAsync</c> — wipe'ає identity keys, sessions, contacts. Re-registration
+            створить новий identity, всі контакти побачать "safety-number-changed".</item>
+            <item><c>FinishChangeNumberAsync</c> — змінює primary phone number акаунту server-side і локально.</item>
+            </list>
+            Вмикай лише після code-review і явного підтвердження consumer'ом.
+            </para>
+            </remarks>
+        </member>
         <member name="P:SignalCli.Models.SignalCliOptions.EnvironmentVariables">
             <summary>Змінні середовища, що передаються процесу signal-cli.</summary>
             <remarks>
@@ -2454,6 +2541,107 @@
         <member name="P:SignalCli.Models.SignalCli.VersionResponse.Version">
             <summary>Рядок, що містить номер версії Signal CLI.</summary>
         </member>
+        <member name="T:SignalCli.Models.Signal.Accounts.DeleteLocalAccountDataParameters">
+            <summary>
+            Wire-DTO для <c>deleteLocalAccountData</c> (DESTRUCTIVE — CANNOT BE UNDONE).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 6. Pinned до
+            <c>DeleteLocalAccountDataCommand.java @ bda4e7fc</c>.
+            <para>
+            Wipe'ає local account directory: identity keys, sessions, contacts, profile cache.
+            Re-registration після цього створить новий identity — всі контакти побачать
+            "safety-number-changed".
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер.</param>
+            <param name="IgnoreRegistered">Якщо <c>true</c> — wipe навіть якщо account ще registered server-side (для recovery scenarios).</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.DeleteLocalAccountDataParameters.#ctor(System.String,System.Boolean)">
+            <summary>
+            Wire-DTO для <c>deleteLocalAccountData</c> (DESTRUCTIVE — CANNOT BE UNDONE).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 6. Pinned до
+            <c>DeleteLocalAccountDataCommand.java @ bda4e7fc</c>.
+            <para>
+            Wipe'ає local account directory: identity keys, sessions, contacts, profile cache.
+            Re-registration після цього створить новий identity — всі контакти побачать
+            "safety-number-changed".
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер.</param>
+            <param name="IgnoreRegistered">Якщо <c>true</c> — wipe навіть якщо account ще registered server-side (для recovery scenarios).</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.DeleteLocalAccountDataParameters.Account">
+            <summary>E.164 номер.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.DeleteLocalAccountDataParameters.IgnoreRegistered">
+            <summary>Якщо <c>true</c> — wipe навіть якщо account ще registered server-side (для recovery scenarios).</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Accounts.FinishChangeNumberOptions">
+            <summary>
+            Опції для <c>finishChangeNumber</c> (DESTRUCTIVE; завершує phone-number change).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 6. Pinned до
+            <c>FinishChangeNumberCommand.java @ bda4e7fc</c>.
+            <para>
+            Після успіху OLD номер більше НЕ associated з акаунтом; всі subsequent RPC envelopes
+            мусять використовувати NEW номер як <c>account</c>.
+            </para>
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.FinishChangeNumberOptions.Account">
+            <summary>OLD E.164 номер (поточний account envelope).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.FinishChangeNumberOptions.NewNumber">
+            <summary>NEW E.164 номер — той самий, що передавався у <c>StartChangeNumber</c>.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.FinishChangeNumberOptions.VerificationCode">
+            <summary>6-digit verification code, отриманий через SMS/voice.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.FinishChangeNumberOptions.Pin">
+            <summary>Registration-lock PIN нового номера (якщо встановлений).</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Accounts.FinishChangeNumberParameters">
+            <summary>
+            Wire-DTO для <c>finishChangeNumber</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 6. Pinned до
+            <c>FinishChangeNumberCommand.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="Account">OLD E.164.</param>
+            <param name="Number">NEW E.164.</param>
+            <param name="VerificationCode">SMS/voice code.</param>
+            <param name="Pin">Registration-lock PIN нового номера (nullable).</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.FinishChangeNumberParameters.#ctor(System.String,System.String,System.String,System.String)">
+            <summary>
+            Wire-DTO для <c>finishChangeNumber</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 6. Pinned до
+            <c>FinishChangeNumberCommand.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="Account">OLD E.164.</param>
+            <param name="Number">NEW E.164.</param>
+            <param name="VerificationCode">SMS/voice code.</param>
+            <param name="Pin">Registration-lock PIN нового номера (nullable).</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.FinishChangeNumberParameters.Account">
+            <summary>OLD E.164.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.FinishChangeNumberParameters.Number">
+            <summary>NEW E.164.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.FinishChangeNumberParameters.VerificationCode">
+            <summary>SMS/voice code.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.FinishChangeNumberParameters.Pin">
+            <summary>Registration-lock PIN нового номера (nullable).</summary>
+        </member>
         <member name="T:SignalCli.Models.Signal.Accounts.ListAccountsParameters">
             <summary>
             Параметри для запиту списку облікових записів Signal.
@@ -2523,6 +2711,142 @@
         <member name="P:SignalCli.Models.Signal.Accounts.Account.Number">
             <summary>Номер телефону облікового запису.</summary>
         </member>
+        <member name="T:SignalCli.Models.Signal.Accounts.RemovePinParameters">
+            <summary>
+            Wire-DTO для <c>removePin</c> (DESTRUCTIVE; significantly weakens account security).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 6. Pinned до
+            <c>RemovePinCommand.java @ bda4e7fc</c>.
+            <para>
+            Idempotent при upstream-рівні (no-op якщо PIN не set). Після виклику account можна
+            re-register з будь-якого device БЕЗ PIN'у.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.RemovePinParameters.#ctor(System.String)">
+            <summary>
+            Wire-DTO для <c>removePin</c> (DESTRUCTIVE; significantly weakens account security).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 6. Pinned до
+            <c>RemovePinCommand.java @ bda4e7fc</c>.
+            <para>
+            Idempotent при upstream-рівні (no-op якщо PIN не set). Після виклику account можна
+            re-register з будь-якого device БЕЗ PIN'у.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.RemovePinParameters.Account">
+            <summary>E.164 номер.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Accounts.SetPinParameters">
+            <summary>
+            Wire-DTO для <c>setPin</c> (DESTRUCTIVE; sets registration-lock PIN на Signal SVR).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 6. Pinned до
+            <c>SetPinCommand.java @ bda4e7fc</c>.
+            <para>
+            Existing PIN силюно перезаписується (немає "set new" vs "update" distinction). Signal SVR
+            rejects PIN'и шорше 4 chars з server-side error → <c>-3 IoError</c>; service-метод
+            pre-validates client-side.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер.</param>
+            <param name="Pin">New registration-lock PIN (4-20 chars numeric, OR 4+ alphanumeric per Signal documentation).</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.SetPinParameters.#ctor(System.String,System.String)">
+            <summary>
+            Wire-DTO для <c>setPin</c> (DESTRUCTIVE; sets registration-lock PIN на Signal SVR).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 6. Pinned до
+            <c>SetPinCommand.java @ bda4e7fc</c>.
+            <para>
+            Existing PIN силюно перезаписується (немає "set new" vs "update" distinction). Signal SVR
+            rejects PIN'и шорше 4 chars з server-side error → <c>-3 IoError</c>; service-метод
+            pre-validates client-side.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер.</param>
+            <param name="Pin">New registration-lock PIN (4-20 chars numeric, OR 4+ alphanumeric per Signal documentation).</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.SetPinParameters.Account">
+            <summary>E.164 номер.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.SetPinParameters.Pin">
+            <summary>New registration-lock PIN (4-20 chars numeric, OR 4+ alphanumeric per Signal documentation).</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Accounts.StartChangeNumberOptions">
+            <summary>
+            Опції для <c>startChangeNumber</c> (DESTRUCTIVE; розпочинає phone-number-change flow).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 6. Pinned до
+            <c>StartChangeNumberCommand.java @ bda4e7fc</c>.
+            <para>
+            <see cref="P:SignalCli.Models.Signal.Accounts.StartChangeNumberOptions.Account"/> — поточний (OLD) номер; <see cref="P:SignalCli.Models.Signal.Accounts.StartChangeNumberOptions.NewNumber"/> — таргет (NEW). Wire
+            field — <c>number</c>; ми називаємо <see cref="P:SignalCli.Models.Signal.Accounts.StartChangeNumberOptions.NewNumber"/> для disambiguation.
+            </para>
+            <para>
+            <b>§F4 Voice:</b> на wire — <c>"voice": bool</c> (argparse short flag <c>-v</c>/<c>--voice</c>).
+            Default <c>false</c> = SMS verification; <c>true</c> = voice call. НЕ <c>--voice-verification</c>.
+            </para>
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.StartChangeNumberOptions.Account">
+            <summary>OLD E.164 номер.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.StartChangeNumberOptions.NewNumber">
+            <summary>NEW E.164 номер (wire: <c>number</c>).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.StartChangeNumberOptions.Voice">
+            <summary>§F4: voice verification (default false = SMS).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.StartChangeNumberOptions.Captcha">
+            <summary>Captcha token (потрібен при <c>CaptchaRequiredException</c> на попередньому виклику).</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Accounts.StartChangeNumberParameters">
+            <summary>
+            Wire-DTO для <c>startChangeNumber</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 6. Pinned до
+            <c>StartChangeNumberCommand.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="Account">OLD E.164.</param>
+            <param name="Number">NEW E.164 (argparse positional named "number").</param>
+            <param name="Voice">§F4 voice verification (bool).</param>
+            <param name="Captcha">Captcha token (nullable).</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.StartChangeNumberParameters.#ctor(System.String,System.String,System.Boolean,System.String)">
+            <summary>
+            Wire-DTO для <c>startChangeNumber</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 6. Pinned до
+            <c>StartChangeNumberCommand.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="Account">OLD E.164.</param>
+            <param name="Number">NEW E.164 (argparse positional named "number").</param>
+            <param name="Voice">§F4 voice verification (bool).</param>
+            <param name="Captcha">Captcha token (nullable).</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.StartChangeNumberParameters.Account">
+            <summary>OLD E.164.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.StartChangeNumberParameters.Number">
+            <summary>NEW E.164 (argparse positional named "number").</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.StartChangeNumberParameters.Voice">
+            <summary>§F4 voice verification (bool).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.StartChangeNumberParameters.Captcha">
+            <summary>Captcha token (nullable).</summary>
+        </member>
         <member name="T:SignalCli.Models.Signal.Accounts.SyncAccountsParameters">
             <summary>
             Відповідь на запит синхронізації облікових записів Signal.
@@ -2542,6 +2866,238 @@
             <summary>
             Відповідь на запит синхронізації облікових записів Signal.
             </summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Accounts.UnregisterParameters">
+            <summary>
+            Wire-DTO для <c>unregister</c> (DESTRUCTIVE).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 6. Pinned до
+            <c>UnregisterCommand.java @ bda4e7fc</c>.
+            <para>
+            <see cref="P:SignalCli.Models.Signal.Accounts.UnregisterParameters.DeleteAccount"/>=<c>false</c> → unregister (reversible через re-register; ламає
+            існуючі secure sessions). <see cref="P:SignalCli.Models.Signal.Accounts.UnregisterParameters.DeleteAccount"/>=<c>true</c> → irreversibly deletes
+            account з Signal серверів; номер стає available для re-registration будь-ким.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер.</param>
+            <param name="DeleteAccount">Якщо <c>true</c> — irreversibly delete account server-side.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.UnregisterParameters.#ctor(System.String,System.Boolean)">
+            <summary>
+            Wire-DTO для <c>unregister</c> (DESTRUCTIVE).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 6. Pinned до
+            <c>UnregisterCommand.java @ bda4e7fc</c>.
+            <para>
+            <see cref="P:SignalCli.Models.Signal.Accounts.UnregisterParameters.DeleteAccount"/>=<c>false</c> → unregister (reversible через re-register; ламає
+            існуючі secure sessions). <see cref="P:SignalCli.Models.Signal.Accounts.UnregisterParameters.DeleteAccount"/>=<c>true</c> → irreversibly deletes
+            account з Signal серверів; номер стає available для re-registration будь-ким.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер.</param>
+            <param name="DeleteAccount">Якщо <c>true</c> — irreversibly delete account server-side.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.UnregisterParameters.Account">
+            <summary>E.164 номер.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.UnregisterParameters.DeleteAccount">
+            <summary>Якщо <c>true</c> — irreversibly delete account server-side.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Accounts.UpdateAccountOptions">
+            <summary>
+            Опції для <c>updateAccount</c> RPC (DESTRUCTIVE; gated by <c>EnableDestructiveOperations</c>).
+            Створюється через <see cref="T:SignalCli.Models.Signal.Accounts.UpdateAccountOptions.Builder"/>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 6 (`account-lifecycle`). Pinned до
+            <c>src/main/java/org/asamk/signal/commands/UpdateAccountCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>§F3 NumberSharing:</b> на wire — <c>bool?</c> (Java <c>type(Boolean.class)</c>), НЕ enum.
+            Internal <c>PhoneNumberSharingMode</c> існує у Manager API але НЕ exposed через JSON-RPC —
+            command використовує plain Boolean flag. .NET property теж <c>bool?</c>.
+            </para>
+            <para>
+            <b>Username vs DeleteUsername XOR:</b> argparse enforce'ить mutex на CLI-рівні, але
+            JSON-RPC шар приймає обидва — upstream silently виконає set-then-delete (account залишається
+            без username). Builder валідує XOR client-side.
+            </para>
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.UpdateAccountOptions.Account">
+            <summary>E.164 номер акаунту.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.UpdateAccountOptions.DeviceName">
+            <summary>Нова назва device у linked-devices list. <c>null</c> = не міняти.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.UpdateAccountOptions.UnrestrictedUnidentifiedSender">
+            <summary>Allow anyone send unidentified-sender messages. <c>null</c> = не міняти.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.UpdateAccountOptions.DiscoverableByNumber">
+            <summary>Чи акаунт discoverable за phone-number. <c>null</c> = не міняти.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.UpdateAccountOptions.NumberSharing">
+            <summary>§F3: Boolean (НЕ enum). Чи Signal sharing phone number при send. <c>null</c> = не міняти.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.UpdateAccountOptions.Username">
+            <summary>Новий Signal username. Mutex з <see cref="P:SignalCli.Models.Signal.Accounts.UpdateAccountOptions.DeleteUsername"/>.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.UpdateAccountOptions.DeleteUsername">
+            <summary>Якщо <c>true</c> — видалити існуючий username. Mutex з <see cref="P:SignalCli.Models.Signal.Accounts.UpdateAccountOptions.Username"/>.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Accounts.UpdateAccountOptions.Builder">
+            <summary>Builder з §XOR enforcement.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.UpdateAccountOptions.Builder.#ctor(System.String)">
+            <summary>Створює builder з обов'язковим account'ом.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.UpdateAccountOptions.Builder.WithDeviceName(System.String)">
+            <summary>Виставити нову назву device.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.UpdateAccountOptions.Builder.WithUnrestrictedUnidentifiedSender(System.Boolean)">
+            <summary>Toggle unrestricted-unidentified-sender.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.UpdateAccountOptions.Builder.WithDiscoverableByNumber(System.Boolean)">
+            <summary>Toggle discoverable-by-number.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.UpdateAccountOptions.Builder.WithNumberSharing(System.Boolean)">
+            <summary>§F3 Toggle number-sharing (bool, NOT enum).</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.UpdateAccountOptions.Builder.WithUsername(System.String)">
+            <summary>Виставити новий username. Mutex з <see cref="M:SignalCli.Models.Signal.Accounts.UpdateAccountOptions.Builder.WithDeleteUsername"/>.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.UpdateAccountOptions.Builder.WithDeleteUsername">
+            <summary>Помітити для видалення username. Mutex з <see cref="M:SignalCli.Models.Signal.Accounts.UpdateAccountOptions.Builder.WithUsername(System.String)"/>.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.UpdateAccountOptions.Builder.Build">
+            <summary>Будує <see cref="T:SignalCli.Models.Signal.Accounts.UpdateAccountOptions"/>.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Accounts.UpdateAccountParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>updateAccount</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 6 (account-lifecycle). Pinned до
+            <c>src/main/java/org/asamk/signal/commands/UpdateAccountCommand.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="Account">E.164 номер.</param>
+            <param name="DeviceName">Нова назва device.</param>
+            <param name="UnrestrictedUnidentifiedSender">Toggle.</param>
+            <param name="DiscoverableByNumber">Toggle.</param>
+            <param name="NumberSharing">§F3: bool, не enum.</param>
+            <param name="Username">Новий username.</param>
+            <param name="DeleteUsername">Видалити username.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.UpdateAccountParameters.#ctor(System.String,System.String,System.Nullable{System.Boolean},System.Nullable{System.Boolean},System.Nullable{System.Boolean},System.String,System.Boolean)">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>updateAccount</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 6 (account-lifecycle). Pinned до
+            <c>src/main/java/org/asamk/signal/commands/UpdateAccountCommand.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="Account">E.164 номер.</param>
+            <param name="DeviceName">Нова назва device.</param>
+            <param name="UnrestrictedUnidentifiedSender">Toggle.</param>
+            <param name="DiscoverableByNumber">Toggle.</param>
+            <param name="NumberSharing">§F3: bool, не enum.</param>
+            <param name="Username">Новий username.</param>
+            <param name="DeleteUsername">Видалити username.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.UpdateAccountParameters.Account">
+            <summary>E.164 номер.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.UpdateAccountParameters.DeviceName">
+            <summary>Нова назва device.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.UpdateAccountParameters.UnrestrictedUnidentifiedSender">
+            <summary>Toggle.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.UpdateAccountParameters.DiscoverableByNumber">
+            <summary>Toggle.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.UpdateAccountParameters.NumberSharing">
+            <summary>§F3: bool, не enum.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.UpdateAccountParameters.Username">
+            <summary>Новий username.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.UpdateAccountParameters.DeleteUsername">
+            <summary>Видалити username.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Accounts.UpdateAccountResponse">
+            <summary>
+            Відповідь на <c>updateAccount</c>. Поля заповнюються ТІЛЬКИ при successful username-set;
+            при attribute-only updates або delete-username — обидва nullable null.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 6. Pinned до
+            <c>UpdateAccountCommand.java:70-76, 94-97 @ bda4e7fc</c> (private JsonAccountResponse record).
+            </remarks>
+            <param name="Username">Newly assigned username (null коли не set).</param>
+            <param name="UsernameLink">Username link URL (null коли username не set).</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.UpdateAccountResponse.#ctor(System.String,System.String)">
+            <summary>
+            Відповідь на <c>updateAccount</c>. Поля заповнюються ТІЛЬКИ при successful username-set;
+            при attribute-only updates або delete-username — обидва nullable null.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 6. Pinned до
+            <c>UpdateAccountCommand.java:70-76, 94-97 @ bda4e7fc</c> (private JsonAccountResponse record).
+            </remarks>
+            <param name="Username">Newly assigned username (null коли не set).</param>
+            <param name="UsernameLink">Username link URL (null коли username не set).</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.UpdateAccountResponse.Username">
+            <summary>Newly assigned username (null коли не set).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.UpdateAccountResponse.UsernameLink">
+            <summary>Username link URL (null коли username не set).</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Accounts.UpdateConfigurationOptions">
+            <summary>
+            Опції для <c>updateConfiguration</c> (DESTRUCTIVE; syncs config до linked devices).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 6. Pinned до
+            <c>UpdateConfigurationCommand.java @ bda4e7fc</c>. Поля — nullable bool;
+            <c>null</c> = "не міняти".
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.UpdateConfigurationOptions.Account">
+            <summary>E.164 номер.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.UpdateConfigurationOptions.ReadReceipts">
+            <summary>Чи send read receipts. <c>null</c> = не міняти.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.UpdateConfigurationOptions.UnidentifiedDeliveryIndicators">
+            <summary>Чи show unidentified-delivery indicators. <c>null</c> = не міняти.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.UpdateConfigurationOptions.TypingIndicators">
+            <summary>Чи send/show typing indicators. <c>null</c> = не міняти.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Accounts.UpdateConfigurationOptions.LinkPreviews">
+            <summary>Чи auto-generate link previews. <c>null</c> = не міняти.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Accounts.UpdateConfigurationParameters">
+            <summary>
+            Wire-DTO для <c>updateConfiguration</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 6. Pinned до
+            <c>UpdateConfigurationCommand.java @ bda4e7fc</c>.
+            </remarks>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Accounts.UpdateConfigurationParameters.#ctor(System.String,System.Nullable{System.Boolean},System.Nullable{System.Boolean},System.Nullable{System.Boolean},System.Nullable{System.Boolean})">
+            <summary>
+            Wire-DTO для <c>updateConfiguration</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 6. Pinned до
+            <c>UpdateConfigurationCommand.java @ bda4e7fc</c>.
+            </remarks>
         </member>
         <member name="T:SignalCli.Models.Signal.Contacts.BlockParameters">
             <summary>
@@ -7545,6 +8101,16 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.DeleteLocalAccountDataParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.FinishChangeNumberParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.ListAccountsParameters">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
@@ -7555,12 +8121,47 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.RemovePinParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.SetPinParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.StartChangeNumberParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.SyncAccountsParameters">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.SyncAccountsResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.UnregisterParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.UpdateAccountParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.UpdateAccountResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.UpdateConfigurationParameters">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -8727,6 +9328,36 @@
             Спільне ядро для sync- і async-disposal. Викликається РІВНО ОДИН РАЗ — guard
             через <c>_disposedFlag</c> у callers.
             </summary>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalAccounts.EnsureDestructiveAllowed(System.String)">
+            <summary>
+            Гейтер для всіх destructive-методів. Кидає <see cref="T:System.InvalidOperationException"/> ПЕРЕД
+            RPC-dispatch якщо <see cref="P:SignalCli.Models.SignalCliOptions.EnableDestructiveOperations"/> = false.
+            </summary>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalAccounts.UpdateAccountAsync(SignalCli.Models.Signal.Accounts.UpdateAccountOptions,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalAccounts.UnregisterAsync(System.String,System.Boolean,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalAccounts.DeleteLocalAccountDataAsync(System.String,System.Boolean,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalAccounts.StartChangeNumberAsync(SignalCli.Models.Signal.Accounts.StartChangeNumberOptions,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalAccounts.FinishChangeNumberAsync(SignalCli.Models.Signal.Accounts.FinishChangeNumberOptions,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalAccounts.UpdateConfigurationAsync(SignalCli.Models.Signal.Accounts.UpdateConfigurationOptions,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalAccounts.SetPinAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalAccounts.RemovePinAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc/>
         </member>
         <member name="T:SignalCli.Services.Signal.SignalContacts">
             <summary>
