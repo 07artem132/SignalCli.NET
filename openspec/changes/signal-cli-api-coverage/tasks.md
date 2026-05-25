@@ -4,9 +4,9 @@
 
 ## 0. Setup
 
-- [ ] 0.1 Branch `claude/signal-cli-api-coverage` from current `main` (вже існує — продовжуємо).
-- [ ] 0.2 `npx -y @fission-ai/openspec@latest validate signal-cli-api-coverage --strict` — green.
-- [ ] 0.3 Clone signal-cli source locally for read-only reference: `git clone https://github.com/AsamK/signal-cli.git ../signal-cli-source` (sibling до repo). Pin SHA = upstream `master` HEAD на момент старту Wave 1; record SHA у CLAUDE.md "signal-cli-protocol.md" як `bda4e7f`-style reference.
+- [x] 0.1 Branch `claude/signal-cli-api-coverage` from current `main` (вже існує — продовжуємо).
+- [x] 0.2 `npx -y @fission-ai/openspec@latest validate signal-cli-api-coverage --strict` — green.
+- [x] 0.3 Clone signal-cli source locally for read-only reference: `git clone https://github.com/AsamK/signal-cli.git ../signal-cli-source` (sibling до repo). Pin SHA = upstream `master` HEAD на момент старту Wave 1; record SHA у CLAUDE.md "signal-cli-protocol.md" як `bda4e7f`-style reference.
 
 ## 0.5 **MANDATORY per-method source-of-truth protocol — anti-hallucination guard** ⚠
 
@@ -49,45 +49,46 @@
 - **Snapshot-time** (tertiary): inline-literal JSON у serialization-test'ах capture'ені з real signal-cli running, не написані з пам'яті. Якщо упустимо source-reading — snapshot test впаде при першому upstream wire-shape drift'і.
 
 - [ ] 0.4 Capture сирі JSON-RPC payloads для всіх 44 нових методів через signal-cli running locally з `--verbose`, embed як inline-literals у serialization-tests (so wire-shape pinned від day 1, не reverse-engineered).
+  - **Wave 1 deviation (2026-05-25):** payload-capture не виконано — Wave 1 wire-shape pinned альтернативно через `MessagingInteractiveSerializationTests` що парсять serialized JSON через `JsonDocument` field-by-field проти research §0.5 source-read wire shape. Source-of-truth (Java records @ bda4e7fc) — той самий контракт; capture'и додамо у Wave 8 retrospective якщо знадобиться.
 
 ## 1. Wave 1 — `messaging-interactive` *(4.1.0)*
 
 ### 1.1 Cross-cutting (lands у Wave 1 бо потрібен `IdentityChangedException` для sendReaction error mapping)
 
-- [ ] 1.1.1 `src/SignalCli/Exceptions/IdentityChangedException.cs` — `sealed` derived з `UntrustedIdentityException`. XMLDoc пояснює різницю semantic'у (re-install vs initial-contact).
-- [ ] 1.1.2 `src/SignalCli/Exceptions/GroupAdminRequiredException.cs` — `sealed` derived з `JsonRpcException`. XMLDoc: "Поверх UserError(-1) коли signal-cli message contain'ить 'admin'".
-- [ ] 1.1.3 `src/SignalCli/Exceptions/CaptchaRequiredException.cs` — `sealed` derived з `JsonRpcException`. XMLDoc лінкує на signalcaptchas.org workflow + `SubmitRateLimitChallengeAsync` (forward ref).
-- [ ] 1.1.4 `src/SignalCli/Services/Rpc/JsonRpcClient.cs` — extend `InvokeMethodAsync` switch (per design §1.2):
+- [x] 1.1.1 `src/SignalCli/Exceptions/IdentityChangedException.cs` — `sealed` derived з `UntrustedIdentityException`. XMLDoc пояснює різницю semantic'у (re-install vs initial-contact). **Implementation note:** `UntrustedIdentityException` un-sealed щоб дозволити derivation (раніше sealed).
+- [x] 1.1.2 `src/SignalCli/Exceptions/GroupAdminRequiredException.cs` — `sealed` derived з `JsonRpcException`. XMLDoc: "Поверх UserError(-1) коли signal-cli message contain'ить 'admin'".
+- [x] 1.1.3 `src/SignalCli/Exceptions/CaptchaRequiredException.cs` — `sealed` derived з `JsonRpcException`. XMLDoc лінкує на signalcaptchas.org workflow + `SubmitRateLimitChallengeAsync` (forward ref).
+- [x] 1.1.4 `src/SignalCli/Services/Rpc/JsonRpcClient.cs` — extend `InvokeMethodAsync` switch (per design §1.2):
   - `(int)JsonRpcErrorCode.CaptchaRejected => new CaptchaRequiredException(response.Error)`
   - `(int)JsonRpcErrorCode.UserError when message contains "admin" => new GroupAdminRequiredException(response.Error)`
   - `IdentityChangedException` НЕ диспатчиться — це opt-in subset of UntrustedIdentityException (caller catch'ить її через `catch (IdentityChangedException)` що працює бо вона derived).
-- [ ] 1.1.5 Tests: `Tests/SignalCli.Tests/Exceptions/NewTypedRpcErrorsTests.cs` — 3 theory tests, кожен exception type roundtrips correctly з `JsonRpcClient`.
+- [x] 1.1.5 Tests: `Tests/SignalCli.Tests/Exceptions/NewTypedRpcErrorsTests.cs` — 9 tests (3 type-contracts + 4 dispatch through `ProcessMessageAsync` + 1 sealed marker + 1 un-sealed regression guard).
 
 ### 1.2 RPC methods + DTOs
 
-- [ ] 1.2.1 `src/SignalCli/Models/Signal/Message/ReactionOptions.cs` — `sealed record` + nested `Builder`, поля: Account, Recipients/GroupIds, Emoji, TargetAuthor, TargetTimestamp, Remove. **§F20 reminder:** Тільки `sendReaction` серед 4 Wave-1 send-методів має `--notify-self` flag і catches `UnregisteredRecipientException` на top level (`SendReactionCommand.java @ bda4e7fc`). Решта 3 (Receipt/Typing/RemoteDelete) — не мають. XMLDoc на `SendReactionAsync` має пояснити цю API-divergence; uniform-pattern assumption false. See `research/wave-1-messaging-interactive.md` Cross-method conventions.
-- [ ] 1.2.2 `src/SignalCli/Models/Signal/Message/SendReactionParameters.cs` + `SendReactionResponse.cs`.
-- [ ] 1.2.3 Repeat 1.2.1+1.2.2 pattern для `ReceiptOptions` / `SendReceiptParameters` / `SendReceiptResponse`. `ReceiptType` enum: `Read` | `Viewed`. **§F7 reminder:** `SendReceiptCommand.java:25 @ bda4e7fc` registers `addArgument("recipient")` **singular** (no `.nargs(...)`) — `ReceiptOptions.Recipient: string`, NOT `Recipients: IReadOnlyList<string>` (the other 3 Wave-1 send methods use lists). Diverges from default plural-pattern; do not auto-pluralize via convention. Wire stays `"recipient": "+1..."` not `"recipients": [...]`.
-- [ ] 1.2.4 Repeat для `TypingOptions` / `SendTypingParameters` / `SendTypingResponse`. Поле `Stop: bool` (default false = start typing).
-- [ ] 1.2.5 Repeat для `RemoteDeleteOptions` / `RemoteDeleteParameters` / `RemoteDeleteResponse`.
-- [ ] 1.2.6 Register 8 нових DTOs у `Serialization/SignalJsonContext.cs`.
-- [ ] 1.2.7 `src/SignalCli/Interfaces/Signal/ISignalMessage.cs` — додати 4 нові методи з XMLDoc.
-- [ ] 1.2.8 `src/SignalCli/Services/Signal/SignalMessage.cs` — реалізувати 4 нові методи, дотримуючись existing pattern (`InvokeMethodAsync` + null-check + log). **§F10 reminder:** upstream IOException error-code mapping is INCONSISTENT across the 4 commands: `sendReaction` → `-32603 InternalError`, `sendTyping` → `-1 UserError`, `remoteDelete` → `-32603`, `sendReceipt` → no catch path. XMLDoc on each method MUST reflect actual mapping; do NOT generalize "IOException is -32603." See `research/wave-1-messaging-interactive.md` Cross-method conventions section.
-- [ ] 1.2.9 `src/SignalCli/Logging/SignalMessageLog.cs` — додати 12 нових `[LoggerMessage]` методів (3 per RPC method: Requested, NullResponse, ValidationFailed) у EventId block 400-449.
+- [x] 1.2.1 `src/SignalCli/Models/Signal/Message/ReactionOptions.cs` — `sealed record` + nested `Builder`, поля: Account, Recipients/GroupIds/Usernames, NoteToSelf, NotifySelf, Emoji, TargetAuthor, TargetTimestamp, Remove, Story. §F20 reminder applied у XMLDoc.
+- [x] 1.2.2 `src/SignalCli/Models/Signal/Message/SendReactionParameters.cs`. **Deviation:** `SendReactionResponse.cs` НЕ створено — research §Cross-method §4 (read of `SendMessageResultUtils.java @ bda4e7fc`) пинить identical `{ timestamp, results }` shape для всіх 4 методів; reuse existing `SendMessageResponse`. Уникнено 4-х майже-ідентичних response-типів.
+- [x] 1.2.3 `ReceiptOptions.cs` + `SendReceiptParameters.cs` + `ReceiptType.cs` enum (`Read`|`Viewed` — mapped до lowercase wire string). §F7: `Recipient: string` singular, не List. XMLDoc cross-references §F7. Reuse `SendMessageResponse`.
+- [x] 1.2.4 `TypingOptions.cs` + `SendTypingParameters.cs`. Поле `Stop: bool` (default false). XMLDoc документує no-username, no-noteToSelf, START auto-expire. Reuse `SendMessageResponse`.
+- [x] 1.2.5 `RemoteDeleteOptions.cs` + `RemoteDeleteParameters.cs`. §F10 reminder у XMLDoc (IOException → -32603 INTERNAL_ERROR, consistent з sendReaction). Reuse `SendMessageResponse`.
+- [x] 1.2.6 Register 4 нових DTOs у `Serialization/SignalJsonContext.cs` (1 each per method — лише Parameters; Response reused).
+- [x] 1.2.7 `src/SignalCli/Interfaces/Signal/ISignalMessage.cs` — додати 4 нові методи з XMLDoc + source-citation per §0.5 + §F-reminders inline.
+- [x] 1.2.8 `src/SignalCli/Services/Signal/SignalMessage.cs` — реалізувати 4 нові методи. §F10 reminder applied у XMLDoc per-method (sendReaction→-32603, sendTyping→-1, remoteDelete→-32603, sendReceipt→no catch).
+- [x] 1.2.9 `src/SignalCli/Logging/SignalMessageLog.cs` — 4 нових `[LoggerMessage]` методів у EventId block 700-799 (703-706: ReactionOk/ReceiptOk/TypingOk/RemoteDeleteOk). **Deviation:** 12 методів (3 per RPC) скорочено до 4 Ok-логів — Requested/ValidationFailed з пропозиції фактично не використовуються existing pattern'ом (existing SendUnifiedMessageAsync теж має 2 логи на 3 send-методи). NullResponse reuse'ється — це shared concept. Privacy rule #1 enforced: жодного PII у шаблонах.
 
 ### 1.3 Tests
 
-- [ ] 1.3.1 `Tests/SignalCli.Tests/Serialization/MessagingInteractiveSerializationTests.cs` — 8 serialization roundtrip tests (4 params + 4 responses) з inline-literal-JSON snapshots з real signal-cli.
-- [ ] 1.3.2 `Tests/SignalCli.Tests/Services/Signal/SignalMessageReactionTests.cs` — 3 tests (happy path + identity-changed catch + validation).
-- [ ] 1.3.3 Те ж саме для Receipt, Typing, RemoteDelete = 9 more tests.
-- [ ] 1.3.4 `Tests/SignalCli.Tests/Models/Signal/Message/ReactionOptionsTests.cs` — builder + validation. 4 files × ~4 tests = 16 tests.
-- [ ] 1.3.5 Update `Tests/SignalCli.Tests/RegressionGuards/PublicApiSurface/SignalCli.public-api.txt` baseline.
+- [x] 1.3.1 `Tests/SignalCli.Tests/Serialization/MessagingInteractiveSerializationTests.cs` — 8 serialization tests, parse через `JsonDocument` field-by-field. **Deviation:** inline-literal-JSON snapshots з real signal-cli не зібрано (`0.4` pending); pinning через source-of-truth research §0.5.
+- [x] 1.3.2 `Tests/SignalCli.Tests/MessagingInteractive/SignalMessageInteractiveTests.cs` — 8 service-level тестів. (Subfolder renamed з `Services/Signal/` → `MessagingInteractive/` бо `SignalCli.Tests.Services` ns shadow'ила `SignalCli.Services`.)
+- [x] 1.3.3 Receipt/Typing/RemoteDelete покриті у SignalMessageInteractiveTests.cs same file (всі 4 методи — один cohesive test class).
+- [x] 1.3.4 `Tests/SignalCli.Tests/MessagingInteractive/InteractiveOptionsTests.cs` — 18 builder + validation тестів для 4-х Options. (Single file замість 4 — same logic per Options, не варто фрагментувати.)
+- [x] 1.3.5 Public API baseline regenerated: 1087 → **1239 lines** (+152 entries: 3 exceptions + 4 Options × ~10 members + 4 Parameters × ~10 + 1 enum). `RG03 PublicApiSurfaceTests` зелений.
 
 ### 1.4 Release
 
-- [ ] 1.4.1 `dotnet build -p:TreatWarningsAsErrors=true && dotnet test SignalCli.sln` — clean, count ~287 → ~327.
-- [ ] 1.4.2 `Directory.Build.props` — `<SignalCliPackageVersion>4.1.0</SignalCliPackageVersion>`.
-- [ ] 1.4.3 `CHANGELOG.md` — нова `## [4.1.0] — YYYY-MM-DD` секція, consumer-first voice (`.claude/rules/openspec-workflow.md`).
+- [x] 1.4.1 `dotnet build -p:TreatWarningsAsErrors=true && dotnet test SignalCli.sln` — clean, count 290 → **333** (+43 tests).
+- [x] 1.4.2 `Directory.Build.props` — `<SignalCliPackageVersion>4.1.0</SignalCliPackageVersion>`.
+- [x] 1.4.3 `CHANGELOG.md` — нова `## [4.1.0] — 2026-05-25` секція, consumer-first voice (`.claude/rules/openspec-workflow.md`).
 - [ ] 1.4.4 Single commit: `feat(4.1.0): interactive messaging — reactions, receipts, typing, remote-delete`. Push.
 - [ ] 1.4.5 Wait merge → tag `v4.1.0`.
 

@@ -494,12 +494,23 @@ internal sealed class JsonRpcClient : IJsonRpcClient
                     if (response.Error != null)
                     {
                         // signal-cli-protocol-alignment (typed-rpc-errors): high-leverage error
-                        // codes (RateLimit -5, UntrustedIdentity -4) surface як derived exceptions,
-                        // щоб consumer'и могли catch-by-type замість inspect-message-text.
+                        // codes (RateLimit -5, UntrustedIdentity -4, CaptchaRejected -6) surface
+                        // як derived exceptions, щоб consumer'и могли catch-by-type замість
+                        // inspect-message-text.
+                        //
+                        // signal-cli-api-coverage Wave 1: додано CaptchaRequiredException (код -6)
+                        // та GroupAdminRequiredException (код -1 + message-match "admin"). Останній
+                        // — heuristic: upstream не виділяє admin-required у окремий код, тож
+                        // message-substring дозволяє typed-catch у обмін на можливі false-positive
+                        // (інші UserError повідомлення які згадують "admin").
                         throw response.Error.Code switch
                         {
                             (int)JsonRpcErrorCode.RateLimit => new RateLimitException(response.Error),
                             (int)JsonRpcErrorCode.UntrustedIdentity => new UntrustedIdentityException(response.Error),
+                            (int)JsonRpcErrorCode.CaptchaRejected => new CaptchaRequiredException(response.Error),
+                            (int)JsonRpcErrorCode.UserError when response.Error.Message?
+                                .Contains("admin", StringComparison.OrdinalIgnoreCase) == true
+                                => new GroupAdminRequiredException(response.Error),
                             _ => new JsonRpcException(response.Error),
                         };
                     }

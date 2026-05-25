@@ -3,6 +3,64 @@
 Формат заснований на [Keep a Changelog](https://keepachangelog.com/),
 проєкт дотримується [семантичного версіонування](https://semver.org/lang/uk/).
 
+## [4.1.0] — 2026-05-25
+
+Minor-реліз. **Якщо твій бот колись хотів зробити "👍 read + typing-indicator + remote-delete" без shell'у в signal-cli CLI — тепер це нативно у бібліотеці.** 4 нові send-методи на `ISignalMessage` + 3 typed exceptions для consumer-actionable error-codes. Backward-compatible — жодних змін до існуючих send-методів, тестів чи DI-композиції.
+
+### ✨ Нове
+
+- **`ISignalMessage` отримав 4 нові методи: `SendReactionAsync`, `SendReceiptAsync`, `SendTypingAsync`, `SendRemoteDeleteAsync`.** Кожен — тонкий typed wrapper навколо відповідного signal-cli RPC (`sendReaction` / `sendReceipt` / `sendTyping` / `remoteDelete`). Builder-style options:
+  ```csharp
+  await signalMessage.SendReactionAsync(
+      new ReactionOptions.Builder("+380...", "👍", targetTimestamp: 1717181920000L)
+          .WithRecipients(["+380999..."])
+          .WithNotifySelf()
+          .Build());
+  ```
+  Wire-shape, field names, enum values, error codes pinned до signal-cli source @ `bda4e7fc` (читали Java records напряму, не вгадували) — кожен новий метод цитує `org.asamk.signal.commands.<X>Command.java` у XMLDoc remarks для re-verify на 1 хв. *([signal-cli-api-coverage](openspec/changes/signal-cli-api-coverage/proposal.md), `messaging-interactive` capability)*
+
+- **3 нові typed exceptions для consumer-actionable patterns:**
+  - `IdentityChangedException : UntrustedIdentityException` — opt-in subset для розрізнення "re-install уже відомого контакту" vs "first-contact untrusted" (upstream signal-cli обидва кидає кодом `-4`; розрізнення — client-side concern, готується для Wave 3 `ISignalContacts`).
+  - `GroupAdminRequiredException : JsonRpcException` — code `-1` (UserError) з message-substring "admin". Дозволяє `catch (GroupAdminRequiredException) { /* escalate */ }` замість inspect-message-text по локалізованих рядках.
+  - `CaptchaRequiredException : JsonRpcException` — code `-6` (CaptchaRejected). XMLDoc лінкує consumer flow через signalcaptchas.org → token → submitRateLimitChallenge (Wave 8).
+  - `JsonRpcClient` dispatch switch розширено: автоматично кидає правильний derived-тип за кодом+message.
+
+### 🛠 Інше
+
+- **`UntrustedIdentityException` тепер `un-sealed`.** Потрібно для derivation `IdentityChangedException`. Чисто-additive change: existing `catch (UntrustedIdentityException)` працює без змін; new `catch (IdentityChangedException)` працює як строгіший subset.
+
+- **Wave-cycle прецедент: всі 4 нові методи перевикористовують існуючий `SendMessageResponse`** замість додавання 4-х майже-ідентичних response-типів. Research §0.5 (читання `SendMessageResultUtils.java @ bda4e7fc`) підтвердило: wire shape `{ timestamp, results }` ідентичний для усіх 4-х. Уникнено boilerplate × 4.
+
+### 🛡️ Захист від регресій
+
+- **`MessagingInteractiveSerializationTests` — 8 тестів пінять kebab-case wire-shape** (`note-to-self`, `target-author`, `target-timestamp`, `group-id`, `recipient` як singular для receipt'у, `stop` як boolean для typing). Уся wire-shape парситься через `JsonDocument` field-by-field (не raw substring), тож тести не chrupkі до STJ-encoder defaults.
+- **`SignalMessageInteractiveTests` — 8 service-level тестів** з Moq pinning'ом method-name → RPC-method, Options → Parameters mapping, derived-exception propagation, null-response гарду.
+- **`InteractiveOptionsTests` — 18 builder + validation тестів** для 4-х Options-типів. Покриті: обов'язкові поля, "хоча б один recipient-source" guard, default values (Type=Read, Stop=false), §F7 singular-Recipient invariant.
+- **`NewTypedRpcErrorsTests` — 9 тестів** на inheritance-контракти (`IdentityChangedException : UntrustedIdentityException : JsonRpcException`), sealed-маркер, та реальний dispatch через `JsonRpcClient.ProcessMessageAsync` для кодів `-6`/`-1+admin`/`-1 plain`.
+
+### 📊 Тестова статистика
+
+- Unit: 290 → **333** (+43 тести).
+- Integration: 8 (без змін; усі mock-only за wave-1 ризик-планом).
+- Build на src/ + Tests/: 0 warnings, 0 errors з `TreatWarningsAsErrors=true`.
+
+### 📦 Що в Wave 1 / що в наступних wave'ах
+
+| Wave | Capability | RPC методи | Release | Risk |
+|---|---|---|---|---|
+| **1** | **`messaging-interactive`** | **sendReaction, sendReceipt, sendTyping, remoteDelete** | **4.1.0 (цей реліз)** | low |
+| 2 | `groups-crud` | joinGroup, updateGroup, quitGroup | 4.2.0 (next) | medium |
+| 3 | `contacts-identity` | listContacts, listIdentities, trust, updateContact, removeContact, updateProfile, block, unblock | 4.3.0 | low |
+| 4 | `sticker-packs` + `binary-resource-fetch` | upload/list/addStickerPack, get{Attachment,Avatar,Sticker} | 4.4.0 | low |
+| 5 | `device-management` | add/list/remove/updateDevice | 4.5.0 | medium |
+| 6 | `account-lifecycle` *(opt-in gated)* | 8 destructive методів | 4.6.0 | HIGH |
+| 7 | `polls` + `messaging-power-user` + receive-decoders | 8 send + 7 receive event-streams | 4.7.0 | medium |
+| 8 | `utility-rpc` | getUserStatus, submitRateLimitChallenge, sendContacts | 4.8.0 | low |
+
+Target після Wave 8: **53/54 = 98% coverage** signal-cli JSON-RPC surface (єдиний пропущений — `receive` polling, бо `subscribeReceive` є його кращою альтернативою).
+
+---
+
 ## [4.0.3] — 2026-05-25
 
 Patch-реліз. **Нульовий impact на consumer'ів — це чисто developer/agent ergonomics**:

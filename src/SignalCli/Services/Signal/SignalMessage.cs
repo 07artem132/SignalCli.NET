@@ -320,6 +320,157 @@ namespace SignalCli.Services.Signal
             return await SendUnifiedMessageAsync(req, cancellationToken).ConfigureAwait(false);
         }
 
+        // ===== signal-cli-api-coverage Wave 1 (messaging-interactive) =====
+        // Кожен з 4-х методів — тонкий wrapper навколо InvokeMethodAsync:
+        //   1) ArgumentNullException.ThrowIfNull(options) — fail-fast.
+        //   2) Маппінг *Options → *Parameters (consumer-facing → wire-shape).
+        //   3) InvokeMethodAsync(method, params, requestInfo, responseInfo, ct) — usual AOT-safe shape.
+        //   4) null-response guard + Information-level Ok-лог із timestamp'ом.
+        // Виключення (RateLimit/UntrustedIdentity/CaptchaRequired/GroupAdminRequired/JsonRpcException)
+        // транспортує JsonRpcClient — тут ми не намагаємось catch + re-wrap.
+
+        /// <inheritdoc/>
+        public async Task<SendMessageResponse> SendReactionAsync(
+            ReactionOptions options,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(options);
+            var parameters = new SendReactionParameters(
+                Account: options.Account,
+                Recipients: options.Recipients,
+                GroupIds: options.GroupIds,
+                Usernames: options.Usernames,
+                NoteToSelf: options.NoteToSelf,
+                NotifySelf: options.NotifySelf,
+                Emoji: options.Emoji,
+                TargetAuthor: options.TargetAuthor,
+                TargetTimestamp: options.TargetTimestamp,
+                Remove: options.Remove,
+                Story: options.Story);
+
+            var response = await _signalCliClient
+                .InvokeMethodAsync(
+                    "sendReaction",
+                    parameters,
+                    SignalJsonContext.Default.SendReactionParameters,
+                    SignalJsonContext.Default.SendMessageResponse,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            if (response == null)
+            {
+                SignalMessageLog.SendNullResponse(_logger);
+                throw new InvalidOperationException("Null response from server");
+            }
+
+            SignalMessageLog.ReactionOk(_logger, response.TimeStamp);
+            return response;
+        }
+
+        /// <inheritdoc/>
+        public async Task<SendMessageResponse> SendReceiptAsync(
+            ReceiptOptions options,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(options);
+            // §F7: Recipient — singular, не список. Маппимо як є.
+            // ReceiptType (.NET enum) → lowercase wire-string per upstream argparse choices.
+            var typeWire = options.Type switch
+            {
+                ReceiptType.Read => "read",
+                ReceiptType.Viewed => "viewed",
+                _ => throw new ArgumentOutOfRangeException(nameof(options),
+                    $"Невідоме значення ReceiptType: {options.Type}"),
+            };
+            var parameters = new SendReceiptParameters(
+                Account: options.Account,
+                Recipient: options.Recipient,
+                TargetTimestamps: options.TargetTimestamps,
+                Type: typeWire);
+
+            var response = await _signalCliClient
+                .InvokeMethodAsync(
+                    "sendReceipt",
+                    parameters,
+                    SignalJsonContext.Default.SendReceiptParameters,
+                    SignalJsonContext.Default.SendMessageResponse,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            if (response == null)
+            {
+                SignalMessageLog.SendNullResponse(_logger);
+                throw new InvalidOperationException("Null response from server");
+            }
+
+            SignalMessageLog.ReceiptOk(_logger, response.TimeStamp);
+            return response;
+        }
+
+        /// <inheritdoc/>
+        public async Task<SendMessageResponse> SendTypingAsync(
+            TypingOptions options,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(options);
+            var parameters = new SendTypingParameters(
+                Account: options.Account,
+                Recipients: options.Recipients,
+                GroupIds: options.GroupIds,
+                Stop: options.Stop);
+
+            var response = await _signalCliClient
+                .InvokeMethodAsync(
+                    "sendTyping",
+                    parameters,
+                    SignalJsonContext.Default.SendTypingParameters,
+                    SignalJsonContext.Default.SendMessageResponse,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            if (response == null)
+            {
+                SignalMessageLog.SendNullResponse(_logger);
+                throw new InvalidOperationException("Null response from server");
+            }
+
+            SignalMessageLog.TypingOk(_logger, response.TimeStamp);
+            return response;
+        }
+
+        /// <inheritdoc/>
+        public async Task<SendMessageResponse> SendRemoteDeleteAsync(
+            RemoteDeleteOptions options,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(options);
+            var parameters = new RemoteDeleteParameters(
+                Account: options.Account,
+                TargetTimestamp: options.TargetTimestamp,
+                GroupIds: options.GroupIds,
+                Recipients: options.Recipients,
+                Usernames: options.Usernames,
+                NoteToSelf: options.NoteToSelf);
+
+            var response = await _signalCliClient
+                .InvokeMethodAsync(
+                    "remoteDelete",
+                    parameters,
+                    SignalJsonContext.Default.RemoteDeleteParameters,
+                    SignalJsonContext.Default.SendMessageResponse,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            if (response == null)
+            {
+                SignalMessageLog.SendNullResponse(_logger);
+                throw new InvalidOperationException("Null response from server");
+            }
+
+            SignalMessageLog.RemoteDeleteOk(_logger, response.TimeStamp);
+            return response;
+        }
+
         /// <summary>
         /// Перевіряє, що список отримувачів не порожній.
         /// </summary>

@@ -70,6 +70,14 @@ namespace SignalCli.Serialization;
 // Message
 [JsonSerializable(typeof(SendMessageFullParameters))]
 [JsonSerializable(typeof(SendMessageResponse))]
+// Message — Wave 1 messaging-interactive (signal-cli-api-coverage):
+// 4 send-методи reuse'ять існуючий SendMessageResponse (research §Cross-method §4
+// confirms identical wire shape `{ timestamp, results }` для всіх sendReaction/Receipt/
+// Typing/RemoteDelete). Окремі Response-типи створювати не потрібно.
+[JsonSerializable(typeof(SendReactionParameters))]
+[JsonSerializable(typeof(SendReceiptParameters))]
+[JsonSerializable(typeof(SendTypingParameters))]
+[JsonSerializable(typeof(RemoteDeleteParameters))]
 // post-modernize-tuning §6.7 (audit P6): JsonElement використовується як TResponse
 // у SignalEventService.SubscribeAsync (signal-cli повертає raw id або помилку); після
 // AOT-міграції потрібен JsonTypeInfo<JsonElement>. Source-gen надає pass-through-typeinfo.
