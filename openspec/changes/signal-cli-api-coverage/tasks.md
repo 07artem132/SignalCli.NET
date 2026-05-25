@@ -111,7 +111,7 @@
 
 ## 3. Wave 3 — `contacts-identity` *(4.3.0)*
 
-- [ ] 3.1 Нова папка `src/SignalCli/Models/Signal/Contacts/` — 16 DTOs (8 methods × 2):
+- [x] 3.1 Нова папка `src/SignalCli/Models/Signal/Contacts/` — 16 DTOs (8 methods × 2):
   - `ListContactsParameters/Response.cs` + nested `Contact` record (number, profile-key, name, given/family-name, expirationSeconds, blocked, archived)
   - `ListIdentitiesParameters/Response.cs` + nested `Identity` record (number, fingerprint, safety-number, scannableSafetyNumber, trustLevel, addedTimestamp)
   - `TrustParameters` + `TrustOptions` (sealed record) + `TrustMode` enum (`TrustAllKnown` | `VerifiedSafetyNumber`)
@@ -119,19 +119,19 @@
   - `RemoveContactParameters` + `RemoveContactBehavior` enum (`Hide` | `Forget`). **§F9 reminder:** `RemoveContactCommand.java:23 @ bda4e7fc` uses `addMutuallyExclusiveGroup()` but the mutex is enforced ONLY at argparse4j CLI level — JSON-RPC clients can set BOTH `hide=true` and `forget=true` simultaneously, and upstream then executes `hide` first-wins. The .NET `RemoveContactOptions` Builder MUST validate XOR client-side (throw `ArgumentException` if both flags set) so wire never receives an ambiguous payload. See `research/wave-3-contacts-identity.md`.
   - `UpdateProfileParameters` + `UpdateProfileOptions` (sealed record, nullable: GivenName, FamilyName, About, AboutEmoji, MobileCoinAddress, AvatarPath, RemoveAvatar). **§F18 reminder:** `AvatarPath` vs `RemoveAvatar` XOR — same pattern as F9 (RemoveContact). Builder MUST validate XOR client-side (throw `ArgumentException` if both set); upstream `UpdateProfileCommand.java @ bda4e7fc` mutex is argparse-only — wire silently accepts both with undefined first-wins behavior. See `research/wave-3-contacts-identity.md` updateProfile section.
   - `BlockParameters` + `UnblockParameters` (shape identical, separate types для type-safety)
-- [ ] 3.2 Register 16 нових DTOs у `SignalJsonContext` (+ `List<Contact>`, `List<Identity>` wrapper-collections per critical rule N10).
-- [ ] 3.3 `src/SignalCli/Interfaces/Signal/ISignalContacts.cs` — NEW interface, 8 methods.
-- [ ] 3.4 `src/SignalCli/Services/Signal/SignalContacts.cs` — NEW service, implementations.
-- [ ] 3.5 `src/SignalCli/Logging/SignalContactsLog.cs` — NEW, ~24 `[LoggerMessage]` методів у NEW EventId block 600-649.
-- [ ] 3.6 `src/SignalCli/Extensions/ServiceCollectionExtensions.cs` — `services.TryAddSingleton<ISignalContacts, SignalContacts>()` у `AddSignalCli`.
-- [ ] 3.7 Serialization + service + validation tests (~24 unit).
-- [ ] 3.8 Створити `Tests/SignalCli.Tests.Integration/TestAccountFixture.cs` (per design §1.8) — `EnvVar = "SIGNALCLI_TEST_ACCOUNT"`, `TryGet()`, `GetOrSkip()`.
-- [ ] 3.8.1 E2E: `Tests/SignalCli.Tests.Integration/SignalCliE2EContactsTests.cs` — `ListContacts_Returns_Empty_Or_Populated`, `ListIdentities_Returns_Own_Identity_AtMinimum`. Both read-only. ОБИДВА тести стартують з `var account = TestAccountFixture.GetOrSkip();` — skip clean якщо env var відсутній (CI без registered тестового номера).
-- [ ] 3.9 Update `SignalCli.public-api.txt` baseline (new namespace + interface + 8 methods).
-- [ ] 3.10 Update `R02` (`EventIdBlockTests`) — додати reservation 600-649 для `SignalContactsLog`.
-- [ ] 3.11 Build + test (count ~352 → ~378 unit + 2 E2E).
-- [ ] 3.12 Bump 4.2.0 → 4.3.0 + CHANGELOG.
-- [ ] 3.13 Commit `feat(4.3.0): contacts & identities — list/trust/update/remove/profile/block`, push, merge, tag.
+- [x] 3.2 Register 16 нових DTOs у `SignalJsonContext` (+ `List<JsonContact>`, `List<JsonIdentity>` wrapper-collections per critical rule N10).
+- [x] 3.3 `src/SignalCli/Interfaces/Signal/ISignalContacts.cs` — NEW interface, **9** methods (Trust split на TrustAllKnownKeysAsync + TrustVerifiedAsync для type-safe XOR).
+- [x] 3.4 `src/SignalCli/Services/Signal/SignalContacts.cs` — NEW service. Void-методи використовують JsonElement як response-тип (signal-cli emit'ить `"result": null` для void); §F9 RemoveContactMode→XOR mapping; §F18 defense-in-depth XOR guard.
+- [x] 3.5 `src/SignalCli/Logging/SignalContactsLog.cs` — NEW, 8 `[LoggerMessage]` методів у **EventId block 830-849** (within shared 800-899 з Accounts/Devices/Groups per `.claude/rules/patterns.md`; **task plan мав помилку — вказував 600-649, виправлено** — 600-699 належить SignalServiceLog).
+- [x] 3.6 `src/SignalCli/Extensions/ServiceCollectionExtensions.cs` — `services.TryAddSingleton<ISignalContacts, SignalContacts>()` у `AddSignalCli`.
+- [x] 3.7 Serialization (9) + service (10) + builder (10) tests = **29 unit**.
+- [x] 3.8 Створити `Tests/SignalCli.Tests.Integration/TestAccountFixture.cs` — `EnvVar = "SIGNALCLI_TEST_ACCOUNT"`, `TryGet()`, `TryGetOrSkip()`.
+- [x] 3.8.1 E2E: `Tests/SignalCli.Tests.Integration/SignalCliE2EContactsTests.cs` — 2 env-gated тести (ListContacts + ListIdentities). Skip clean якщо env var відсутній.
+- [x] 3.9 Update `SignalCli.public-api.txt` baseline: 1375 → **1642** lines (+267 entries: ISignalContacts + nested record types + 2 enums + 8 Parameters + 2 Response wrappers).
+- [x] 3.10 Update `R02` (`EventIdBlockTests`) — додано reservation `[typeof(SignalContactsLog), 800, 899]`.
+- [x] 3.11 Build + test: 358 → **387** (+29 unit) + 2 E2E env-gated. `TreatWarningsAsErrors=true` зелений.
+- [x] 3.12 Bump 4.2.0 → 4.3.0 + CHANGELOG consumer-first voice.
+- [ ] 3.13 Commit `feat(4.3.0): contacts & identities — list/trust/update/remove/profile/block`. (Local-only per user instruction; push/merge/tag — окремий етап.)
 
 ## 4. Wave 4 — `sticker-packs` + `binary-resource-fetch` *(4.4.0)*
 

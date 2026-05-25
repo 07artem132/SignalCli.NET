@@ -3,6 +3,89 @@
 Формат заснований на [Keep a Changelog](https://keepachangelog.com/),
 проєкт дотримується [семантичного версіонування](https://semver.org/lang/uk/).
 
+## [4.3.0] — 2026-05-25
+
+Minor-реліз. **Якщо твій бот колись хотів читати контакти, керувати identity-trust або blocklist'ом з .NET — це нарешті є.** Новий `ISignalContacts` interface (8 RPC методів signal-cli) + перший env-gated E2E test проти реального signal-cli. Backward-compatible — інші 4 facades (Message/Groups/Devices/Accounts) без змін.
+
+### ✨ Нове
+
+- **`ISignalContacts` — новий interface з 9 методами** (Trust розщеплено на два type-safe API).
+  ```csharp
+  // Read contacts і identities
+  var contacts = await signalContacts.ListContactsAsync(account, includeInternal: true);
+  var identities = await signalContacts.ListIdentitiesAsync(account);
+
+  // Trust identity (production path — safety-number verification)
+  await signalContacts.TrustVerifiedAsync(account, "+380...", "12345 67890 ...");
+  // Trust identity (testing path — all known keys)
+  await signalContacts.TrustAllKnownKeysAsync(account, "+380...");
+
+  // Update contact metadata
+  await signalContacts.UpdateContactAsync(
+      new UpdateContactOptions.Builder(account, "+380...")
+          .WithGivenName("Foo").WithFamilyName("Bar")
+          .WithNote("VIP customer")
+          .Build());
+
+  // Remove contact (3 distinct modes — §F9 XOR enforced through enum)
+  await signalContacts.RemoveContactAsync(account, "+380...", RemoveContactMode.Hide);
+
+  // Update own profile (§F18 AvatarPath/RemoveAvatar XOR enforced у Builder)
+  await signalContacts.UpdateProfileAsync(
+      new UpdateProfileOptions.Builder(account)
+          .WithGivenName("Test")
+          .WithAvatarPath("/local/path/avatar.jpg")  // OR .WithRemoveAvatar() — not both
+          .Build());
+
+  // Block/Unblock
+  await signalContacts.BlockAsync(account, recipients: ["+380..."], groupIds: ["g=="]);
+  await signalContacts.UnblockAsync(account, recipients: ["+380..."]);
+  ```
+  Wire-shape для всіх 8 методів pinned до signal-cli source @ `bda4e7fc` per §0.5 protocol; XMLDoc на кожному методі цитує `org.asamk.signal.commands.<X>Command.java`. *([signal-cli-api-coverage](openspec/changes/signal-cli-api-coverage/proposal.md), `contacts-identity` capability)*
+
+- **2 нові enum типи:**
+  - `TrustLevel { Untrusted, TrustedUnverified, TrustedVerified }` — wire UPPER_SNAKE (`"TRUSTED_VERIFIED"`).
+  - `RemoveContactMode { DeleteContact, Hide, Forget }` — type-safe alternative до upstream's two-boolean XOR (§F9).
+
+- **Wire-DTOs:** `JsonContact` (+ nested `JsonContactProfile`/`JsonContactInternal`), `JsonIdentity`, 8 `*Parameters` types + `ListContactsResponse`/`ListIdentitiesResponse` wrapper-records (flat-array converter pattern as `ListAccountsResponse`).
+
+- **`TestAccountFixture` (Integration project)** + перший env-gated E2E (`SignalCliE2EContactsTests`). Виставляєш `SIGNALCLI_TEST_ACCOUNT="+1234567890"` (E.164 номер уже-registered тестового акаунту через signal-cli CLI), тест запускається проти живого daemon'у; без env var — clean skip без CI-failure.
+
+### 🛠 Інше
+
+- **§F9 RemoveContact XOR enforced через enum.** Upstream argparse mutex group НЕ enforce'иться у JSON-RPC; обидва прапори `hide=true&forget=true` upstream приймає silently → hide-first-wins. Наш `RemoveContactMode` enum мапиться у valid XOR booleans перед wire — consumer не може випадково послати ambiguous payload.
+
+- **§F18 UpdateProfile XOR enforced у Builder + defense-in-depth у service.** `UpdateProfileOptions.Builder.WithAvatarPath()` + `WithRemoveAvatar()` mutex check одне-проти-одного на builder-level; `SignalContacts.UpdateProfileAsync` додатково guards для direct-record-construction (минаючи Builder).
+
+- **Void RPC методи (Trust*/UpdateContact/RemoveContact/UpdateProfile/Block/Unblock) використовують `JsonElement` як response-type** бо signal-cli emit'ить `"result": null` для void commands. JsonElement deserializer приймає null без exception (на відміну від reference-typed responses де `typedResult is null` → throw). Service-методи повертають `Task` (не `Task<T>`).
+
+- **`SignalContactsLog` block 830-849** (within shared 800-899 з Accounts/Devices/Groups). `EventIdBlockTests` (RG02) extended з reservation `[typeof(SignalContactsLog), 800, 899]`.
+
+- **Trust split: одне signal-cli RPC `trust`, два .NET methods.** `TrustVerifiedAsync(verifiedSafetyNumber)` + `TrustAllKnownKeysAsync()`. XOR mutex enforced через окремі API замість optional-parameter-on-one-method-with-runtime-validation. Consumer не може помилково передати обидва.
+
+### 🛡️ Захист від регресій
+
+- **`ContactsSerializationTests` — 9 тестів** пінять wire-shape: TrustLevel UPPER_SNAKE на wire, JsonContact field-naming quirks (`nickGivenName` shortening from `nickNameGivenName`, `discoverableByPhonenumber` upstream typo preserved), Internal sub-object presence (request `internal=true` → present; absent inakше), Block/Unblock identical shape.
+
+- **`SignalContactsTests` — 10 service-level тестів** (5 happy path + 1 Theory з 3 RemoveContactMode cases + 1 XOR defense-in-depth + 3 arg validation). Pins enum→XOR mapping та Trust-split contract.
+
+- **`UpdateContactOptionsTests` + `UpdateProfileOptionsTests` — 10 builder тестів.** Включає §F18 XOR-on-Builder для UpdateProfile (path→remove throws; remove→path throws; alone-валідні).
+
+- **`EventIdBlockTests` extended** — додано `[typeof(SignalContactsLog), 800, 899]`.
+
+### 📊 Тестова статистика
+
+- Unit: 358 → **387** (+29 unit тестів).
+- Integration: 8 → **10** (+2 env-gated E2E; skip clean на CI без registered акаунту).
+- Public API baseline: 1375 → ~1700 lines (+~325 entries — велика expansion бо новий interface + nested record types + 2 enums).
+- Build на src/ + Tests/: 0 warnings, 0 errors з `TreatWarningsAsErrors=true`.
+
+### 📦 Що в Wave 3 / що далі
+
+Після Wave 3: **9 + 4 + 3 + 9 = 25 з ~54 = 46%** signal-cli JSON-RPC покрито. Залишилось 5 wave'ів (sticker-packs/binary-resource-fetch, device-management, account-lifecycle opt-in, polls/power-user, utility-rpc) до target'у **98%** у 4.8.0.
+
+---
+
 ## [4.2.0] — 2026-05-25
 
 Minor-реліз. **Якщо тобі треба з .NET керувати членством у Signal-групах — приєднуватися, оновлювати, виходити — тепер це нативно у бібліотеці.** 3 нові методи на `ISignalGroups`. Backward-compatible — `ListGroupsAsync` без змін.

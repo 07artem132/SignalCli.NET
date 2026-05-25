@@ -874,6 +874,155 @@
             <exception cref="T:SignalCli.Exceptions.JsonRpcException">Виникає при помилці JSON-RPC запиту.</exception>
             <exception cref="T:System.OperationCanceledException">Виникає, якщо операцію скасовано.</exception>
         </member>
+        <member name="T:SignalCli.Interfaces.Signal.ISignalContacts">
+            <summary>
+            Сервіс для роботи з контактами та identity-keys у Signal (signal-cli-api-coverage Wave 3).
+            </summary>
+            <remarks>
+            8 RPC методів (Trust розщеплено на 2 type-safe методи: TrustAllKnownKeys + TrustVerified —
+            XOR mutex enforce'иться через окремі API). Read-only методи (<c>listContacts</c>/<c>listIdentities</c>)
+            безпечно ділять акаунт між test-runs; mutating методи (<c>updateContact</c>, <c>block</c>,
+            etc.) тригерять contacts-sync на linked devices.
+            </remarks>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalContacts.ListContactsAsync(System.String,System.Collections.Generic.IEnumerable{System.String},System.Boolean,System.Nullable{System.Boolean},System.String,System.Boolean,System.Threading.CancellationToken)">
+            <summary>
+            Список усіх відомих контактів акаунту з опційним фільтром.
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see
+            <c>src/main/java/org/asamk/signal/commands/ListContactsCommand.java</c> @ <c>bda4e7fc</c>.
+            Read-only.
+            </remarks>
+            <param name="account">E.164 номер акаунту.</param>
+            <param name="recipients">Опційний фільтр — лише ці recipient'и.</param>
+            <param name="allRecipients">Якщо <c>true</c>, returnн усі known recipients (не лише contacts).</param>
+            <param name="blocked">Фільтр по blocked-state: <c>null</c>=no-filter.</param>
+            <param name="name">Substring-фільтр по contact-name або profile-name.</param>
+            <param name="includeInternal">Якщо <c>true</c>, додає <c>internal</c> sub-object у кожен результат.</param>
+            <param name="cancellationToken">Токен скасування.</param>
+            <exception cref="T:System.ArgumentException">Якщо <paramref name="account"/> порожнє.</exception>
+            <exception cref="T:SignalCli.Exceptions.JsonRpcException">При RPC-помилці.</exception>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalContacts.ListIdentitiesAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Список identity-keys для акаунту з опційним фільтром по recipient'у.
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see
+            <c>src/main/java/org/asamk/signal/commands/ListIdentitiesCommand.java</c> @ <c>bda4e7fc</c>.
+            Read-only.
+            </remarks>
+            <param name="account">E.164 номер акаунту.</param>
+            <param name="recipient">Опційний recipient identifier (phone/UUID/PNI/username). <c>null</c> = усі.</param>
+            <param name="cancellationToken">Токен скасування.</param>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalContacts.TrustAllKnownKeysAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Trust усіх known identity-keys recipient'а (testing-only path, <c>--trust-all-known-keys</c>).
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see <c>src/main/java/org/asamk/signal/commands/TrustCommand.java</c>
+            @ <c>bda4e7fc</c>. Mutates trust DB; може тригерити verified-message sync на linked devices.
+            </remarks>
+            <param name="account">E.164 номер акаунту.</param>
+            <param name="recipient">Recipient identifier.</param>
+            <param name="cancellationToken">Токен скасування.</param>
+            <exception cref="T:SignalCli.Exceptions.JsonRpcException"><c>-1</c> якщо recipient не зареєстрований або не має identity.</exception>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalContacts.TrustVerifiedAsync(System.String,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Trust identity-key recipient'а за verified safety-number (стандартний production path).
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see <c>src/main/java/org/asamk/signal/commands/TrustCommand.java</c>
+            @ <c>bda4e7fc</c>. <paramref name="verifiedSafetyNumber"/> може бути 60-digit safety-number
+            (з пробілами або без), 66-hex-fingerprint, або base64 scannable-safety-number — upstream
+            disambiguate'ить за довжиною.
+            </remarks>
+            <param name="account">E.164 номер акаунту.</param>
+            <param name="recipient">Recipient identifier.</param>
+            <param name="verifiedSafetyNumber">60/66-char або base64 safety-number.</param>
+            <param name="cancellationToken">Токен скасування.</param>
+            <exception cref="T:SignalCli.Exceptions.JsonRpcException"><c>-1</c> якщо safety-number не співпадає або має invalid format.</exception>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalContacts.UpdateContactAsync(SignalCli.Models.Signal.Contacts.UpdateContactOptions,System.Threading.CancellationToken)">
+            <summary>
+            Оновлює метадані контакту (імена/note/expiration). Не змінює profile-side (для цього <see cref="M:SignalCli.Interfaces.Signal.ISignalContacts.UpdateProfileAsync(SignalCli.Models.Signal.Contacts.UpdateProfileOptions,System.Threading.CancellationToken)"/>).
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see
+            <c>src/main/java/org/asamk/signal/commands/UpdateContactCommand.java</c> @ <c>bda4e7fc</c>.
+            </remarks>
+            <param name="options">Опції з required <c>account</c>+<c>recipient</c>; всі інші поля nullable.</param>
+            <param name="cancellationToken">Токен скасування.</param>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalContacts.RemoveContactAsync(System.String,System.String,SignalCli.Models.Signal.Contacts.RemoveContactMode,System.Threading.CancellationToken)">
+            <summary>
+            Видаляє контакт у одному з трьох режимів (<see cref="T:SignalCli.Models.Signal.Contacts.RemoveContactMode"/>).
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see
+            <c>src/main/java/org/asamk/signal/commands/RemoveContactCommand.java</c> @ <c>bda4e7fc</c>.
+            <para>
+            §F9: <see cref="T:SignalCli.Models.Signal.Contacts.RemoveContactMode"/> enum гарантує валідний XOR на wire (uplstream
+            argparse mutex group НЕ enforce'иться у JSON-RPC шарі, тож unsanitized direct DTO
+            усе одно accepts hide=true+forget=true → hide-first-wins; цей service-метод цьому запобігає).
+            </para>
+            </remarks>
+            <param name="account">E.164 номер акаунту.</param>
+            <param name="recipient">Recipient identifier.</param>
+            <param name="mode">Режим видалення. Default — <see cref="F:SignalCli.Models.Signal.Contacts.RemoveContactMode.DeleteContact"/>.</param>
+            <param name="cancellationToken">Токен скасування.</param>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalContacts.UpdateProfileAsync(SignalCli.Models.Signal.Contacts.UpdateProfileOptions,System.Threading.CancellationToken)">
+            <summary>
+            Оновлює власний profile (givenName/familyName/about/aboutEmoji/mobileCoinAddress + avatar).
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see
+            <c>src/main/java/org/asamk/signal/commands/UpdateProfileCommand.java</c> @ <c>bda4e7fc</c>.
+            <para>
+            §F18: <c>AvatarPath</c> та <c>RemoveAvatar</c> mutex. Builder enforce'ить XOR client-side.
+            </para>
+            <para>
+            <b>Daemon-side filesystem:</b> avatar-шлях читається з ФС signal-cli-процесу, не клієнта.
+            </para>
+            </remarks>
+            <param name="options">Опції profile-update'у.</param>
+            <param name="cancellationToken">Токен скасування.</param>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalContacts.BlockAsync(System.String,System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Threading.CancellationToken)">
+            <summary>
+            Блокує recipient'ів та/або group-id'и.
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see
+            <c>src/main/java/org/asamk/signal/commands/BlockCommand.java</c> @ <c>bda4e7fc</c>.
+            <para>
+            <b>Caveat:</b> recipient-block та group-block — 2 окремі Manager calls. Якщо перший
+            fails, другий не виконується (partial-application). Unknown group-id — лише warn-лог,
+            інші group-id'и продовжують застосуватись.
+            </para>
+            <para>
+            <b>Linked devices:</b> метод throw'ить UserError на linked-device callers
+            (NotPrimaryDeviceException).
+            </para>
+            </remarks>
+            <param name="account">E.164 номер акаунту.</param>
+            <param name="recipients">Recipient'и (опційно).</param>
+            <param name="groupIds">Group-id'и (опційно).</param>
+            <param name="cancellationToken">Токен скасування.</param>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalContacts.UnblockAsync(System.String,System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Threading.CancellationToken)">
+            <summary>
+            Розблоковує recipient'ів та/або group-id'и. Same caveats as <see cref="M:SignalCli.Interfaces.Signal.ISignalContacts.BlockAsync(System.String,System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Threading.CancellationToken)"/>.
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see
+            <c>src/main/java/org/asamk/signal/commands/UnblockCommand.java</c> @ <c>bda4e7fc</c>.
+            </remarks>
+        </member>
         <member name="T:SignalCli.Interfaces.Signal.ISignalDevices">
             <summary>
             Сервіс для роботи з пристроями Signal.
@@ -1468,6 +1617,17 @@
             C.1: source-generated логи для <see cref="T:SignalCli.Services.SignalCli.SignalCliHostedService"/>.
             EventId-блок 100–199.
             </summary>
+        </member>
+        <member name="T:SignalCli.Logging.SignalContactsLog">
+            <summary>
+            signal-cli-api-coverage Wave 3 (contacts-identity): source-generated логи для
+            <see cref="T:SignalCli.Services.Signal.SignalContacts"/>. EventId-блок <b>830–849</b>
+            (within shared 800-899 range з Accounts/Devices/Groups per CLAUDE.md "Established patterns → Logging").
+            </summary>
+            <remarks>
+            Privacy (CLAUDE.md rule #1): жодних PII (account/recipient/safetyNumber/avatarPath) у
+            шаблонах <c>Information+</c>. Лише counts, method-name, idempotent-markers.
+            </remarks>
         </member>
         <member name="T:SignalCli.Logging.SignalDevicesLog">
             <summary>
@@ -2185,6 +2345,794 @@
             <summary>
             Відповідь на запит синхронізації облікових записів Signal.
             </summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Contacts.BlockParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>block</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/BlockCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>Partial-application caveat:</b> upstream виконує recipient-block та group-block
+            послідовно як 2 окремі Manager calls. Якщо recipient-block кидає виняток,
+            group-block НЕ виконується. Якщо group-block кидає, recipient-block уже commit'нуто.
+            </para>
+            <para>
+            <b>Unknown group-id — лише warn-лог, не помилка.</b> Block для інших known-груп
+            продовжується. Consumer не отримує сигналу які group-ids не застосувались
+            — це upstream-quirk без типового API recovery-path'у.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Recipients">Recipient'и заблокувати.</param>
+            <param name="GroupIds">Group-id'и заблокувати.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.BlockParameters.#ctor(System.String,System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String})">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>block</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/BlockCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>Partial-application caveat:</b> upstream виконує recipient-block та group-block
+            послідовно як 2 окремі Manager calls. Якщо recipient-block кидає виняток,
+            group-block НЕ виконується. Якщо group-block кидає, recipient-block уже commit'нуто.
+            </para>
+            <para>
+            <b>Unknown group-id — лише warn-лог, не помилка.</b> Block для інших known-груп
+            продовжується. Consumer не отримує сигналу які group-ids не застосувались
+            — це upstream-quirk без типового API recovery-path'у.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Recipients">Recipient'и заблокувати.</param>
+            <param name="GroupIds">Group-id'и заблокувати.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.BlockParameters.Account">
+            <summary>E.164 номер акаунту.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.BlockParameters.Recipients">
+            <summary>Recipient'и заблокувати.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.BlockParameters.GroupIds">
+            <summary>Group-id'и заблокувати.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Contacts.JsonContact">
+            <summary>
+            Один контакт у відповіді <c>listContacts</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3 (`contacts-identity`). Wire-shape pinned до
+            <c>src/main/java/org/asamk/signal/json/JsonContact.java @ bda4e7fc</c>.
+            <para>
+            Field-naming quirks (preserved as-is з upstream'у):
+            <list type="bullet">
+            <item><c>nickGivenName</c> / <c>nickFamilyName</c> — wire дропає другий "Name" з Java-полів
+            <c>nickNameGivenName</c>/<c>nickNameFamilyName</c>. .NET property повторює wire-name.</item>
+            <item><c>discoverableByPhonenumber</c> — одне слово, lowercase "n" (upstream typo, preserved).</item>
+            <item><see cref="P:SignalCli.Models.Signal.Contacts.JsonContact.Name"/> — composed display name (givenName+familyName), не окреме збережене поле.</item>
+            <item><see cref="P:SignalCli.Models.Signal.Contacts.JsonContact.Internal"/> — present ТІЛЬКИ коли request <c>internal=true</c> (Jackson <c>@JsonInclude(NON_NULL)</c>).</item>
+            </list>
+            </para>
+            </remarks>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.JsonContact.#ctor(System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.Boolean,System.Boolean,System.Boolean,System.Int32,System.Boolean,System.Boolean,SignalCli.Models.Signal.Contacts.JsonContactProfile,SignalCli.Models.Signal.Contacts.JsonContactInternal)">
+            <summary>
+            Один контакт у відповіді <c>listContacts</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3 (`contacts-identity`). Wire-shape pinned до
+            <c>src/main/java/org/asamk/signal/json/JsonContact.java @ bda4e7fc</c>.
+            <para>
+            Field-naming quirks (preserved as-is з upstream'у):
+            <list type="bullet">
+            <item><c>nickGivenName</c> / <c>nickFamilyName</c> — wire дропає другий "Name" з Java-полів
+            <c>nickNameGivenName</c>/<c>nickNameFamilyName</c>. .NET property повторює wire-name.</item>
+            <item><c>discoverableByPhonenumber</c> — одне слово, lowercase "n" (upstream typo, preserved).</item>
+            <item><see cref="P:SignalCli.Models.Signal.Contacts.JsonContact.Name"/> — composed display name (givenName+familyName), не окреме збережене поле.</item>
+            <item><see cref="P:SignalCli.Models.Signal.Contacts.JsonContact.Internal"/> — present ТІЛЬКИ коли request <c>internal=true</c> (Jackson <c>@JsonInclude(NON_NULL)</c>).</item>
+            </list>
+            </para>
+            </remarks>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Contacts.JsonContactProfile">
+            <summary>
+            Profile-секція у контакті (server-side profile data).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Pinned до <c>JsonContact.java:31-40 @ bda4e7fc</c>.
+            Перейменовано з upstream <c>JsonProfile</c> у <c>JsonContactProfile</c> щоб уникнути
+            конфлікту з потенційним top-level profile DTO у майбутніх wave'ах.
+            </remarks>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.JsonContactProfile.#ctor(System.Int64,System.String,System.String,System.String,System.String,System.Boolean,System.String)">
+            <summary>
+            Profile-секція у контакті (server-side profile data).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Pinned до <c>JsonContact.java:31-40 @ bda4e7fc</c>.
+            Перейменовано з upstream <c>JsonProfile</c> у <c>JsonContactProfile</c> щоб уникнути
+            конфлікту з потенційним top-level profile DTO у майбутніх wave'ах.
+            </remarks>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Contacts.JsonContactInternal">
+            <summary>
+            "Internal"-секція у контакті (capabilities + access mode + sharing flags).
+            Present лише коли request <c>internal=true</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Pinned до <c>JsonContact.java:42-48 @ bda4e7fc</c>.
+            Field <c>discoverableByPhonenumber</c> — single word, lowercase "n" — upstream-typo preserved verbatim.
+            <para>
+            <c>capabilities</c> — Java enum identifiers у lowercase/mixedCase
+            (<c>"storage"</c>, <c>"storageServiceEncryptionV2Capability"</c>), а НЕ UPPER_SNAKE
+            (різниться з рештою Java-enum-wire-naming). Тому модельовано як <c>string[]</c>.
+            </para>
+            <para>
+            <c>unidentifiedAccessMode</c> — UPPER_SNAKE: <c>DISABLED</c>/<c>ENABLED</c>/<c>UNRESTRICTED</c>;
+            <c>UNKNOWN</c> мапиться upstream'ом у <c>null</c>. Модельовано як <c>string?</c>.
+            </para>
+            </remarks>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.JsonContactInternal.#ctor(System.Collections.Generic.IReadOnlyList{System.String},System.String,System.Nullable{System.Boolean},System.Nullable{System.Boolean})">
+            <summary>
+            "Internal"-секція у контакті (capabilities + access mode + sharing flags).
+            Present лише коли request <c>internal=true</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Pinned до <c>JsonContact.java:42-48 @ bda4e7fc</c>.
+            Field <c>discoverableByPhonenumber</c> — single word, lowercase "n" — upstream-typo preserved verbatim.
+            <para>
+            <c>capabilities</c> — Java enum identifiers у lowercase/mixedCase
+            (<c>"storage"</c>, <c>"storageServiceEncryptionV2Capability"</c>), а НЕ UPPER_SNAKE
+            (різниться з рештою Java-enum-wire-naming). Тому модельовано як <c>string[]</c>.
+            </para>
+            <para>
+            <c>unidentifiedAccessMode</c> — UPPER_SNAKE: <c>DISABLED</c>/<c>ENABLED</c>/<c>UNRESTRICTED</c>;
+            <c>UNKNOWN</c> мапиться upstream'ом у <c>null</c>. Модельовано як <c>string?</c>.
+            </para>
+            </remarks>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Contacts.JsonIdentity">
+            <summary>
+            Один identity-запис у відповіді <c>listIdentities</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/ListIdentitiesCommand.java:88-96 @ bda4e7fc</c>
+            (private <c>JsonIdentity</c> record там само).
+            </remarks>
+            <param name="Number">E.164 phone, nullable.</param>
+            <param name="Uuid">ACI UUID string, nullable.</param>
+            <param name="Fingerprint">Hex-encoded fingerprint bytes.</param>
+            <param name="SafetyNumber">Space-formatted 60-digit safety number.</param>
+            <param name="ScannableSafetyNumber">Base64 scannable safety number; <c>null</c> якщо недоступно.</param>
+            <param name="TrustLevel">UPPER_SNAKE Java enum name (e.g. <c>"TRUSTED_VERIFIED"</c>).</param>
+            <param name="AddedTimestamp">Unix-ms коли identity додано.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.JsonIdentity.#ctor(System.String,System.String,System.String,System.String,System.String,System.String,System.Int64)">
+            <summary>
+            Один identity-запис у відповіді <c>listIdentities</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/ListIdentitiesCommand.java:88-96 @ bda4e7fc</c>
+            (private <c>JsonIdentity</c> record там само).
+            </remarks>
+            <param name="Number">E.164 phone, nullable.</param>
+            <param name="Uuid">ACI UUID string, nullable.</param>
+            <param name="Fingerprint">Hex-encoded fingerprint bytes.</param>
+            <param name="SafetyNumber">Space-formatted 60-digit safety number.</param>
+            <param name="ScannableSafetyNumber">Base64 scannable safety number; <c>null</c> якщо недоступно.</param>
+            <param name="TrustLevel">UPPER_SNAKE Java enum name (e.g. <c>"TRUSTED_VERIFIED"</c>).</param>
+            <param name="AddedTimestamp">Unix-ms коли identity додано.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.JsonIdentity.Number">
+            <summary>E.164 phone, nullable.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.JsonIdentity.Uuid">
+            <summary>ACI UUID string, nullable.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.JsonIdentity.Fingerprint">
+            <summary>Hex-encoded fingerprint bytes.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.JsonIdentity.SafetyNumber">
+            <summary>Space-formatted 60-digit safety number.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.JsonIdentity.ScannableSafetyNumber">
+            <summary>Base64 scannable safety number; <c>null</c> якщо недоступно.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.JsonIdentity.TrustLevel">
+            <summary>UPPER_SNAKE Java enum name (e.g. <c>"TRUSTED_VERIFIED"</c>).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.JsonIdentity.AddedTimestamp">
+            <summary>Unix-ms коли identity додано.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Contacts.ListContactsParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>listContacts</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/ListContactsCommand.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Recipients">Опціональний фільтр — лише ці recipient'и.</param>
+            <param name="AllRecipients">Якщо <c>true</c>, повертає ВСІ відомі recipient'и (а не лише contacts).</param>
+            <param name="Blocked">Фільтр: <c>null</c>=no-filter, <c>true</c>=blocked only, <c>false</c>=unblocked only.</param>
+            <param name="Name">Substring-фільтр по contact-name або profile-name.</param>
+            <param name="Internal">Якщо <c>true</c>, додає <c>internal</c> sub-object у кожен результат.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.ListContactsParameters.#ctor(System.String,System.Collections.Generic.IEnumerable{System.String},System.Boolean,System.Nullable{System.Boolean},System.String,System.Boolean)">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>listContacts</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/ListContactsCommand.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Recipients">Опціональний фільтр — лише ці recipient'и.</param>
+            <param name="AllRecipients">Якщо <c>true</c>, повертає ВСІ відомі recipient'и (а не лише contacts).</param>
+            <param name="Blocked">Фільтр: <c>null</c>=no-filter, <c>true</c>=blocked only, <c>false</c>=unblocked only.</param>
+            <param name="Name">Substring-фільтр по contact-name або profile-name.</param>
+            <param name="Internal">Якщо <c>true</c>, додає <c>internal</c> sub-object у кожен результат.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.ListContactsParameters.Account">
+            <summary>E.164 номер акаунту.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.ListContactsParameters.Recipients">
+            <summary>Опціональний фільтр — лише ці recipient'и.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.ListContactsParameters.AllRecipients">
+            <summary>Якщо <c>true</c>, повертає ВСІ відомі recipient'и (а не лише contacts).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.ListContactsParameters.Blocked">
+            <summary>Фільтр: <c>null</c>=no-filter, <c>true</c>=blocked only, <c>false</c>=unblocked only.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.ListContactsParameters.Name">
+            <summary>Substring-фільтр по contact-name або profile-name.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.ListContactsParameters.Internal">
+            <summary>Якщо <c>true</c>, додає <c>internal</c> sub-object у кожен результат.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Contacts.ListContactsResponse">
+            <summary>
+            Відповідь на <c>listContacts</c> — flat JSON-масив <see cref="T:SignalCli.Models.Signal.Contacts.JsonContact"/>-записів.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Wrapper-record + custom converter per CLAUDE.md
+            "AOT readiness" pattern (як <see cref="T:SignalCli.Models.Signal.Accounts.ListAccountsResponse"/>).
+            </remarks>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.ListContactsResponse.#ctor(System.Collections.Generic.IReadOnlyList{SignalCli.Models.Signal.Contacts.JsonContact})">
+            <summary>
+            Відповідь на <c>listContacts</c> — flat JSON-масив <see cref="T:SignalCli.Models.Signal.Contacts.JsonContact"/>-записів.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Wrapper-record + custom converter per CLAUDE.md
+            "AOT readiness" pattern (як <see cref="T:SignalCli.Models.Signal.Accounts.ListAccountsResponse"/>).
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.ListContactsResponse.Count">
+            <summary>Кількість контактів.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.ListContactsResponse.Item(System.Int32)">
+            <summary>Доступ за індексом.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.ListContactsResponse.GetEnumerator">
+            <inheritdoc/>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Contacts.ListContactsResponseConverter">
+            <summary>Конвертер, що читає/пише <see cref="T:SignalCli.Models.Signal.Contacts.ListContactsResponse"/> як плоский JSON-масив.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Contacts.ListIdentitiesParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>listIdentities</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/ListIdentitiesCommand.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Number">Опціональний фільтр — лише identities цього recipient'а. <c>null</c> = усі.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.ListIdentitiesParameters.#ctor(System.String,System.String)">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>listIdentities</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/ListIdentitiesCommand.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Number">Опціональний фільтр — лише identities цього recipient'а. <c>null</c> = усі.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.ListIdentitiesParameters.Account">
+            <summary>E.164 номер акаунту.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.ListIdentitiesParameters.Number">
+            <summary>Опціональний фільтр — лише identities цього recipient'а. <c>null</c> = усі.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Contacts.ListIdentitiesResponse">
+            <summary>
+            Відповідь на <c>listIdentities</c> — flat JSON-масив <see cref="T:SignalCli.Models.Signal.Contacts.JsonIdentity"/>-записів.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Wrapper-record + custom converter per CLAUDE.md
+            "AOT readiness" pattern.
+            </remarks>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.ListIdentitiesResponse.#ctor(System.Collections.Generic.IReadOnlyList{SignalCli.Models.Signal.Contacts.JsonIdentity})">
+            <summary>
+            Відповідь на <c>listIdentities</c> — flat JSON-масив <see cref="T:SignalCli.Models.Signal.Contacts.JsonIdentity"/>-записів.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Wrapper-record + custom converter per CLAUDE.md
+            "AOT readiness" pattern.
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.ListIdentitiesResponse.Count">
+            <summary>Кількість identity-записів.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.ListIdentitiesResponse.Item(System.Int32)">
+            <summary>Доступ за індексом.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.ListIdentitiesResponse.GetEnumerator">
+            <inheritdoc/>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Contacts.ListIdentitiesResponseConverter">
+            <summary>Конвертер, що читає/пише <see cref="T:SignalCli.Models.Signal.Contacts.ListIdentitiesResponse"/> як плоский JSON-масив.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Contacts.RemoveContactMode">
+            <summary>
+            Режим видалення контакту. Три distinct behaviors, які upstream signal-cli виражає
+            через два булеані (<c>hide</c>/<c>forget</c>), а ми моделюємо як один enum-параметр
+            щоб уникнути client-side помилки "обидва прапори true одночасно".
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/RemoveContactCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>§F9 mutex:</b> upstream'ів argparse mutex group enforce'ить це на CLI-рівні,
+            але JSON-RPC шар приймає обидва прапори (тоді hide-first-wins). .NET service-метод
+            перекладає enum у відповідну пару флагів — на wire завжди корректний XOR.
+            </para>
+            </remarks>
+        </member>
+        <member name="F:SignalCli.Models.Signal.Contacts.RemoveContactMode.DeleteContact">
+            <summary>Видалити контакт-запис (names/note/blocked), але зберегти identity-keys та sessions. Wire: hide=false, forget=false.</summary>
+        </member>
+        <member name="F:SignalCli.Models.Signal.Contacts.RemoveContactMode.Hide">
+            <summary>Сховати контакт у listings, зберегти всі дані. Wire: hide=true.</summary>
+        </member>
+        <member name="F:SignalCli.Models.Signal.Contacts.RemoveContactMode.Forget">
+            <summary>Hard delete — identity keys, sessions, profile, contact record — все знищено. Wire: forget=true.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Contacts.RemoveContactParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>removeContact</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/RemoveContactCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>§F9 mutex (client-side):</b> service-метод <c>RemoveContactAsync</c> гарантує XOR;
+            при direct-construction цього DTO consumer несе відповідальність за wire-correctness.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Recipient">Recipient identifier.</param>
+            <param name="Hide">Якщо <c>true</c> — сховати, зберегти дані. Mutex з <see cref="P:SignalCli.Models.Signal.Contacts.RemoveContactParameters.Forget"/>.</param>
+            <param name="Forget">Якщо <c>true</c> — hard delete (keys/sessions/profile). Mutex з <see cref="P:SignalCli.Models.Signal.Contacts.RemoveContactParameters.Hide"/>.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.RemoveContactParameters.#ctor(System.String,System.String,System.Boolean,System.Boolean)">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>removeContact</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/RemoveContactCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>§F9 mutex (client-side):</b> service-метод <c>RemoveContactAsync</c> гарантує XOR;
+            при direct-construction цього DTO consumer несе відповідальність за wire-correctness.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Recipient">Recipient identifier.</param>
+            <param name="Hide">Якщо <c>true</c> — сховати, зберегти дані. Mutex з <see cref="P:SignalCli.Models.Signal.Contacts.RemoveContactParameters.Forget"/>.</param>
+            <param name="Forget">Якщо <c>true</c> — hard delete (keys/sessions/profile). Mutex з <see cref="P:SignalCli.Models.Signal.Contacts.RemoveContactParameters.Hide"/>.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.RemoveContactParameters.Account">
+            <summary>E.164 номер акаунту.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.RemoveContactParameters.Recipient">
+            <summary>Recipient identifier.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.RemoveContactParameters.Hide">
+            <summary>Якщо <c>true</c> — сховати, зберегти дані. Mutex з <see cref="P:SignalCli.Models.Signal.Contacts.RemoveContactParameters.Forget"/>.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.RemoveContactParameters.Forget">
+            <summary>Якщо <c>true</c> — hard delete (keys/sessions/profile). Mutex з <see cref="P:SignalCli.Models.Signal.Contacts.RemoveContactParameters.Hide"/>.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Contacts.TrustLevel">
+            <summary>
+            Trust-рівень identity-key контакту. Wire-shape — UPPER_SNAKE_CASE Java enum name verbatim
+            (<c>"UNTRUSTED"</c> / <c>"TRUSTED_UNVERIFIED"</c> / <c>"TRUSTED_VERIFIED"</c>).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3 (`contacts-identity`). Pinned до
+            <c>lib/src/main/java/org/asamk/signal/manager/api/TrustLevel.java @ bda4e7fc</c>.
+            <para>
+            Emit'ить upstream'ом через <c>id.trustLevel().name()</c> (raw enum-name) у
+            <c>ListIdentitiesCommand.java:80</c>. Receive-side mapping відбувається у
+            сервіс-методі <c>SignalContacts.ListIdentitiesAsync</c> з string на цей enum
+            (UPPER_SNAKE → PascalCase).
+            </para>
+            </remarks>
+        </member>
+        <member name="F:SignalCli.Models.Signal.Contacts.TrustLevel.Untrusted">
+            <summary>Identity не довірена (default після першого contact'у).</summary>
+        </member>
+        <member name="F:SignalCli.Models.Signal.Contacts.TrustLevel.TrustedUnverified">
+            <summary>Identity довірена implicitly (trust-all-known-keys path).</summary>
+        </member>
+        <member name="F:SignalCli.Models.Signal.Contacts.TrustLevel.TrustedVerified">
+            <summary>Identity довірена explicitly (safety-number verification path).</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Contacts.TrustParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>trust</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/TrustCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>Mutex client-side:</b> сервіс-методи <c>TrustAllKnownKeysAsync</c> та
+            <c>TrustVerifiedAsync</c> розводять виклики на два окремі API, тож на wire завжди
+            рівно одне з <see cref="P:SignalCli.Models.Signal.Contacts.TrustParameters.TrustAllKnownKeys"/>/<see cref="P:SignalCli.Models.Signal.Contacts.TrustParameters.VerifiedSafetyNumber"/>
+            виставлено. Argparse mutex group НЕ enforce'иться у JSON-RPC, тож якщо хтось напряму
+            будує цей wire-DTO — він/вона несе відповідальність за XOR.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Recipient">Single recipient identifier (phone/UUID/PNI/username).</param>
+            <param name="TrustAllKnownKeys">Trust усі відомі identity-keys recipient'а (testing-only).</param>
+            <param name="VerifiedSafetyNumber">60-digit safety-number/66-hex-fingerprint/base64 scannable.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.TrustParameters.#ctor(System.String,System.String,System.Boolean,System.String)">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>trust</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/TrustCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>Mutex client-side:</b> сервіс-методи <c>TrustAllKnownKeysAsync</c> та
+            <c>TrustVerifiedAsync</c> розводять виклики на два окремі API, тож на wire завжди
+            рівно одне з <see cref="P:SignalCli.Models.Signal.Contacts.TrustParameters.TrustAllKnownKeys"/>/<see cref="P:SignalCli.Models.Signal.Contacts.TrustParameters.VerifiedSafetyNumber"/>
+            виставлено. Argparse mutex group НЕ enforce'иться у JSON-RPC, тож якщо хтось напряму
+            будує цей wire-DTO — він/вона несе відповідальність за XOR.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Recipient">Single recipient identifier (phone/UUID/PNI/username).</param>
+            <param name="TrustAllKnownKeys">Trust усі відомі identity-keys recipient'а (testing-only).</param>
+            <param name="VerifiedSafetyNumber">60-digit safety-number/66-hex-fingerprint/base64 scannable.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.TrustParameters.Account">
+            <summary>E.164 номер акаунту.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.TrustParameters.Recipient">
+            <summary>Single recipient identifier (phone/UUID/PNI/username).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.TrustParameters.TrustAllKnownKeys">
+            <summary>Trust усі відомі identity-keys recipient'а (testing-only).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.TrustParameters.VerifiedSafetyNumber">
+            <summary>60-digit safety-number/66-hex-fingerprint/base64 scannable.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Contacts.UnblockParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>unblock</c>. Shape identical to <see cref="T:SignalCli.Models.Signal.Contacts.BlockParameters"/>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/UnblockCommand.java @ bda4e7fc</c>.
+            Окремий тип (а не reuse <see cref="T:SignalCli.Models.Signal.Contacts.BlockParameters"/>) для type-safety method dispatch.
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Recipients">Recipient'и розблокувати.</param>
+            <param name="GroupIds">Group-id'и розблокувати.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.UnblockParameters.#ctor(System.String,System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String})">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>unblock</c>. Shape identical to <see cref="T:SignalCli.Models.Signal.Contacts.BlockParameters"/>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/UnblockCommand.java @ bda4e7fc</c>.
+            Окремий тип (а не reuse <see cref="T:SignalCli.Models.Signal.Contacts.BlockParameters"/>) для type-safety method dispatch.
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Recipients">Recipient'и розблокувати.</param>
+            <param name="GroupIds">Group-id'и розблокувати.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UnblockParameters.Account">
+            <summary>E.164 номер акаунту.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UnblockParameters.Recipients">
+            <summary>Recipient'и розблокувати.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UnblockParameters.GroupIds">
+            <summary>Group-id'и розблокувати.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Contacts.UpdateContactOptions">
+            <summary>
+            Опції для <c>updateContact</c> RPC. Створюється через <see cref="T:SignalCli.Models.Signal.Contacts.UpdateContactOptions.Builder"/>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Wire-shape pinned до
+            <c>src/main/java/org/asamk/signal/commands/UpdateContactCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>Clear-vs-leave-unchanged:</b> усі string-поля nullable; <c>null</c> = "не чіпати",
+            <c>""</c> = "очистити". Цей контракт mirror'ить upstream — там же null/empty distinction.
+            </para>
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateContactOptions.Account">
+            <summary>E.164 номер акаунту.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateContactOptions.Recipient">
+            <summary>Recipient identifier (phone/UUID/PNI/username).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateContactOptions.Name">
+            <summary>Convenience alias: коли GivenName=null AND Name=set, upstream заповнює GivenName з Name + FamilyName="".</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateContactOptions.GivenName">
+            <summary>Нове system given name.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateContactOptions.FamilyName">
+            <summary>Нове system family name.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateContactOptions.NickGivenName">
+            <summary>Нове nick given name.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateContactOptions.NickFamilyName">
+            <summary>Нове nick family name.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateContactOptions.Note">
+            <summary>Note (free-form text).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateContactOptions.Expiration">
+            <summary>Disappearing-message timer у секундах. <c>0</c> вимикає; null — leave-unchanged.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Contacts.UpdateContactOptions.Builder">
+            <summary>Builder для <see cref="T:SignalCli.Models.Signal.Contacts.UpdateContactOptions"/>.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.UpdateContactOptions.Builder.#ctor(System.String,System.String)">
+            <summary>Створює builder з обов'язковими account + recipient.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.UpdateContactOptions.Builder.WithName(System.String)">
+            <summary>Convenience: виставити name (заповнить GivenName, FamilyName="").</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.UpdateContactOptions.Builder.WithGivenName(System.String)">
+            <summary>Given name.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.UpdateContactOptions.Builder.WithFamilyName(System.String)">
+            <summary>Family name.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.UpdateContactOptions.Builder.WithNickGivenName(System.String)">
+            <summary>Nick given name.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.UpdateContactOptions.Builder.WithNickFamilyName(System.String)">
+            <summary>Nick family name.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.UpdateContactOptions.Builder.WithNote(System.String)">
+            <summary>Note.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.UpdateContactOptions.Builder.WithExpiration(System.Int32)">
+            <summary>Message-expiration timer (seconds). 0 — вимкнути; пропуск — leave-unchanged.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.UpdateContactOptions.Builder.Build">
+            <summary>Будує <see cref="T:SignalCli.Models.Signal.Contacts.UpdateContactOptions"/>.</summary>
+            <exception cref="T:System.InvalidOperationException">Якщо required-поля скинуто після ctor.</exception>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Contacts.UpdateContactParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>updateContact</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/UpdateContactCommand.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Recipient">Recipient identifier.</param>
+            <param name="Name">Convenience alias (див. UpdateContactOptions XMLDoc).</param>
+            <param name="GivenName">System given name.</param>
+            <param name="FamilyName">System family name.</param>
+            <param name="NickGivenName">Nick given name.</param>
+            <param name="NickFamilyName">Nick family name.</param>
+            <param name="Note">Free-form note.</param>
+            <param name="Expiration">Message-expiration timer (seconds).</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.UpdateContactParameters.#ctor(System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.Nullable{System.Int32})">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>updateContact</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/UpdateContactCommand.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Recipient">Recipient identifier.</param>
+            <param name="Name">Convenience alias (див. UpdateContactOptions XMLDoc).</param>
+            <param name="GivenName">System given name.</param>
+            <param name="FamilyName">System family name.</param>
+            <param name="NickGivenName">Nick given name.</param>
+            <param name="NickFamilyName">Nick family name.</param>
+            <param name="Note">Free-form note.</param>
+            <param name="Expiration">Message-expiration timer (seconds).</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateContactParameters.Account">
+            <summary>E.164 номер акаунту.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateContactParameters.Recipient">
+            <summary>Recipient identifier.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateContactParameters.Name">
+            <summary>Convenience alias (див. UpdateContactOptions XMLDoc).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateContactParameters.GivenName">
+            <summary>System given name.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateContactParameters.FamilyName">
+            <summary>System family name.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateContactParameters.NickGivenName">
+            <summary>Nick given name.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateContactParameters.NickFamilyName">
+            <summary>Nick family name.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateContactParameters.Note">
+            <summary>Free-form note.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateContactParameters.Expiration">
+            <summary>Message-expiration timer (seconds).</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Contacts.UpdateProfileOptions">
+            <summary>
+            Опції для <c>updateProfile</c> RPC. Створюється через <see cref="T:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.Builder"/>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Wire-shape pinned до
+            <c>src/main/java/org/asamk/signal/commands/UpdateProfileCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>§F18 Avatar XOR:</b> <see cref="P:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.AvatarPath"/> та <see cref="P:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.RemoveAvatar"/> mutex.
+            Builder enforce'ить XOR client-side щоб уникнути undefined upstream-behavior
+            (argparse mutex group там argparse-only). Обидва unset = avatar untouched.
+            </para>
+            <para>
+            <b>Daemon-side filesystem:</b> <see cref="P:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.AvatarPath"/> читається з ФС signal-cli-процесу,
+            не з клієнтського процесу. При daemon-deployment'і шлях має бути доступним
+            сервер-side; для bytes-over-RPC consumer'ам треба попередньо записати у local temp file.
+            </para>
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.Account">
+            <summary>E.164 номер акаунту.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.GivenName">
+            <summary>Profile given name. <c>""</c> = clear; <c>null</c> = leave-unchanged.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.FamilyName">
+            <summary>Profile family name.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.About">
+            <summary>About-текст.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.AboutEmoji">
+            <summary>About emoji (single emoji string).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.MobileCoinAddress">
+            <summary>Base64-encoded MobileCoin public-address bytes.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.AvatarPath">
+            <summary>Шлях до avatar-файлу на daemon-side ФС. Mutex з <see cref="P:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.RemoveAvatar"/>.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.RemoveAvatar">
+            <summary>Якщо <c>true</c>, видалити поточний avatar. Mutex з <see cref="P:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.AvatarPath"/>.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.Builder">
+            <summary>Builder для <see cref="T:SignalCli.Models.Signal.Contacts.UpdateProfileOptions"/>.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.Builder.#ctor(System.String)">
+            <summary>Створює builder з обов'язковим account'ом.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.Builder.WithGivenName(System.String)">
+            <summary>Profile given name.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.Builder.WithFamilyName(System.String)">
+            <summary>Profile family name.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.Builder.WithAbout(System.String)">
+            <summary>About text.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.Builder.WithAboutEmoji(System.String)">
+            <summary>About emoji.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.Builder.WithMobileCoinAddress(System.String)">
+            <summary>MobileCoin public-address (base64). Consumer повинен сам валідувати base64.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.Builder.WithAvatarPath(System.String)">
+            <summary>Avatar file path (daemon-side filesystem).</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.Builder.WithRemoveAvatar">
+            <summary>Видалити поточний avatar.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.UpdateProfileOptions.Builder.Build">
+            <summary>Будує <see cref="T:SignalCli.Models.Signal.Contacts.UpdateProfileOptions"/>.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Contacts.UpdateProfileParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>updateProfile</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/UpdateProfileCommand.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="GivenName">Profile given name.</param>
+            <param name="FamilyName">Profile family name.</param>
+            <param name="About">About text.</param>
+            <param name="AboutEmoji">About emoji.</param>
+            <param name="MobileCoinAddress">MobileCoin base64-encoded public-address bytes.</param>
+            <param name="Avatar">Daemon-side filesystem path до avatar-файлу.</param>
+            <param name="RemoveAvatar">Якщо <c>true</c>, видалити avatar.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Contacts.UpdateProfileParameters.#ctor(System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.Boolean)">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>updateProfile</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 3. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/UpdateProfileCommand.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="GivenName">Profile given name.</param>
+            <param name="FamilyName">Profile family name.</param>
+            <param name="About">About text.</param>
+            <param name="AboutEmoji">About emoji.</param>
+            <param name="MobileCoinAddress">MobileCoin base64-encoded public-address bytes.</param>
+            <param name="Avatar">Daemon-side filesystem path до avatar-файлу.</param>
+            <param name="RemoveAvatar">Якщо <c>true</c>, видалити avatar.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateProfileParameters.Account">
+            <summary>E.164 номер акаунту.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateProfileParameters.GivenName">
+            <summary>Profile given name.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateProfileParameters.FamilyName">
+            <summary>Profile family name.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateProfileParameters.About">
+            <summary>About text.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateProfileParameters.AboutEmoji">
+            <summary>About emoji.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateProfileParameters.MobileCoinAddress">
+            <summary>MobileCoin base64-encoded public-address bytes.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateProfileParameters.Avatar">
+            <summary>Daemon-side filesystem path до avatar-файлу.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Contacts.UpdateProfileParameters.RemoveAvatar">
+            <summary>Якщо <c>true</c>, видалити avatar.</summary>
         </member>
         <member name="T:SignalCli.Models.Signal.Devices.FinishLinkParameters">
             <summary>
@@ -5698,6 +6646,76 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.BlockParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonContact">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonContactInternal">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonContactProfile">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonIdentity">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListContactsParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListContactsResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListIdentitiesParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListIdentitiesResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.RemoveContactParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.TrustParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.UnblockParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.UpdateContactParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.UpdateProfileParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.FinishLinkParameters">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
@@ -6008,12 +7026,27 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.IReadOnlyListString">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.ListSingle">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.ListAccount">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListJsonContact">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListJsonIdentity">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -6665,6 +7698,53 @@
             Спільне ядро для sync- і async-disposal. Викликається РІВНО ОДИН РАЗ — guard
             через <c>_disposedFlag</c> у callers.
             </summary>
+        </member>
+        <member name="T:SignalCli.Services.Signal.SignalContacts">
+            <summary>
+            signal-cli-api-coverage Wave 3 (contacts-identity). 8 RPC методів signal-cli (Trust
+            розщеплено на 2 type-safe методи). Void-методи (Trust*/UpdateContact/RemoveContact/
+            UpdateProfile/Block/Unblock) використовують <see cref="T:System.Text.Json.JsonElement"/> як response-тип
+            бо upstream emit'ить <c>"result": null</c> — JsonElement deserialize'ить null-значення
+            без exception (на відміну від reference-typed responses де <c>typedResult is null</c>
+            throw'ить).
+            </summary>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalContacts.#ctor(SignalCli.Interfaces.SignalCli.ISignalCliClient,Microsoft.Extensions.Logging.ILogger{SignalCli.Services.Signal.SignalContacts})">
+            <summary>
+            signal-cli-api-coverage Wave 3 (contacts-identity). 8 RPC методів signal-cli (Trust
+            розщеплено на 2 type-safe методи). Void-методи (Trust*/UpdateContact/RemoveContact/
+            UpdateProfile/Block/Unblock) використовують <see cref="T:System.Text.Json.JsonElement"/> як response-тип
+            бо upstream emit'ить <c>"result": null</c> — JsonElement deserialize'ить null-значення
+            без exception (на відміну від reference-typed responses де <c>typedResult is null</c>
+            throw'ить).
+            </summary>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalContacts.ListContactsAsync(System.String,System.Collections.Generic.IEnumerable{System.String},System.Boolean,System.Nullable{System.Boolean},System.String,System.Boolean,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalContacts.ListIdentitiesAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalContacts.TrustAllKnownKeysAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalContacts.TrustVerifiedAsync(System.String,System.String,System.String,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalContacts.UpdateContactAsync(SignalCli.Models.Signal.Contacts.UpdateContactOptions,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalContacts.RemoveContactAsync(System.String,System.String,SignalCli.Models.Signal.Contacts.RemoveContactMode,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalContacts.UpdateProfileAsync(SignalCli.Models.Signal.Contacts.UpdateProfileOptions,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalContacts.BlockAsync(System.String,System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalContacts.UnblockAsync(System.String,System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Threading.CancellationToken)">
+            <inheritdoc/>
         </member>
         <member name="T:SignalCli.Services.Signal.SignalEventService">
             <summary>

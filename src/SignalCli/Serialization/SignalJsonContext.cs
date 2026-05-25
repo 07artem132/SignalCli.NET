@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using SignalCli.Models.Rpc;
 using SignalCli.Models.Signal;
 using SignalCli.Models.Signal.Accounts;
+using SignalCli.Models.Signal.Contacts;
 using SignalCli.Models.Signal.Devices;
 using SignalCli.Models.Signal.Events;
 using SignalCli.Models.Signal.Groups;
@@ -78,6 +79,27 @@ namespace SignalCli.Serialization;
 [JsonSerializable(typeof(UpdateGroupResponse))]
 [JsonSerializable(typeof(QuitGroupParameters))]
 [JsonSerializable(typeof(QuitGroupResponse))]
+// Contacts — Wave 3 contacts-identity (signal-cli-api-coverage):
+// 8 нових RPC методів. ListContacts/Identities — flat-array wrapper-record pattern
+// (як ListAccountsResponse). 6 void-методів (Trust*/UpdateContact/RemoveContact/
+// UpdateProfile/Block/Unblock) використовують JsonElement як response-тип
+// (signal-cli emit'ить `"result": null` для void).
+[JsonSerializable(typeof(ListContactsParameters))]
+[JsonSerializable(typeof(ListContactsResponse))]
+[JsonSerializable(typeof(List<JsonContact>))]
+[JsonSerializable(typeof(JsonContact))]
+[JsonSerializable(typeof(JsonContactProfile))]
+[JsonSerializable(typeof(JsonContactInternal))]
+[JsonSerializable(typeof(ListIdentitiesParameters))]
+[JsonSerializable(typeof(ListIdentitiesResponse))]
+[JsonSerializable(typeof(List<JsonIdentity>))]
+[JsonSerializable(typeof(JsonIdentity))]
+[JsonSerializable(typeof(TrustParameters))]
+[JsonSerializable(typeof(UpdateContactParameters))]
+[JsonSerializable(typeof(RemoveContactParameters))]
+[JsonSerializable(typeof(UpdateProfileParameters))]
+[JsonSerializable(typeof(BlockParameters))]
+[JsonSerializable(typeof(UnblockParameters))]
 // Message
 [JsonSerializable(typeof(SendMessageFullParameters))]
 [JsonSerializable(typeof(SendMessageResponse))]
