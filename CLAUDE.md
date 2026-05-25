@@ -129,7 +129,7 @@ Path-scoped agent instructions live in `.claude/rules/` (load conditionally when
 
 ## Implemented, merged, archived
 
-Historical reference (do not re-open — all in `openspec/changes/archive/2026-05-24-*/`):
+Historical reference (do not re-open — all in `openspec/changes/archive/<date>-*/`):
 - `address-audit-findings` — privacy/security/correctness audit round 1.
 - `modernize-architecture` — `net9.0` → `net10.0`, `Newtonsoft.Json` → `System.Text.Json` (+ source-gen `JsonSerializerContext`), single-source-of-truth process state via `ProcessStateManager`.
 - `agent-ready-conventions` — `.editorconfig`, analyzers, narrowed broad `catch`-es, this `CLAUDE.md`.
@@ -142,10 +142,10 @@ Historical reference (do not re-open — all in `openspec/changes/archive/2026-0
 - `deprecated-shim-removal` (**4.0.0**) — BREAKING: deleted `Config` + 6 `[Obsolete]` shims. Migration table in CHANGELOG.
 - `json-hardening-source-gen-attribute` (**4.0.2**) — closes Critical rule #18 dead-flag prog with `[JsonSourceGenerationOptions(AllowDuplicateProperties = false)]` on the source-gen context.
 - `e2e-coverage-expansion` (**4.0.2**) — `SignalCliE2EParallelRpcCorrelationTests` pins protocol fact §3 (parallel correlation by `id`) against real upstream.
-- `claude-md-pattern-additions` (**4.0.3**) — 4 doc additions: DI registration idioms (TryAddSingleton vs AddSingleton, one-instance-two-roles, sentinel-marker idempotency), namespace hierarchy + DTO/EventArgs/test-class naming, exception derivation heuristic, README voice + drift rules.
-- `claude-md-rules-restructure` (**4.0.3**) — Anthropic-aligned split: root CLAUDE.md 592 → 150 lines + 9 path-scoped topic files under `.claude/rules/` with `paths:` frontmatter. New RG08 (`ClaudeMdSplitConsistencyTests`) pins split shape (root size cap, frontmatter validity, numeric `Critical rule #N` anchors only in root).
+- `claude-md-pattern-additions` (**4.0.3**, archived 2026-05-25) — 4 doc additions: DI registration idioms (TryAddSingleton vs AddSingleton, one-instance-two-roles, sentinel-marker idempotency), namespace hierarchy + DTO/EventArgs/test-class naming, exception derivation heuristic, README voice + drift rules.
+- `claude-md-rules-restructure` (**4.0.3**, archived 2026-05-25) — Anthropic-aligned split: root CLAUDE.md 592 → 150 lines + 9 path-scoped topic files under `.claude/rules/` with `paths:` frontmatter. New RG08 (`ClaudeMdSplitConsistencyTests`) pins split shape (root size cap, frontmatter validity, numeric `Critical rule #N` anchors only in root).
 
-**Pending changes:** `claude-md-pattern-additions`, `claude-md-rules-restructure` (in `openspec/changes/`; archive after PR merges per `.claude/rules/openspec-workflow.md` § Post-merge archive workflow).
+**Pending changes:** _(none)_ — `openspec/changes/` має лише `archive/` subdirectory; start a new change to add work.
 
 ## Git
 
