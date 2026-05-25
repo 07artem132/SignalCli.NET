@@ -3,6 +3,63 @@
 Формат заснований на [Keep a Changelog](https://keepachangelog.com/),
 проєкт дотримується [семантичного версіонування](https://semver.org/lang/uk/).
 
+## [4.2.0] — 2026-05-25
+
+Minor-реліз. **Якщо тобі треба з .NET керувати членством у Signal-групах — приєднуватися, оновлювати, виходити — тепер це нативно у бібліотеці.** 3 нові методи на `ISignalGroups`. Backward-compatible — `ListGroupsAsync` без змін.
+
+### ✨ Нове
+
+- **`ISignalGroups` отримав 3 нові методи: `JoinGroupAsync`, `UpdateGroupAsync`, `QuitGroupAsync`.** Wire-shape pinned до signal-cli source @ `bda4e7fc` (читали Java records напряму, §0.5 anti-hallucination protocol).
+  ```csharp
+  // Join за invitation-посиланням
+  var join = await signalGroups.JoinGroupAsync("+380...", "https://signal.group/#CjQK...");
+  if (join.OnlyRequested == true) { /* pending admin approval */ }
+
+  // Create-OR-update (§F14 dual-mode — те саме API)
+  var update = await signalGroups.UpdateGroupAsync(
+      new UpdateGroupOptions.Builder("+380...")
+          .WithGroupId("base64==")    // omit → CREATE-then-update
+          .WithName("New name")
+          .WithMembers(["+380999..."])
+          .WithLinkState(GroupLinkState.EnabledWithApproval)
+          .WithPermissionAddMember(GroupPermission.OnlyAdmins)
+          .Build());
+  if (update.GroupId is { } newId) { /* щойно створили групу newId */ }
+
+  // Idempotent quit (§F8): якщо вже не member — success-no-op без винятку
+  var quit = await signalGroups.QuitGroupAsync("+380...", "base64==", deleteLocally: true);
+  if (quit.WasAlreadyNotMember) { /* нічого не робили — це OK */ }
+  ```
+
+- **2 нові wire-enum типи: `GroupLinkState`** (Enabled / EnabledWithApproval / Disabled) **і `GroupPermission`** (EveryMember / OnlyAdmins). Mapping .NET PascalCase → kebab-case wire string відбувається у сервісі (`SignalGroups.ToWireLinkState`/`ToWirePermission`); DTO передає `string?` поля що читаються upstream'ом argparse'ом.
+
+### 🛠 Інше
+
+- **§F14 dual-mode `UpdateGroupAsync`.** Один і той самий метод — і create і update. Якщо `Options.GroupId == null` — upstream викликає `createGroup(name, members, avatar)` ПЕРШИМ, далі `updateGroup(...)` з рештою полів. У відповіді `UpdateGroupResponse.GroupId` присутній ТІЛЬКИ на create-path (іначе `null`). XMLDoc на методі чітко документує цю двозначність — consumer бачить її у IDE.
+
+- **§F8 idempotent `QuitGroupAsync` per CLAUDE.md rule #14.** Upstream silently catches `NotAGroupMemberException` і повертає `{}`. У .NET це деsеріалізується як `QuitGroupResponse` з обома полями `null`, а зручний `WasAlreadyNotMember` property повертає `true`. Consumer не отримує винятку — `quit на групі де ти не member` — це OK.
+
+- **§F13 dimorphic `JoinGroupResponse.OnlyRequested: bool?`.** `null` = direct join (full member), `true` = pending admin approval. Wire ніколи не повертає `false` — це специфіка upstream `Map.of(...)` branches у `JoinGroupCommand.java:61-76`. Тип nullable обов'язково — `bool` тут було б брехнею.
+
+- **`QuitGroupAsync` параметр `delete` перейменовано на `deleteLocally`** (CA1716 — `delete` collides з C++ reserved keyword, погіршує consumer interop). Wire-field залишається `"delete"` через `[JsonPropertyName]`.
+
+### 🛡️ Захист від регресій
+
+- **`GroupsCrudSerializationTests` — 9 тестів** пінять wire-shape: camelCase param fields (`groupId`/`removeMembers`/`setPermissionAddMember`), kebab-case enum values на wire (`"enabled-with-approval"`/`"only-admins"`), dimorphic `OnlyRequested`-absent-not-false, dimorphic `GroupId`-present-only-on-create, idempotent `{}` deserializes у QuitGroupResponse без помилки.
+
+- **`SignalGroupsCrudTests` — 9 service-level тестів** з Moq: parameters mapping, enum→kebab пер LinkState/PermissionAddMember, §F14 create vs update path, §F8 idempotent NotAGroupMember не кидає виняток (CLAUDE.md rule #14), arg validation.
+
+- **`UpdateGroupOptionsTests` — 5 builder тестів:** happy path, no-groupId-is-valid (create-mode), required-account, negative-expiration rejected, expiration-zero-allowed.
+
+### 📊 Тестова статистика
+
+- Unit: 333 → **358** (+25 тести).
+- Integration: 8 (без змін; усі mock-only за wave-2 ризик-планом).
+- Public API baseline: 1239 → ~1380 lines (+enums, +Options-builder, +3 method signatures).
+- Build на src/ + Tests/: 0 warnings, 0 errors з `TreatWarningsAsErrors=true`.
+
+---
+
 ## [4.1.0] — 2026-05-25
 
 Minor-реліз. **Якщо твій бот колись хотів зробити "👍 read + typing-indicator + remote-delete" без shell'у в signal-cli CLI — тепер це нативно у бібліотеці.** 4 нові send-методи на `ISignalMessage` + 3 typed exceptions для consumer-actionable error-codes. Backward-compatible — жодних змін до існуючих send-методів, тестів чи DI-композиції.

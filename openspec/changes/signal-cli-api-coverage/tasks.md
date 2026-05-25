@@ -94,19 +94,20 @@
 
 ## 2. Wave 2 — `groups-crud` *(4.2.0)*
 
-- [ ] 2.1 `src/SignalCli/Models/Signal/Groups/`:
-  - `JoinGroupParameters.cs` / `JoinGroupResponse.cs`. **§F13 reminder:** `onlyRequested` field MUST be `bool?` (nullable), NOT `bool`. Upstream is dimorphic: field is `present+true` (pending admin approval) OR completely absent (direct join). NEVER serialized as `false`. See `research/wave-2-groups-crud.md` joinGroup section.
-  - `UpdateGroupOptions.cs` (sealed record + Builder, ~12 nullable properties: Name, Description, AvatarPath, Members/Admins add/remove arrays, ExpirationSeconds, LinkState enum, Permission* enums) + `UpdateGroupParameters.cs` / `UpdateGroupResponse.cs`. **§F14 reminder:** `updateGroup` з `groupId == null` triggers CREATE-then-update (upstream `UpdateGroupCommand.handleCommand` calls `m.createGroup(...)` first then `m.updateGroup(...)`). Same RPC method = dual semantic. Consider splitting `.NET` API into explicit `CreateGroupAsync(CreateGroupOptions)` + `UpdateGroupAsync(UpdateGroupOptions)` for clarity, OR explicit XMLDoc warning about dual-mode. See `research/wave-2-groups-crud.md` updateGroup section.
-  - `QuitGroupParameters.cs` + `QuitGroupBehavior` enum
-- [ ] 2.2 Register 6 нових DTOs у `SignalJsonContext`.
-- [ ] 2.3 `ISignalGroups` — 3 нові методи + XMLDoc.
-- [ ] 2.4 `SignalGroups.cs` — implementations. **§F8 reminder:** `QuitGroupCommand.java:59 @ bda4e7fc` silently catches `NotAGroupMemberException` and returns empty success. Per CLAUDE.md rule #14 (idempotent state errors), `QuitGroupAsync` SHOULD also be idempotent — calling for a group you're not in returns success, NOT an exception. XMLDoc must say "idempotent — returns success even if the account is not a member of the group". See `research/wave-2-groups-crud.md`.
-- [ ] 2.5 `SignalGroupsLog.cs` — 9 нових `[LoggerMessage]` методів у block 550-599.
-- [ ] 2.6 Serialization tests + service tests + options-validation tests (~15 unit + 3 builder tests).
-- [ ] 2.7 Update `SignalCli.public-api.txt` baseline.
-- [ ] 2.8 Build + test (count ~327 → ~352).
-- [ ] 2.9 Bump 4.1.0 → 4.2.0 + CHANGELOG.
-- [ ] 2.10 Commit `feat(4.2.0): group CRUD — join/update/quit`, push, merge, tag.
+- [x] 2.1 `src/SignalCli/Models/Signal/Groups/`:
+  - `JoinGroupParameters.cs` / `JoinGroupResponse.cs` with `OnlyRequested: bool?` (§F13 dimorphic). Reuse `Message.SendMessageResult` cross-namespace для shared upstream wire type.
+  - `UpdateGroupOptions.cs` (sealed record + Builder; ~16 nullable fields), `UpdateGroupParameters.cs`, `UpdateGroupResponse.cs` all-nullable (§F14 dimorphic GroupId-present-only-on-create + Results-concat-on-create).
+  - `QuitGroupParameters.cs` (without QuitGroupBehavior enum — research showed no such enum exists upstream; `delete: bool` was the actual wire field). `QuitGroupResponse.cs` all-nullable + convenience `WasAlreadyNotMember` property для §F8 idempotent case.
+  - `GroupLinkState.cs` enum + `GroupPermission.cs` enum (PascalCase .NET; service maps до kebab-case wire string).
+- [x] 2.2 Register 6 нових DTOs у `SignalJsonContext`.
+- [x] 2.3 `ISignalGroups` — 3 нові методи + XMLDoc з source-citation per §0.5 + inline §F8/F13/F14/F10 reminders.
+- [x] 2.4 `SignalGroups.cs` — implementations. §F8 idempotent (NotAGroupMember → `WasAlreadyNotMember=true`, no throw), §F14 dual-mode XMLDoc, enum→kebab mapping у helpers.
+- [x] 2.5 `SignalGroupsLog.cs` — 5 нових `[LoggerMessage]` методів у block **815-819** (НЕ 550-599 як вказано у task — той block належить SignalEventServiceLog за `.claude/rules/patterns.md`; Groups має block 810-819 within shared 800-899 range з Accounts/Devices). 5 методів замість 9 — pragmatic-only (existing Wave-1 pattern теж використовує 1 Ok-log per method).
+- [x] 2.6 Serialization tests (9) + service tests (9) + options-validation tests (5) = **23 unit**. (Task plan: ~18; 23 cover'ять more edge cases — §F13 absent-not-false, §F14 create vs update both wire & service, §F8 idempotent contract.)
+- [x] 2.7 Update `SignalCli.public-api.txt` baseline: 1239 → **1375** lines (+136 entries).
+- [x] 2.8 Build + test: 333 → **358** (+25 у Wave 2). `TreatWarningsAsErrors=true` зелений.
+- [x] 2.9 Bump 4.1.0 → 4.2.0 + CHANGELOG consumer-first voice.
+- [ ] 2.10 Commit `feat(4.2.0): group CRUD — join/update/quit`. (User asked для local-only commit; push/merge/tag — окремий етап на user authorization.)
 
 ## 3. Wave 3 — `contacts-identity` *(4.3.0)*
 

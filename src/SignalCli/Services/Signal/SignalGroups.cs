@@ -51,4 +51,141 @@ internal sealed class SignalGroups(
         return response;
     }
 
+    // ===== signal-cli-api-coverage Wave 2 (groups-crud) =====
+
+    /// <inheritdoc/>
+    public async Task<JoinGroupResponse> JoinGroupAsync(
+        string account,
+        string uri,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(account);
+        ArgumentException.ThrowIfNullOrEmpty(uri);
+
+        var response = await _signalCliClient
+            .InvokeMethodAsync(
+                "joinGroup",
+                new JoinGroupParameters(account, uri),
+                SignalJsonContext.Default.JoinGroupParameters,
+                SignalJsonContext.Default.JoinGroupResponse,
+                cancellationToken).ConfigureAwait(false);
+
+        if (response == null)
+        {
+            SignalGroupsLog.GroupOpNullResponse(_logger, "joinGroup");
+            throw new InvalidOperationException("Отримано нульову відповідь від сервера");
+        }
+
+        SignalGroupsLog.JoinGroupOk(_logger, response.TimeStamp, response.OnlyRequested == true);
+        return response;
+    }
+
+    /// <inheritdoc/>
+    public async Task<UpdateGroupResponse> UpdateGroupAsync(
+        UpdateGroupOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        // §F14 dual-mode: groupId=null → upstream створить нову групу.
+        // Enum→kebab mapping робимо у service-layer (Wave-1 pattern із ReceiptType).
+        var parameters = new UpdateGroupParameters(
+            Account: options.Account,
+            GroupId: options.GroupId,
+            Name: options.Name,
+            Description: options.Description,
+            Avatar: options.AvatarPath,
+            Members: options.Members,
+            RemoveMembers: options.RemoveMembers,
+            Admins: options.Admins,
+            RemoveAdmins: options.RemoveAdmins,
+            Bans: options.Bans,
+            Unbans: options.Unbans,
+            ResetLink: options.ResetLink,
+            Link: ToWireLinkState(options.LinkState),
+            SetPermissionAddMember: ToWirePermission(options.PermissionAddMember),
+            SetPermissionEditDetails: ToWirePermission(options.PermissionEditDetails),
+            SetPermissionSendMessages: ToWirePermission(options.PermissionSendMessages),
+            Expiration: options.Expiration);
+
+        var response = await _signalCliClient
+            .InvokeMethodAsync(
+                "updateGroup",
+                parameters,
+                SignalJsonContext.Default.UpdateGroupParameters,
+                SignalJsonContext.Default.UpdateGroupResponse,
+                cancellationToken).ConfigureAwait(false);
+
+        if (response == null)
+        {
+            SignalGroupsLog.GroupOpNullResponse(_logger, "updateGroup");
+            throw new InvalidOperationException("Отримано нульову відповідь від сервера");
+        }
+
+        SignalGroupsLog.UpdateGroupOk(_logger, response.TimeStamp, created: response.GroupId is not null);
+        return response;
+    }
+
+    /// <inheritdoc/>
+    public async Task<QuitGroupResponse> QuitGroupAsync(
+        string account,
+        string groupId,
+        bool deleteLocally = false,
+        IEnumerable<string>? admins = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(account);
+        ArgumentException.ThrowIfNullOrEmpty(groupId);
+
+        var parameters = new QuitGroupParameters(
+            Account: account,
+            GroupId: groupId,
+            Delete: deleteLocally,
+            Admins: admins);
+
+        var response = await _signalCliClient
+            .InvokeMethodAsync(
+                "quitGroup",
+                parameters,
+                SignalJsonContext.Default.QuitGroupParameters,
+                SignalJsonContext.Default.QuitGroupResponse,
+                cancellationToken).ConfigureAwait(false);
+
+        if (response == null)
+        {
+            SignalGroupsLog.GroupOpNullResponse(_logger, "quitGroup");
+            throw new InvalidOperationException("Отримано нульову відповідь від сервера");
+        }
+
+        // §F8: NotAGroupMemberException upstream → {} → response має обидва поля null.
+        // Per CLAUDE.md rule #14 повертаємо success без винятку.
+        if (response.WasAlreadyNotMember)
+        {
+            SignalGroupsLog.QuitGroupAlreadyNotMember(_logger);
+        }
+        else
+        {
+            SignalGroupsLog.QuitGroupOk(_logger, response.TimeStamp ?? 0L);
+        }
+        return response;
+    }
+
+    // Enum → kebab-case wire string (Wave-1 pattern із SignalMessage.SendReceiptAsync).
+    // null → null (поле omitting на стороні STJ через DefaultIgnoreCondition.WhenWritingNull).
+    private static string? ToWireLinkState(GroupLinkState? state) => state switch
+    {
+        null => null,
+        GroupLinkState.Enabled => "enabled",
+        GroupLinkState.EnabledWithApproval => "enabled-with-approval",
+        GroupLinkState.Disabled => "disabled",
+        _ => throw new ArgumentOutOfRangeException(nameof(state), state, "Невідоме значення GroupLinkState"),
+    };
+
+    private static string? ToWirePermission(GroupPermission? permission) => permission switch
+    {
+        null => null,
+        GroupPermission.EveryMember => "every-member",
+        GroupPermission.OnlyAdmins => "only-admins",
+        _ => throw new ArgumentOutOfRangeException(nameof(permission), permission, "Невідоме значення GroupPermission"),
+    };
 }

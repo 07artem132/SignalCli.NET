@@ -67,6 +67,17 @@ namespace SignalCli.Serialization;
 // §4.20 (N10): inner-collection для wrapper-converter'а.
 [JsonSerializable(typeof(List<Group>))]
 [JsonSerializable(typeof(Group))]
+// Groups — Wave 2 groups-crud (signal-cli-api-coverage):
+// 3 нові методи (joinGroup/updateGroup/quitGroup) кожен з парою Parameters/Response.
+// Response типи окремі (а НЕ reuse SendMessageResponse) бо wire shapes різні:
+// JoinGroupResponse додає {groupId, onlyRequested?}; UpdateGroupResponse все-nullable
+// + dimorphic groupId; QuitGroupResponse теж все-nullable бо §F8 NotAGroupMember → {}.
+[JsonSerializable(typeof(JoinGroupParameters))]
+[JsonSerializable(typeof(JoinGroupResponse))]
+[JsonSerializable(typeof(UpdateGroupParameters))]
+[JsonSerializable(typeof(UpdateGroupResponse))]
+[JsonSerializable(typeof(QuitGroupParameters))]
+[JsonSerializable(typeof(QuitGroupResponse))]
 // Message
 [JsonSerializable(typeof(SendMessageFullParameters))]
 [JsonSerializable(typeof(SendMessageResponse))]

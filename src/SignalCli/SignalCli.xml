@@ -1094,6 +1094,85 @@
             </code>
             </example>
         </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalGroups.JoinGroupAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Приєднується до Signal-групи за invitation-посиланням (<c>signal.group/#...</c>) (signal-cli-api-coverage Wave 2).
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see <c>src/main/java/org/asamk/signal/commands/JoinGroupCommand.java</c>
+            @ <c>bda4e7fc</c>. Field names mirror Jackson record exactly.
+            <para>
+            <b>§F13:</b> Response поле <see cref="P:SignalCli.Models.Signal.Groups.JoinGroupResponse.OnlyRequested"/> — <c>bool?</c>:
+            <c>null</c> = direct join (повноправний member), <c>true</c> = pending admin approval.
+            Wire ніколи не повертає <c>false</c> для цього поля.
+            </para>
+            </remarks>
+            <param name="account">E.164 номер акаунту.</param>
+            <param name="uri">Signal group invitation link.</param>
+            <param name="cancellationToken">Токен скасування.</param>
+            <returns>Новий group-id + send-results.</returns>
+            <exception cref="T:System.ArgumentException">Якщо account або uri порожні.</exception>
+            <exception cref="T:SignalCli.Exceptions.JsonRpcException">Invalid link / unknown version / inactive / pending-admin-approval (<c>-1</c>) або IOError (<c>-3</c>).</exception>
+            <exception cref="T:System.OperationCanceledException">При скасуванні.</exception>
+            <exception cref="T:System.TimeoutException">При тайм-ауті.</exception>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalGroups.UpdateGroupAsync(SignalCli.Models.Signal.Groups.UpdateGroupOptions,System.Threading.CancellationToken)">
+            <summary>
+            Оновлює існуючу групу АБО створює нову (dual-mode) (signal-cli-api-coverage Wave 2).
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see <c>src/main/java/org/asamk/signal/commands/UpdateGroupCommand.java</c>
+            @ <c>bda4e7fc</c>. Field names mirror Jackson record exactly.
+            <para>
+            <b>§F14 dual-mode:</b> якщо <see cref="P:SignalCli.Models.Signal.Groups.UpdateGroupOptions.GroupId"/> == <c>null</c>,
+            upstream signal-cli викликає <c>createGroup</c> ПЕРШИМ, далі <c>updateGroup</c> з
+            решткою полів. У відповіді <see cref="P:SignalCli.Models.Signal.Groups.UpdateGroupResponse.GroupId"/> присутній
+            ТІЛЬКИ на create-path.
+            </para>
+            <para>
+            <b>§F10 IOException divergence:</b> IOException у цьому методі мапиться на
+            <c>-32603 INTERNAL_ERROR</c> (через <c>UnexpectedErrorException</c>), не на <c>-3 IoError</c>
+            як у joinGroup/quitGroup. Inconsistent upstream-choice, не нормалізуємо.
+            </para>
+            </remarks>
+            <param name="options">Опції з усіма необов'язковими полями (Name/Description/Members/Admins/Permissions/etc.).</param>
+            <param name="cancellationToken">Токен скасування.</param>
+            <returns>Send-results + новий groupId (тільки на create-path).</returns>
+            <exception cref="T:System.ArgumentNullException">Якщо <paramref name="options"/> = null.</exception>
+            <exception cref="T:SignalCli.Exceptions.GroupAdminRequiredException">Якщо акаунт — не admin при mutating операції (<c>-1</c> + "admin").</exception>
+            <exception cref="T:SignalCli.Exceptions.JsonRpcException">Invalid group id / phone / link state / permission / etc. (<c>-1</c>) або IOException (<c>-32603</c>).</exception>
+            <exception cref="T:System.OperationCanceledException">При скасуванні.</exception>
+            <exception cref="T:System.TimeoutException">При тайм-ауті.</exception>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalGroups.QuitGroupAsync(System.String,System.String,System.Boolean,System.Collections.Generic.IEnumerable{System.String},System.Threading.CancellationToken)">
+            <summary>
+            Залишає Signal-групу. <b>Idempotent</b>: якщо акаунт уже не member, повертає response
+            з <see cref="P:SignalCli.Models.Signal.Groups.QuitGroupResponse.WasAlreadyNotMember"/> = <c>true</c> замість викидання
+            винятку (signal-cli-api-coverage Wave 2).
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see <c>src/main/java/org/asamk/signal/commands/QuitGroupCommand.java</c>
+            @ <c>bda4e7fc</c>. Field names mirror Jackson record exactly.
+            <para>
+            <b>§F8 idempotent:</b> upstream silently catches <c>NotAGroupMemberException</c>,
+            logs "User is not a group member", повертає порожній <c>{}</c>. Per CLAUDE.md rule #14
+            ми трактуємо це як success-no-op (а не помилку).
+            </para>
+            <para>
+            <b>delete=true:</b> локально видаляє group-data після quit-send.
+            </para>
+            </remarks>
+            <param name="account">E.164 номер акаунту.</param>
+            <param name="groupId">Base64 group id.</param>
+            <param name="deleteLocally">Якщо <c>true</c>, локально видалити group-data після quit. На wire — поле <c>"delete"</c>.</param>
+            <param name="admins">Список нових admin'ів (потрібен якщо акаунт — last admin групи).</param>
+            <param name="cancellationToken">Токен скасування.</param>
+            <returns>Send-результати (або marker idempotent-no-op якщо вже не member).</returns>
+            <exception cref="T:System.ArgumentException">Якщо account/groupId порожні.</exception>
+            <exception cref="T:SignalCli.Exceptions.JsonRpcException">Invalid group id / phone / last-admin-without-successor / IO error.</exception>
+            <exception cref="T:System.OperationCanceledException">При скасуванні.</exception>
+            <exception cref="T:System.TimeoutException">При тайм-ауті.</exception>
+        </member>
         <member name="T:SignalCli.Interfaces.Signal.ISignalMessage">
             <summary>
             Сервіс для відправки повідомлень Signal.
@@ -3836,6 +3915,135 @@
             Порожній запис, який підтверджує успішне скасування підписки.
             </remarks>
         </member>
+        <member name="T:SignalCli.Models.Signal.Groups.GroupLinkState">
+            <summary>
+            Стан публічного посилання-запрошення групи. Wire-shape — kebab-case рядки:
+            <c>"enabled"</c> / <c>"enabled-with-approval"</c> / <c>"disabled"</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 2 (`groups-crud`). Pinned до
+            <c>lib/src/main/java/org/asamk/signal/manager/api/GroupLinkState.java @ bda4e7fc</c>.
+            <para>
+            Upstream приймає і kebab-case (argparse <c>.choices</c>) і camelCase
+            (<c>enabledWithApproval</c>) як alias — server-side fallback у
+            <c>UpdateGroupCommand.java:82-92</c>. Canonical вихідний wire-формат — kebab-case.
+            Service-метод мапить .NET PascalCase → kebab-string перед серіалізацією.
+            </para>
+            </remarks>
+        </member>
+        <member name="F:SignalCli.Models.Signal.Groups.GroupLinkState.Enabled">
+            <summary>Посилання-запрошення активне; будь-хто з посиланням стає member'ом одразу.</summary>
+        </member>
+        <member name="F:SignalCli.Models.Signal.Groups.GroupLinkState.EnabledWithApproval">
+            <summary>Посилання активне, але join потребує admin-approval. Wire: <c>"enabled-with-approval"</c>.</summary>
+        </member>
+        <member name="F:SignalCli.Models.Signal.Groups.GroupLinkState.Disabled">
+            <summary>Посилання вимкнено; новий join можливий лише через прямі add-member виклики admin'ів.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Groups.GroupPermission">
+            <summary>
+            Хто має право на конкретну group-action (add-member / edit-details / send-messages).
+            Wire-shape — kebab-case: <c>"every-member"</c> / <c>"only-admins"</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 2. Pinned до
+            <c>lib/src/main/java/org/asamk/signal/manager/api/GroupPermission.java @ bda4e7fc</c>.
+            camelCase (<c>everyMember</c>/<c>onlyAdmins</c>) теж приймається upstream'ом як alias.
+            <para>
+            Для <c>send-messages</c> permission upstream нормалізує значення у boolean
+            <c>isAnnouncementGroup</c> (<c>OnlyAdmins → true</c>, <c>EveryMember → false</c>) —
+            але це internal-translation у command-handler'і; wire-shape тут стандартний.
+            </para>
+            </remarks>
+        </member>
+        <member name="F:SignalCli.Models.Signal.Groups.GroupPermission.EveryMember">
+            <summary>Будь-який member може виконати дію. Wire: <c>"every-member"</c>.</summary>
+        </member>
+        <member name="F:SignalCli.Models.Signal.Groups.GroupPermission.OnlyAdmins">
+            <summary>Тільки admin'и можуть виконати дію. Wire: <c>"only-admins"</c>.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Groups.JoinGroupParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>joinGroup</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 2 (groups-crud). Pinned до
+            <c>src/main/java/org/asamk/signal/commands/JoinGroupCommand.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="Account">E.164 номер акаунту-приєднувача.</param>
+            <param name="Uri">Signal group invitation link (<c>https://signal.group/#...</c> або <c>sgnl://...</c>). Required.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.JoinGroupParameters.#ctor(System.String,System.String)">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>joinGroup</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 2 (groups-crud). Pinned до
+            <c>src/main/java/org/asamk/signal/commands/JoinGroupCommand.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="Account">E.164 номер акаунту-приєднувача.</param>
+            <param name="Uri">Signal group invitation link (<c>https://signal.group/#...</c> або <c>sgnl://...</c>). Required.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.JoinGroupParameters.Account">
+            <summary>E.164 номер акаунту-приєднувача.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.JoinGroupParameters.Uri">
+            <summary>Signal group invitation link (<c>https://signal.group/#...</c> або <c>sgnl://...</c>). Required.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Groups.JoinGroupResponse">
+            <summary>
+            Відповідь на <c>joinGroup</c>: timestamp send'у "join group" повідомлення, per-recipient
+            статуси, та новий <see cref="P:SignalCli.Models.Signal.Groups.JoinGroupResponse.GroupId"/>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 2. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/JoinGroupCommand.java:58-77 @ bda4e7fc</c>.
+            <para>
+            <b>§F13 dimorphic <see cref="P:SignalCli.Models.Signal.Groups.JoinGroupResponse.OnlyRequested"/>:</b> поле present-and-<c>true</c> ЛИШЕ
+            коли group вимагає admin-approval і ми ще не повноправний member; повністю
+            <i>відсутнє</i> (NOT <c>false</c>!) при прямому join. Тому тип — <c>bool?</c>, не <c>bool</c>:
+            <c>null</c> = direct join, <c>true</c> = pending-admin-approval. Wire ніколи не приймає
+            <c>false</c> для цього поля.
+            </para>
+            </remarks>
+            <param name="TimeStamp">Send-timestamp (epoch ms) "join group"-повідомлення.</param>
+            <param name="Results">Per-recipient send results. Може бути <c>null</c> якщо send не відбувся.</param>
+            <param name="GroupId">Base64 id групи, до якої приєдналися (новий або існуючий).</param>
+            <param name="OnlyRequested">§F13: dimorphic. <c>null</c> = direct join, <c>true</c> = pending approval.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.JoinGroupResponse.#ctor(System.Int64,System.Collections.Generic.List{SignalCli.Models.Signal.Message.SendMessageResult},System.String,System.Nullable{System.Boolean})">
+            <summary>
+            Відповідь на <c>joinGroup</c>: timestamp send'у "join group" повідомлення, per-recipient
+            статуси, та новий <see cref="P:SignalCli.Models.Signal.Groups.JoinGroupResponse.GroupId"/>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 2. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/JoinGroupCommand.java:58-77 @ bda4e7fc</c>.
+            <para>
+            <b>§F13 dimorphic <see cref="P:SignalCli.Models.Signal.Groups.JoinGroupResponse.OnlyRequested"/>:</b> поле present-and-<c>true</c> ЛИШЕ
+            коли group вимагає admin-approval і ми ще не повноправний member; повністю
+            <i>відсутнє</i> (NOT <c>false</c>!) при прямому join. Тому тип — <c>bool?</c>, не <c>bool</c>:
+            <c>null</c> = direct join, <c>true</c> = pending-admin-approval. Wire ніколи не приймає
+            <c>false</c> для цього поля.
+            </para>
+            </remarks>
+            <param name="TimeStamp">Send-timestamp (epoch ms) "join group"-повідомлення.</param>
+            <param name="Results">Per-recipient send results. Може бути <c>null</c> якщо send не відбувся.</param>
+            <param name="GroupId">Base64 id групи, до якої приєдналися (новий або існуючий).</param>
+            <param name="OnlyRequested">§F13: dimorphic. <c>null</c> = direct join, <c>true</c> = pending approval.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.JoinGroupResponse.TimeStamp">
+            <summary>Send-timestamp (epoch ms) "join group"-повідомлення.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.JoinGroupResponse.Results">
+            <summary>Per-recipient send results. Може бути <c>null</c> якщо send не відбувся.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.JoinGroupResponse.GroupId">
+            <summary>Base64 id групи, до якої приєдналися (новий або існуючий).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.JoinGroupResponse.OnlyRequested">
+            <summary>§F13: dimorphic. <c>null</c> = direct join, <c>true</c> = pending approval.</summary>
+        </member>
         <member name="T:SignalCli.Models.Signal.Groups.ListGroupsParameters">
             <summary>
             Параметри запиту списку груп Signal.
@@ -4011,6 +4219,397 @@
         </member>
         <member name="P:SignalCli.Models.Signal.Groups.Member.Uuid">
             <summary>Унікальний ідентифікатор користувача.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Groups.QuitGroupParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>quitGroup</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 2. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/QuitGroupCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>§F8 idempotent NotAGroupMember:</b> якщо вже не member групи, upstream silently
+            logs "User is not a group member" і повертає <c>{}</c> (empty object). Сервіс-метод
+            інтерпретує це як success per CLAUDE.md rule #14 (prefer idempotency over throwing).
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="GroupId">Base64 id групи. Required.</param>
+            <param name="Delete">Якщо <c>true</c>, локально видалити дані групи після quit.</param>
+            <param name="Admins">Список нових admin'ів (потрібен якщо акаунт — last admin групи).</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.QuitGroupParameters.#ctor(System.String,System.String,System.Boolean,System.Collections.Generic.IEnumerable{System.String})">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>quitGroup</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 2. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/QuitGroupCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>§F8 idempotent NotAGroupMember:</b> якщо вже не member групи, upstream silently
+            logs "User is not a group member" і повертає <c>{}</c> (empty object). Сервіс-метод
+            інтерпретує це як success per CLAUDE.md rule #14 (prefer idempotency over throwing).
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="GroupId">Base64 id групи. Required.</param>
+            <param name="Delete">Якщо <c>true</c>, локально видалити дані групи після quit.</param>
+            <param name="Admins">Список нових admin'ів (потрібен якщо акаунт — last admin групи).</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.QuitGroupParameters.Account">
+            <summary>E.164 номер акаунту.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.QuitGroupParameters.GroupId">
+            <summary>Base64 id групи. Required.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.QuitGroupParameters.Delete">
+            <summary>Якщо <c>true</c>, локально видалити дані групи після quit.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.QuitGroupParameters.Admins">
+            <summary>Список нових admin'ів (потрібен якщо акаунт — last admin групи).</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Groups.QuitGroupResponse">
+            <summary>
+            Відповідь на <c>quitGroup</c>. Поля nullable бо §F8 idempotent NotAGroupMember case
+            повертає порожній <c>{}</c> — обидва <see cref="P:SignalCli.Models.Signal.Groups.QuitGroupResponse.TimeStamp"/> та <see cref="P:SignalCli.Models.Signal.Groups.QuitGroupResponse.Results"/>
+            будуть <c>null</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 2. Pinned до
+            <c>src/main/java/org/asamk/signal/util/SendMessageResultUtils.java:29-41 @ bda4e7fc</c> +
+            <c>QuitGroupCommand.java:59-61 @ bda4e7fc</c> (silent-log idempotent path).
+            </remarks>
+            <param name="TimeStamp">Send-timestamp quit-повідомлення. <c>null</c> якщо вже не member.</param>
+            <param name="Results">Per-recipient send results. <c>null</c> якщо вже не member.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.QuitGroupResponse.#ctor(System.Nullable{System.Int64},System.Collections.Generic.List{SignalCli.Models.Signal.Message.SendMessageResult})">
+            <summary>
+            Відповідь на <c>quitGroup</c>. Поля nullable бо §F8 idempotent NotAGroupMember case
+            повертає порожній <c>{}</c> — обидва <see cref="P:SignalCli.Models.Signal.Groups.QuitGroupResponse.TimeStamp"/> та <see cref="P:SignalCli.Models.Signal.Groups.QuitGroupResponse.Results"/>
+            будуть <c>null</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 2. Pinned до
+            <c>src/main/java/org/asamk/signal/util/SendMessageResultUtils.java:29-41 @ bda4e7fc</c> +
+            <c>QuitGroupCommand.java:59-61 @ bda4e7fc</c> (silent-log idempotent path).
+            </remarks>
+            <param name="TimeStamp">Send-timestamp quit-повідомлення. <c>null</c> якщо вже не member.</param>
+            <param name="Results">Per-recipient send results. <c>null</c> якщо вже не member.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.QuitGroupResponse.TimeStamp">
+            <summary>Send-timestamp quit-повідомлення. <c>null</c> якщо вже не member.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.QuitGroupResponse.Results">
+            <summary>Per-recipient send results. <c>null</c> якщо вже не member.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.QuitGroupResponse.WasAlreadyNotMember">
+            <summary>
+            Зручний прапорець: <c>true</c> якщо це idempotent-no-op (акаунт уже не був member'ом
+            групи перед викликом). Тоді upstream signal-cli мовчки логує "User is not a group member"
+            та повертає <c>{}</c>.
+            </summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Groups.UpdateGroupOptions">
+            <summary>
+            Опції для <c>updateGroup</c> RPC. Створюється через <see cref="T:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Builder"/>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 2 (`groups-crud`). Wire-shape pinned до
+            <c>src/main/java/org/asamk/signal/commands/UpdateGroupCommand.java @ bda4e7fc</c> +
+            <c>lib/src/main/java/org/asamk/signal/manager/api/UpdateGroup.java @ bda4e7fc</c>.
+            <para>
+            <b>§F14 dual-mode:</b> якщо <see cref="P:SignalCli.Models.Signal.Groups.UpdateGroupOptions.GroupId"/> == <c>null</c>, upstream signal-cli
+            викликає <c>m.createGroup(name, members, avatar)</c> ПЕРШИМ, далі <c>m.updateGroup(...)</c>.
+            Тобто <i>один і той же RPC = create OR update</i> залежно від наявності GroupId.
+            На .NET-сайті це single API, dual-semantic; XMLDoc на <c>UpdateGroupAsync</c> чітко
+            документує цю двозначність. У відповіді <see cref="P:SignalCli.Models.Signal.Groups.UpdateGroupResponse.GroupId"/>
+            присутній ТІЛЬКИ при create-path (новий group); при update-path — <c>null</c>.
+            </para>
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Account">
+            <summary>E.164 номер акаунту-власника.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupOptions.GroupId">
+            <summary>
+            §F14: <c>null</c> → CREATE-then-update (новий group); інакше — UPDATE existing.
+            Base64 group id.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Name">
+            <summary>Нова назва групи.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Description">
+            <summary>Новий опис групи.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupOptions.AvatarPath">
+            <summary>
+            Локальний шлях до avatar-файлу. <b>Privacy:</b> signal-cli читає файл з ФС у власному
+            process'і; шлях НЕ логуй вище <c>Trace</c> (CLAUDE.md rule #1).
+            </summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Members">
+            <summary>Members додати (phone/UUID/username).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupOptions.RemoveMembers">
+            <summary>Members видалити.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Admins">
+            <summary>Members промотити в admin'и.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupOptions.RemoveAdmins">
+            <summary>Members зняти з admin'ів.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Bans">
+            <summary>Members забанити.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Unbans">
+            <summary>Members розбанити.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupOptions.ResetLink">
+            <summary>Скинути group-invite-link password (regenerate).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupOptions.LinkState">
+            <summary>Стан group-invite-link.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupOptions.PermissionAddMember">
+            <summary>Permission на add-member (хто може додавати).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupOptions.PermissionEditDetails">
+            <summary>Permission на edit-details (хто може редагувати details групи).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupOptions.PermissionSendMessages">
+            <summary>
+            Permission на send-messages. Upstream нормалізує: <see cref="F:SignalCli.Models.Signal.Groups.GroupPermission.OnlyAdmins"/>
+            → <c>isAnnouncementGroup=true</c>. У .NET ми лишаємо semantic-symmetric з іншими permission-полями.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Expiration">
+            <summary>Disappearing-messages timer у секундах. <c>null</c> = не міняти, <c>0</c> = вимкнути.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Builder">
+            <summary>Builder для <see cref="T:SignalCli.Models.Signal.Groups.UpdateGroupOptions"/>.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Builder.#ctor(System.String)">
+            <summary>
+            Створює builder з обов'язковим account'ом. GroupId опційний — null означає CREATE
+            замість UPDATE (§F14).
+            </summary>
+            <param name="account">E.164 номер акаунту-власника.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Builder.WithGroupId(System.String)">
+            <summary>Виставити existing groupId. Без виклику — CREATE-mode (§F14).</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Builder.WithName(System.String)">
+            <summary>Виставити нову назву групи.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Builder.WithDescription(System.String)">
+            <summary>Виставити новий опис.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Builder.WithAvatarPath(System.String)">
+            <summary>Виставити шлях до avatar-файлу на ФС signal-cli-процесу.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Builder.WithMembers(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Додати members.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Builder.WithRemoveMembers(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Видалити members.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Builder.WithAdmins(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Промотити в admin'и.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Builder.WithRemoveAdmins(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Зняти з admin'ів.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Builder.WithBans(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Забанити.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Builder.WithUnbans(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Розбанити.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Builder.WithResetLink(System.Boolean)">
+            <summary>Помітити що group-invite-link треба regenerate'нути.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Builder.WithLinkState(SignalCli.Models.Signal.Groups.GroupLinkState)">
+            <summary>Виставити стан group-invite-link.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Builder.WithPermissionAddMember(SignalCli.Models.Signal.Groups.GroupPermission)">
+            <summary>Permission на add-member.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Builder.WithPermissionEditDetails(SignalCli.Models.Signal.Groups.GroupPermission)">
+            <summary>Permission на edit-details.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Builder.WithPermissionSendMessages(SignalCli.Models.Signal.Groups.GroupPermission)">
+            <summary>Permission на send-messages.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Builder.WithExpiration(System.Int32)">
+            <summary>Disappearing-message timer (seconds). <c>0</c> вимикає; null — leave-unchanged.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.UpdateGroupOptions.Builder.Build">
+            <summary>Будує <see cref="T:SignalCli.Models.Signal.Groups.UpdateGroupOptions"/>.</summary>
+            <exception cref="T:System.InvalidOperationException">Якщо Account скинуто після ctor.</exception>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Groups.UpdateGroupParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>updateGroup</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 2. Field naming convention — camelCase per upstream
+            <c>JsonRpcNamespace.dashSeparatedToCamelCaseString</c>; enum fields передаються як
+            kebab-case string (e.g. <c>"enabled-with-approval"</c>) — сервіс-метод робить
+            PascalCase→kebab mapping перед серіалізацією. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/UpdateGroupCommand.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="Account">E.164 номер акаунту-власника.</param>
+            <param name="GroupId">Base64 group id. <c>null</c> → CREATE-mode (§F14).</param>
+            <param name="Name">Нова назва.</param>
+            <param name="Description">Новий опис.</param>
+            <param name="Avatar">Локальний шлях до avatar-файлу.</param>
+            <param name="Members">Members додати.</param>
+            <param name="RemoveMembers">Members видалити.</param>
+            <param name="Admins">Promote-to-admin.</param>
+            <param name="RemoveAdmins">Demote-from-admin.</param>
+            <param name="Bans">Members забанити.</param>
+            <param name="Unbans">Members розбанити.</param>
+            <param name="ResetLink">Regenerate link-password.</param>
+            <param name="Link">Group-invite-link state (kebab-case: <c>"enabled"</c>/<c>"enabled-with-approval"</c>/<c>"disabled"</c>).</param>
+            <param name="SetPermissionAddMember">Add-member permission (kebab-case <c>"every-member"</c>/<c>"only-admins"</c>).</param>
+            <param name="SetPermissionEditDetails">Edit-details permission.</param>
+            <param name="SetPermissionSendMessages">Send-messages permission.</param>
+            <param name="Expiration">Disappearing-message timer (seconds).</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.UpdateGroupParameters.#ctor(System.String,System.String,System.String,System.String,System.String,System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Boolean,System.String,System.String,System.String,System.String,System.Nullable{System.Int32})">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>updateGroup</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 2. Field naming convention — camelCase per upstream
+            <c>JsonRpcNamespace.dashSeparatedToCamelCaseString</c>; enum fields передаються як
+            kebab-case string (e.g. <c>"enabled-with-approval"</c>) — сервіс-метод робить
+            PascalCase→kebab mapping перед серіалізацією. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/UpdateGroupCommand.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="Account">E.164 номер акаунту-власника.</param>
+            <param name="GroupId">Base64 group id. <c>null</c> → CREATE-mode (§F14).</param>
+            <param name="Name">Нова назва.</param>
+            <param name="Description">Новий опис.</param>
+            <param name="Avatar">Локальний шлях до avatar-файлу.</param>
+            <param name="Members">Members додати.</param>
+            <param name="RemoveMembers">Members видалити.</param>
+            <param name="Admins">Promote-to-admin.</param>
+            <param name="RemoveAdmins">Demote-from-admin.</param>
+            <param name="Bans">Members забанити.</param>
+            <param name="Unbans">Members розбанити.</param>
+            <param name="ResetLink">Regenerate link-password.</param>
+            <param name="Link">Group-invite-link state (kebab-case: <c>"enabled"</c>/<c>"enabled-with-approval"</c>/<c>"disabled"</c>).</param>
+            <param name="SetPermissionAddMember">Add-member permission (kebab-case <c>"every-member"</c>/<c>"only-admins"</c>).</param>
+            <param name="SetPermissionEditDetails">Edit-details permission.</param>
+            <param name="SetPermissionSendMessages">Send-messages permission.</param>
+            <param name="Expiration">Disappearing-message timer (seconds).</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupParameters.Account">
+            <summary>E.164 номер акаунту-власника.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupParameters.GroupId">
+            <summary>Base64 group id. <c>null</c> → CREATE-mode (§F14).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupParameters.Name">
+            <summary>Нова назва.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupParameters.Description">
+            <summary>Новий опис.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupParameters.Avatar">
+            <summary>Локальний шлях до avatar-файлу.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupParameters.Members">
+            <summary>Members додати.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupParameters.RemoveMembers">
+            <summary>Members видалити.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupParameters.Admins">
+            <summary>Promote-to-admin.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupParameters.RemoveAdmins">
+            <summary>Demote-from-admin.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupParameters.Bans">
+            <summary>Members забанити.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupParameters.Unbans">
+            <summary>Members розбанити.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupParameters.ResetLink">
+            <summary>Regenerate link-password.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupParameters.Link">
+            <summary>Group-invite-link state (kebab-case: <c>"enabled"</c>/<c>"enabled-with-approval"</c>/<c>"disabled"</c>).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupParameters.SetPermissionAddMember">
+            <summary>Add-member permission (kebab-case <c>"every-member"</c>/<c>"only-admins"</c>).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupParameters.SetPermissionEditDetails">
+            <summary>Edit-details permission.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupParameters.SetPermissionSendMessages">
+            <summary>Send-messages permission.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupParameters.Expiration">
+            <summary>Disappearing-message timer (seconds).</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Groups.UpdateGroupResponse">
+            <summary>
+            Відповідь на <c>updateGroup</c>. Всі поля nullable, оскільки upstream conditionally додає
+            їх у HashMap (<c>UpdateGroupCommand.java:206-217 @ bda4e7fc</c>).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 2.
+            <para>
+            <b>§F14 dimorphic <see cref="P:SignalCli.Models.Signal.Groups.UpdateGroupResponse.GroupId"/>:</b> поле present ЛИШЕ коли upstream створив
+            нову групу (request omitted <c>groupId</c>); absent при plain update існуючої групи.
+            Це дзеркало JoinGroup'ового <see cref="P:SignalCli.Models.Signal.Groups.JoinGroupResponse.OnlyRequested"/>.
+            </para>
+            <para>
+            <see cref="P:SignalCli.Models.Signal.Groups.UpdateGroupResponse.Results"/> при create-path несе concat двох send-батчів (createGroup + updateGroup
+            — <c>UpdateGroupCommand.java:172-175 @ bda4e7fc</c>); consumer повинен ітерувати, не
+            припускати single batch.
+            </para>
+            </remarks>
+            <param name="TimeStamp">Send-timestamp. <c>null</c> якщо send не відбувся.</param>
+            <param name="Results">Per-recipient send results. Може бути concat (create + update).</param>
+            <param name="GroupId">§F14: present-only-on-create.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Groups.UpdateGroupResponse.#ctor(System.Nullable{System.Int64},System.Collections.Generic.List{SignalCli.Models.Signal.Message.SendMessageResult},System.String)">
+            <summary>
+            Відповідь на <c>updateGroup</c>. Всі поля nullable, оскільки upstream conditionally додає
+            їх у HashMap (<c>UpdateGroupCommand.java:206-217 @ bda4e7fc</c>).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 2.
+            <para>
+            <b>§F14 dimorphic <see cref="P:SignalCli.Models.Signal.Groups.UpdateGroupResponse.GroupId"/>:</b> поле present ЛИШЕ коли upstream створив
+            нову групу (request omitted <c>groupId</c>); absent при plain update існуючої групи.
+            Це дзеркало JoinGroup'ового <see cref="P:SignalCli.Models.Signal.Groups.JoinGroupResponse.OnlyRequested"/>.
+            </para>
+            <para>
+            <see cref="P:SignalCli.Models.Signal.Groups.UpdateGroupResponse.Results"/> при create-path несе concat двох send-батчів (createGroup + updateGroup
+            — <c>UpdateGroupCommand.java:172-175 @ bda4e7fc</c>); consumer повинен ітерувати, не
+            припускати single batch.
+            </para>
+            </remarks>
+            <param name="TimeStamp">Send-timestamp. <c>null</c> якщо send не відбувся.</param>
+            <param name="Results">Per-recipient send results. Може бути concat (create + update).</param>
+            <param name="GroupId">§F14: present-only-on-create.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupResponse.TimeStamp">
+            <summary>Send-timestamp. <c>null</c> якщо send не відбувся.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupResponse.Results">
+            <summary>Per-recipient send results. Може бути concat (create + update).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Groups.UpdateGroupResponse.GroupId">
+            <summary>§F14: present-only-on-create.</summary>
         </member>
         <member name="T:SignalCli.Models.Signal.Message.AttachmentMessageOptions">
             <summary>Опції для відправки повідомлення з вкладеннями. Створюється через <see cref="T:SignalCli.Models.Signal.Message.AttachmentMessageOptions.Builder"/>.</summary>
@@ -5159,6 +5758,16 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JoinGroupParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JoinGroupResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.ListGroupsParameters">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
@@ -5170,6 +5779,26 @@
             </summary>
         </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.Member">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.QuitGroupParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.QuitGroupResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.UpdateGroupParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.UpdateGroupResponse">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -6143,6 +6772,15 @@
             post-modernize-tuning §11.B.6: потокобезпечне читання кількості активних підписок
             для <see cref="F:SignalCli.Diagnostics.SignalCliDiagnostics.ActiveSubscriptions"/> ObservableGauge.
             </summary>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalGroups.JoinGroupAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalGroups.UpdateGroupAsync(SignalCli.Models.Signal.Groups.UpdateGroupOptions,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalGroups.QuitGroupAsync(System.String,System.String,System.Boolean,System.Collections.Generic.IEnumerable{System.String},System.Threading.CancellationToken)">
+            <inheritdoc/>
         </member>
         <member name="M:SignalCli.Services.Signal.SignalMessage.SendTextMessageAsync(SignalCli.Models.Signal.Message.TextMessageOptions,System.Threading.CancellationToken)">
             <summary>
