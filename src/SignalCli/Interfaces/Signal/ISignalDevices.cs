@@ -59,4 +59,62 @@ public interface ISignalDevices
     );
 
     // deprecated-shim-removal §3: `FinishLink` Async-suffix-less shim видалено.
+
+    /// <summary>
+    /// Додає secondary device до акаунту (primary-перспектива) (signal-cli-api-coverage Wave 5).
+    /// </summary>
+    /// <remarks>
+    /// signal-cli RPC mapping: see
+    /// <c>src/main/java/org/asamk/signal/commands/AddDeviceCommand.java</c> @ <c>bda4e7fc</c>.
+    /// <para>
+    /// <b>Mental model:</b> secondary device генерує key-pair, кодує <c>uuid</c> + public-key
+    /// у <c>sgnl://linkdevice?uuid=...&amp;pub_key=...</c> URL і відображає QR. Primary
+    /// (цей API) приймає URL і виконує provisioning handshake.
+    /// </para>
+    /// <para>
+    /// <b>Blocking:</b> key-exchange round-trip з secondary через Signal server — секунди.
+    /// </para>
+    /// <para>
+    /// <b>Linked-device callers:</b> якщо цей signal-cli — secondary, throw'ить <c>-1 UserError</c>.
+    /// </para>
+    /// </remarks>
+    Task AddDeviceAsync(string account, string uri, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Перелічує всі linked devices акаунту (server-side fetch, не local-cache).
+    /// </summary>
+    /// <remarks>
+    /// signal-cli RPC mapping: see
+    /// <c>src/main/java/org/asamk/signal/commands/ListDevicesCommand.java</c> @ <c>bda4e7fc</c>.
+    /// <para>
+    /// <b>§F6 quirk:</b> <see cref="Device"/> має 4 поля — wire НЕ містить <c>isThisDevice</c>.
+    /// Self-identification — за <c>Id == 1</c> (primary).
+    /// </para>
+    /// </remarks>
+    Task<ListDevicesResponse> ListDevicesAsync(string account, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Видаляє linked secondary device. <b>Destructive</b> — secondary одразу втрачає capability.
+    /// </summary>
+    /// <remarks>
+    /// signal-cli RPC mapping: see
+    /// <c>src/main/java/org/asamk/signal/commands/RemoveDeviceCommand.java</c> @ <c>bda4e7fc</c>.
+    /// <para>
+    /// Видалений device — no undo path; secondary мусить re-link через <see cref="AddDeviceAsync"/>.
+    /// </para>
+    /// </remarks>
+    Task RemoveDeviceAsync(string account, int deviceId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Оновлює назву linked device'а (encrypted server-side).
+    /// </summary>
+    /// <remarks>
+    /// signal-cli RPC mapping: see
+    /// <c>src/main/java/org/asamk/signal/commands/UpdateDeviceCommand.java</c> @ <c>bda4e7fc</c>.
+    /// <para>
+    /// <b>§F12:</b> <paramref name="deviceName"/> encrypted device's identity-key'ом перед transmission.
+    /// .NET сервіс НЕ логує <paramref name="deviceName"/> вище <c>Trace</c> (CLAUDE.md rule #1).
+    /// </para>
+    /// </remarks>
+    Task UpdateDeviceAsync(string account, int deviceId, string deviceName, CancellationToken cancellationToken = default);
 }

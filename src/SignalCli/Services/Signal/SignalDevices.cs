@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using SignalCli.Interfaces.Signal;
 using SignalCli.Interfaces.SignalCli;
 using SignalCli.Logging;
@@ -63,4 +64,91 @@ internal sealed class SignalDevices(
         return response;
     }
 
+    // ===== signal-cli-api-coverage Wave 5 (device-management) =====
+
+    /// <inheritdoc/>
+    public async Task AddDeviceAsync(string account, string uri, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(account);
+        ArgumentException.ThrowIfNullOrEmpty(uri);
+        // §F11: pub_key у URI може бути unpadded base64 (DeviceLinkUrl.java:48). signal-cli
+        // (Java Base64) приймає обидва форми, тож .NET сервіс pass-through URI без декодування.
+
+        await _signalCliClient
+            .InvokeMethodAsync(
+                "addDevice",
+                new AddDeviceParameters(account, uri),
+                SignalJsonContext.Default.AddDeviceParameters,
+                SignalJsonContext.Default.JsonElement,
+                cancellationToken).ConfigureAwait(false);
+
+        SignalDevicesLog.AddDeviceOk(_logger);
+    }
+
+    /// <inheritdoc/>
+    public async Task<ListDevicesResponse> ListDevicesAsync(string account, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(account);
+
+        var response = await _signalCliClient
+            .InvokeMethodAsync(
+                "listDevices",
+                new ListDevicesParameters(account),
+                SignalJsonContext.Default.ListDevicesParameters,
+                SignalJsonContext.Default.ListDevicesResponse,
+                cancellationToken).ConfigureAwait(false);
+
+        if (response == null)
+        {
+            SignalDevicesLog.DeviceOpNullResponse(_logger, "listDevices");
+            throw new InvalidOperationException("Отримано нульову відповідь від сервера");
+        }
+
+        SignalDevicesLog.ListDevicesOk(_logger, response.Count);
+        return response;
+    }
+
+    /// <inheritdoc/>
+    public async Task RemoveDeviceAsync(string account, int deviceId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(account);
+        if (deviceId <= 0)
+            throw new ArgumentOutOfRangeException(nameof(deviceId), "DeviceId має бути > 0.");
+
+        await _signalCliClient
+            .InvokeMethodAsync(
+                "removeDevice",
+                new RemoveDeviceParameters(account, deviceId),
+                SignalJsonContext.Default.RemoveDeviceParameters,
+                SignalJsonContext.Default.JsonElement,
+                cancellationToken).ConfigureAwait(false);
+
+        SignalDevicesLog.RemoveDeviceOk(_logger, deviceId);
+    }
+
+    /// <inheritdoc/>
+    public async Task UpdateDeviceAsync(
+        string account,
+        int deviceId,
+        string deviceName,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(account);
+        if (deviceId <= 0)
+            throw new ArgumentOutOfRangeException(nameof(deviceId), "DeviceId має бути > 0.");
+        // §F12: deviceName encrypted server-side. Empty-string не блокуємо client-side
+        // (upstream не has empty-guard), але null-guard є для defensive programming.
+        ArgumentNullException.ThrowIfNull(deviceName);
+
+        await _signalCliClient
+            .InvokeMethodAsync(
+                "updateDevice",
+                new UpdateDeviceParameters(account, deviceId, deviceName),
+                SignalJsonContext.Default.UpdateDeviceParameters,
+                SignalJsonContext.Default.JsonElement,
+                cancellationToken).ConfigureAwait(false);
+
+        // §F12: НЕ логуємо deviceName на Information level — це encrypted bytes.
+        SignalDevicesLog.UpdateDeviceOk(_logger, deviceId);
+    }
 }

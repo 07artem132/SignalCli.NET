@@ -64,6 +64,16 @@ namespace SignalCli.Serialization;
 [JsonSerializable(typeof(StartLinkResponse))]
 [JsonSerializable(typeof(FinishLinkParameters))]
 [JsonSerializable(typeof(FinishLinkResponse))]
+// Devices — Wave 5 device-management (signal-cli-api-coverage):
+// 4 нові методи primary-перспективи. listDevices — wrapper-record pattern;
+// add/remove/update — void → JsonElement response.
+[JsonSerializable(typeof(AddDeviceParameters))]
+[JsonSerializable(typeof(ListDevicesParameters))]
+[JsonSerializable(typeof(ListDevicesResponse))]
+[JsonSerializable(typeof(List<Device>))]
+[JsonSerializable(typeof(Device))]
+[JsonSerializable(typeof(RemoveDeviceParameters))]
+[JsonSerializable(typeof(UpdateDeviceParameters))]
 // Groups
 [JsonSerializable(typeof(ListGroupsParameters))]
 [JsonSerializable(typeof(ListGroupsResponse))]

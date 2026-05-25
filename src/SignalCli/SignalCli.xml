@@ -1070,6 +1070,64 @@
             </code>
             </example>
         </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalDevices.AddDeviceAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Додає secondary device до акаунту (primary-перспектива) (signal-cli-api-coverage Wave 5).
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see
+            <c>src/main/java/org/asamk/signal/commands/AddDeviceCommand.java</c> @ <c>bda4e7fc</c>.
+            <para>
+            <b>Mental model:</b> secondary device генерує key-pair, кодує <c>uuid</c> + public-key
+            у <c>sgnl://linkdevice?uuid=...&amp;pub_key=...</c> URL і відображає QR. Primary
+            (цей API) приймає URL і виконує provisioning handshake.
+            </para>
+            <para>
+            <b>Blocking:</b> key-exchange round-trip з secondary через Signal server — секунди.
+            </para>
+            <para>
+            <b>Linked-device callers:</b> якщо цей signal-cli — secondary, throw'ить <c>-1 UserError</c>.
+            </para>
+            </remarks>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalDevices.ListDevicesAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Перелічує всі linked devices акаунту (server-side fetch, не local-cache).
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see
+            <c>src/main/java/org/asamk/signal/commands/ListDevicesCommand.java</c> @ <c>bda4e7fc</c>.
+            <para>
+            <b>§F6 quirk:</b> <see cref="T:SignalCli.Models.Signal.Devices.Device"/> має 4 поля — wire НЕ містить <c>isThisDevice</c>.
+            Self-identification — за <c>Id == 1</c> (primary).
+            </para>
+            </remarks>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalDevices.RemoveDeviceAsync(System.String,System.Int32,System.Threading.CancellationToken)">
+            <summary>
+            Видаляє linked secondary device. <b>Destructive</b> — secondary одразу втрачає capability.
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see
+            <c>src/main/java/org/asamk/signal/commands/RemoveDeviceCommand.java</c> @ <c>bda4e7fc</c>.
+            <para>
+            Видалений device — no undo path; secondary мусить re-link через <see cref="M:SignalCli.Interfaces.Signal.ISignalDevices.AddDeviceAsync(System.String,System.String,System.Threading.CancellationToken)"/>.
+            </para>
+            </remarks>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalDevices.UpdateDeviceAsync(System.String,System.Int32,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Оновлює назву linked device'а (encrypted server-side).
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see
+            <c>src/main/java/org/asamk/signal/commands/UpdateDeviceCommand.java</c> @ <c>bda4e7fc</c>.
+            <para>
+            <b>§F12:</b> <paramref name="deviceName"/> encrypted device's identity-key'ом перед transmission.
+            .NET сервіс НЕ логує <paramref name="deviceName"/> вище <c>Trace</c> (CLAUDE.md rule #1).
+            </para>
+            </remarks>
+        </member>
         <member name="T:SignalCli.Interfaces.Signal.ISignalEventService">
             <summary>
             Сервіс для обробки подій Signal.
@@ -3273,6 +3331,128 @@
         <member name="P:SignalCli.Models.Signal.Contacts.UpdateProfileParameters.RemoveAvatar">
             <summary>Якщо <c>true</c>, видалити avatar.</summary>
         </member>
+        <member name="T:SignalCli.Models.Signal.Devices.AddDeviceParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>addDevice</c> (primary-перспектива — додати linked device).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 5 (`device-management`). Pinned до
+            <c>src/main/java/org/asamk/signal/commands/AddDeviceCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>Mental model:</b> URI генерується SECONDARY device'ом (Signal Desktop, secondary signal-cli)
+            під час його <c>startLink</c> flow, потім primary викликає <c>addDevice</c> з цим URI.
+            Зворотній flow до того, що передбачає інтуїція "primary creates invitation".
+            </para>
+            <para>
+            <b>§F11 base64 padding:</b> upstream <c>DeviceLinkUrl.java:48</c> strip'ить <c>=</c> з
+            <c>pub_key</c>-фрагменту. Java <c>Base64.getDecoder()</c> lenient до padding'у, тож signal-cli
+            приймає обидва форми. .NET сервіс просто pass-through URI — НЕ decode'ить pub_key самостійно,
+            тож padding-restoration helper тут не потрібен. Якщо у майбутньому додамо client-side URI
+            validation, скористаємось <c>Base64Helper.RestoreBase64Padding</c> (наразі не існує).
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту (primary).</param>
+            <param name="Uri"><c>sgnl://linkdevice?uuid=...&amp;pub_key=...</c> URL що відображає secondary.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Devices.AddDeviceParameters.#ctor(System.String,System.String)">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>addDevice</c> (primary-перспектива — додати linked device).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 5 (`device-management`). Pinned до
+            <c>src/main/java/org/asamk/signal/commands/AddDeviceCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>Mental model:</b> URI генерується SECONDARY device'ом (Signal Desktop, secondary signal-cli)
+            під час його <c>startLink</c> flow, потім primary викликає <c>addDevice</c> з цим URI.
+            Зворотній flow до того, що передбачає інтуїція "primary creates invitation".
+            </para>
+            <para>
+            <b>§F11 base64 padding:</b> upstream <c>DeviceLinkUrl.java:48</c> strip'ить <c>=</c> з
+            <c>pub_key</c>-фрагменту. Java <c>Base64.getDecoder()</c> lenient до padding'у, тож signal-cli
+            приймає обидва форми. .NET сервіс просто pass-through URI — НЕ decode'ить pub_key самостійно,
+            тож padding-restoration helper тут не потрібен. Якщо у майбутньому додамо client-side URI
+            validation, скористаємось <c>Base64Helper.RestoreBase64Padding</c> (наразі не існує).
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту (primary).</param>
+            <param name="Uri"><c>sgnl://linkdevice?uuid=...&amp;pub_key=...</c> URL що відображає secondary.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Devices.AddDeviceParameters.Account">
+            <summary>E.164 номер акаунту (primary).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Devices.AddDeviceParameters.Uri">
+            <summary><c>sgnl://linkdevice?uuid=...&amp;pub_key=...</c> URL що відображає secondary.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Devices.Device">
+            <summary>
+            Один linked device у відповіді <c>listDevices</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 5 (`device-management`). Pinned до
+            <c>ListDevicesCommand.java:67 @ bda4e7fc</c> (private <c>JsonDevice</c> record).
+            <para>
+            <b>§F6 quirk — 4 fields only:</b> upstream <c>Device</c> record у
+            <c>lib/.../manager/api/Device.java</c> має 5 полів (<c>id, name, created, lastSeen,
+            isThisDevice</c>), але <c>JsonDevice</c> projection drop'ає <c>isThisDevice</c>
+            (consumed лише <c>PlainTextWriter</c>'ом для " (this device)" annotation —
+            <c>ListDevicesCommand.java:50</c>). НЕ додаємо <c>IsThisDevice</c> у .NET — це б lie'ло про
+            wire shape. Consumer'и можуть self-determine через <c>Id == 1</c> (primary).
+            </para>
+            <para>
+            <b>§Wire-name rename:</b> upstream <c>Device.created</c>/<c>lastSeen</c> renamed у
+            <c>createdTimestamp</c>/<c>lastSeenTimestamp</c> на wire (Jackson default field-name).
+            </para>
+            <para>
+            <b>§int → long widening:</b> upstream <c>Device.id()</c> — <c>int</c>, але <c>JsonDevice.id</c>
+            — <c>long</c> (implicit widening на projection-site). На .NET — <c>long</c> щоб mirror wire.
+            </para>
+            </remarks>
+            <param name="Id">Signal-protocol device ID. Primary завжди <c>1</c>.</param>
+            <param name="Name">Device's self-reported name. Може бути <c>null</c>.</param>
+            <param name="CreatedTimestamp">Unix-ms коли device був linked.</param>
+            <param name="LastSeenTimestamp">Unix-ms останньої серверної активності (<c>0</c> якщо ніколи не connect'ився).</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Devices.Device.#ctor(System.Int64,System.String,System.Int64,System.Int64)">
+            <summary>
+            Один linked device у відповіді <c>listDevices</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 5 (`device-management`). Pinned до
+            <c>ListDevicesCommand.java:67 @ bda4e7fc</c> (private <c>JsonDevice</c> record).
+            <para>
+            <b>§F6 quirk — 4 fields only:</b> upstream <c>Device</c> record у
+            <c>lib/.../manager/api/Device.java</c> має 5 полів (<c>id, name, created, lastSeen,
+            isThisDevice</c>), але <c>JsonDevice</c> projection drop'ає <c>isThisDevice</c>
+            (consumed лише <c>PlainTextWriter</c>'ом для " (this device)" annotation —
+            <c>ListDevicesCommand.java:50</c>). НЕ додаємо <c>IsThisDevice</c> у .NET — це б lie'ло про
+            wire shape. Consumer'и можуть self-determine через <c>Id == 1</c> (primary).
+            </para>
+            <para>
+            <b>§Wire-name rename:</b> upstream <c>Device.created</c>/<c>lastSeen</c> renamed у
+            <c>createdTimestamp</c>/<c>lastSeenTimestamp</c> на wire (Jackson default field-name).
+            </para>
+            <para>
+            <b>§int → long widening:</b> upstream <c>Device.id()</c> — <c>int</c>, але <c>JsonDevice.id</c>
+            — <c>long</c> (implicit widening на projection-site). На .NET — <c>long</c> щоб mirror wire.
+            </para>
+            </remarks>
+            <param name="Id">Signal-protocol device ID. Primary завжди <c>1</c>.</param>
+            <param name="Name">Device's self-reported name. Може бути <c>null</c>.</param>
+            <param name="CreatedTimestamp">Unix-ms коли device був linked.</param>
+            <param name="LastSeenTimestamp">Unix-ms останньої серверної активності (<c>0</c> якщо ніколи не connect'ився).</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Devices.Device.Id">
+            <summary>Signal-protocol device ID. Primary завжди <c>1</c>.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Devices.Device.Name">
+            <summary>Device's self-reported name. Може бути <c>null</c>.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Devices.Device.CreatedTimestamp">
+            <summary>Unix-ms коли device був linked.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Devices.Device.LastSeenTimestamp">
+            <summary>Unix-ms останньої серверної активності (<c>0</c> якщо ніколи не connect'ився).</summary>
+        </member>
         <member name="T:SignalCli.Models.Signal.Devices.FinishLinkParameters">
             <summary>
             Параметри для завершення зв'язування пристрою.
@@ -3328,6 +3508,99 @@
         <member name="P:SignalCli.Models.Signal.Devices.FinishLinkResponse.Number">
             <summary>Номер телефону зв'язаного облікового запису.</summary>
         </member>
+        <member name="T:SignalCli.Models.Signal.Devices.ListDevicesParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>listDevices</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 5. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/ListDevicesCommand.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Devices.ListDevicesParameters.#ctor(System.String)">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>listDevices</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 5. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/ListDevicesCommand.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Devices.ListDevicesParameters.Account">
+            <summary>E.164 номер акаунту.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Devices.ListDevicesResponse">
+            <summary>
+            Відповідь на <c>listDevices</c> — flat JSON-масив <see cref="T:SignalCli.Models.Signal.Devices.Device"/>-записів.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 5. Wrapper-record + custom converter per CLAUDE.md
+            "AOT readiness" pattern (як <see cref="T:SignalCli.Models.Signal.Accounts.ListAccountsResponse"/>).
+            </remarks>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Devices.ListDevicesResponse.#ctor(System.Collections.Generic.IReadOnlyList{SignalCli.Models.Signal.Devices.Device})">
+            <summary>
+            Відповідь на <c>listDevices</c> — flat JSON-масив <see cref="T:SignalCli.Models.Signal.Devices.Device"/>-записів.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 5. Wrapper-record + custom converter per CLAUDE.md
+            "AOT readiness" pattern (як <see cref="T:SignalCli.Models.Signal.Accounts.ListAccountsResponse"/>).
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Devices.ListDevicesResponse.Count">
+            <summary>Кількість linked devices.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Devices.ListDevicesResponse.Item(System.Int32)">
+            <summary>Доступ за індексом.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Devices.ListDevicesResponse.GetEnumerator">
+            <inheritdoc/>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Devices.ListDevicesResponseConverter">
+            <summary>Конвертер, що читає/пише <see cref="T:SignalCli.Models.Signal.Devices.ListDevicesResponse"/> як плоский JSON-масив.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Devices.RemoveDeviceParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>removeDevice</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 5. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/RemoveDeviceCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>Quirk — <see cref="P:SignalCli.Models.Signal.Devices.RemoveDeviceParameters.DeviceId"/> is <c>int</c> not <c>long</c>:</b> asymmetric з
+            <see cref="T:SignalCli.Models.Signal.Devices.ListDevicesResponse"/> де <c>Device.Id</c> — <c>long</c>. Upstream argparse
+            <c>type(int.class)</c> на input-side; widening до <c>long</c> відбувається лише при
+            JSON-projection вихідного <c>JsonDevice</c>. Цей DTO mirror'ить input-side <c>int</c>.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="DeviceId">Signal-protocol device ID (int).</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Devices.RemoveDeviceParameters.#ctor(System.String,System.Int32)">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>removeDevice</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 5. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/RemoveDeviceCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>Quirk — <see cref="P:SignalCli.Models.Signal.Devices.RemoveDeviceParameters.DeviceId"/> is <c>int</c> not <c>long</c>:</b> asymmetric з
+            <see cref="T:SignalCli.Models.Signal.Devices.ListDevicesResponse"/> де <c>Device.Id</c> — <c>long</c>. Upstream argparse
+            <c>type(int.class)</c> на input-side; widening до <c>long</c> відбувається лише при
+            JSON-projection вихідного <c>JsonDevice</c>. Цей DTO mirror'ить input-side <c>int</c>.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="DeviceId">Signal-protocol device ID (int).</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Devices.RemoveDeviceParameters.Account">
+            <summary>E.164 номер акаунту.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Devices.RemoveDeviceParameters.DeviceId">
+            <summary>Signal-protocol device ID (int).</summary>
+        </member>
         <member name="T:SignalCli.Models.Signal.Devices.StartLinkParameters">
             <summary>
             Параметри для запиту ініціалізації зв'язування пристрою.
@@ -3359,6 +3632,49 @@
         </member>
         <member name="P:SignalCli.Models.Signal.Devices.StartLinkResponse.DeviceLinkUri">
             <summary>URI для зв'язування пристрою, використовується для генерації QR-коду.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Devices.UpdateDeviceParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>updateDevice</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 5. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/UpdateDeviceCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>§F12 deviceName encrypted server-side:</b> upstream шифрує <c>DeviceName</c> ідентичним
+            ключем device'а перед transmission. Bytes — opaque ciphertext, тож логування <see cref="P:SignalCli.Models.Signal.Devices.UpdateDeviceParameters.DeviceName"/>
+            вище <c>Trace</c> level — privacy violation (CLAUDE.md rule #1).
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="DeviceId">Signal-protocol device ID (int).</param>
+            <param name="DeviceName">Нова назва device'а. ENCRYPTED server-side — НЕ логуй вище Trace.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Devices.UpdateDeviceParameters.#ctor(System.String,System.Int32,System.String)">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>updateDevice</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 5. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/UpdateDeviceCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>§F12 deviceName encrypted server-side:</b> upstream шифрує <c>DeviceName</c> ідентичним
+            ключем device'а перед transmission. Bytes — opaque ciphertext, тож логування <see cref="P:SignalCli.Models.Signal.Devices.UpdateDeviceParameters.DeviceName"/>
+            вище <c>Trace</c> level — privacy violation (CLAUDE.md rule #1).
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="DeviceId">Signal-protocol device ID (int).</param>
+            <param name="DeviceName">Нова назва device'а. ENCRYPTED server-side — НЕ логуй вище Trace.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Devices.UpdateDeviceParameters.Account">
+            <summary>E.164 номер акаунту.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Devices.UpdateDeviceParameters.DeviceId">
+            <summary>Signal-protocol device ID (int).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Devices.UpdateDeviceParameters.DeviceName">
+            <summary>Нова назва device'а. ENCRYPTED server-side — НЕ логуй вище Trace.</summary>
         </member>
         <member name="T:SignalCli.Models.Signal.JsonMessageEnvelope">
             <summary>
@@ -7329,6 +7645,16 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.AddDeviceParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.Device">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.FinishLinkParameters">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
@@ -7339,12 +7665,32 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListDevicesParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListDevicesResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.RemoveDeviceParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.StartLinkParameters">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.StartLinkResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.UpdateDeviceParameters">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -7720,6 +8066,11 @@
             </summary>
         </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.ListJsonIdentity">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListDevice">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -8422,6 +8773,18 @@
             <inheritdoc/>
         </member>
         <member name="M:SignalCli.Services.Signal.SignalContacts.UnblockAsync(System.String,System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalDevices.AddDeviceAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalDevices.ListDevicesAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalDevices.RemoveDeviceAsync(System.String,System.Int32,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalDevices.UpdateDeviceAsync(System.String,System.Int32,System.String,System.Threading.CancellationToken)">
             <inheritdoc/>
         </member>
         <member name="T:SignalCli.Services.Signal.SignalEventService">

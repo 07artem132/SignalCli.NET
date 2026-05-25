@@ -3,6 +3,65 @@
 Формат заснований на [Keep a Changelog](https://keepachangelog.com/),
 проєкт дотримується [семантичного версіонування](https://semver.org/lang/uk/).
 
+## [4.5.0] — 2026-05-25
+
+Minor-реліз. **Якщо твій бот керує linked devices з primary signal-cli — це нарешті є.** `ISignalDevices` отримує 4 нові методи (add/list/remove/update). Доповнює існуючі `StartLink`/`FinishLink` (де signal-cli стає secondary). Backward-compatible.
+
+### ✨ Нове
+
+- **`ISignalDevices` розширено 4 методами для primary-перспективи:**
+  ```csharp
+  // Add — primary провіжнінг secondary device'а
+  await signalDevices.AddDeviceAsync(account, "sgnl://linkdevice?uuid=...&pub_key=...");
+
+  // List — server-side fetch (НЕ local-cache); §F6 — 4 поля без isThisDevice
+  var devices = await signalDevices.ListDevicesAsync(account);
+  foreach (var d in devices) {
+      Console.WriteLine($"#{d.Id} {d.Name} created={d.CreatedTimestamp} lastSeen={d.LastSeenTimestamp}");
+      // Self-identification: d.Id == 1 → primary (no isThisDevice bit on wire).
+  }
+
+  // Remove — destructive; secondary одразу втрачає capability
+  await signalDevices.RemoveDeviceAsync(account, deviceId: 2);
+
+  // Update — нова назва (encrypted server-side)
+  await signalDevices.UpdateDeviceAsync(account, deviceId: 2, deviceName: "New name");
+  ```
+  Wire-shape pinned до signal-cli source @ `bda4e7fc` per §0.5 protocol.
+
+### 🛠 Інше
+
+- **§F6 Device record — 4 fields only.** Upstream `Device` record у `manager/api/Device.java` має 5 полів (`id, name, created, lastSeen, isThisDevice`), але `JsonDevice` projection drop'ає `isThisDevice` (used лише PlainTextWriter'ом для "(this device)" annotation, не wire). На .NET — 4 поля що mirror wire. Consumer'и можуть self-determine через `Id == 1` для primary.
+
+- **§Wire-asymmetry для `deviceId`:** `Device.Id` — `long` (input-side `int` widening на JsonDevice projection); `RemoveDevice`/`UpdateDeviceParameters.DeviceId` — `int` (argparse `type(int.class)`). Mirror без normalization.
+
+- **§F12 deviceName encrypted у `updateDevice` — НЕ у Information+ логах.** Upstream шифрує `deviceName` identity-key'ом device'а перед transmission. Логи містять лише `deviceId`, не назву.
+
+- **§F11 base64 padding non-issue.** `AddDeviceAsync` — pure pass-through URI; .NET НЕ decode'ить `pub_key` фрагмент. Java `Base64.getDecoder()` lenient до padding'у, тож unpadded URI працює.
+
+- **`AddDeviceAsync` blocking.** Виконує key-exchange round-trip — секунди. Default `RequestTimeoutSeconds` витримує.
+
+### 🛡️ Захист від регресій
+
+- **`DeviceManagementSerializationTests` — 8 тестів** пінять wire-shape: §F6 (Device — рівно 4 reflection-properties без isThisDevice), §wire-asymmetry (Id=long vs DeviceId=int), nullable Name, ListDevicesResponse flat-array, AddDevice/UpdateDevice field presence.
+
+- **`SignalDevicesCrudTests` — 10 service-level тестів.** AddDevice pass-through URI verbatim, null-response → InvalidOperation, RemoveDevice negative/zero deviceId → ArgumentOutOfRangeException, UpdateDevice null deviceName → ArgumentNullException, empty deviceName allowed.
+
+- **`SignalCliE2EDevicesTests.ListDevices_ReturnsAtLeastSelf`** — env-gated E2E проти живого signal-cli. Pin'ить що registered primary account має >=1 device з id=1.
+
+### 📊 Тестова статистика
+
+- Unit: 416 → **434** (+18 unit тестів).
+- Integration: 10 → **11** (+1 env-gated E2E ListDevices).
+- Public API baseline: 1785 → **1853** lines (+68 entries).
+- Build на src/ + Tests/: 0 warnings, 0 errors з `TreatWarningsAsErrors=true`.
+
+### 📦 Coverage progress
+
+9 + 4 + 3 + 9 + 6 + 4 = **35 з ~54 = 65%** signal-cli JSON-RPC API. Залишилось 3 wave'и (account-lifecycle opt-in, polls/power-user, utility-rpc) до **98%** target'у.
+
+---
+
 ## [4.4.0] — 2026-05-25
 
 Minor-реліз. **Якщо твій бот хоче читати attachments / avatars / sticker bytes з кешу signal-cli або деплоїти sticker pack'и — це нарешті є.** 2 нові interfaces (`ISignalStickers` + `ISignalResources`) з 6 RPC методами. Усі read-only (крім sticker upload/install). Backward-compatible.

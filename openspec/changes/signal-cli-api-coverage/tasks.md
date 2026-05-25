@@ -152,21 +152,17 @@
 
 ## 5. Wave 5 — `device-management` *(4.5.0)*
 
-- [ ] 5.1 `src/SignalCli/Models/Signal/Devices/`:
-  - `AddDeviceParameters.cs` (просто account + URI)
-  - `ListDevicesParameters/Response.cs` + nested `Device` record — **4 fields only**: `id: long`, `name: string`, `createdTimestamp: long`, `lastSeenTimestamp: long`. **§F6 reminder:** upstream `Device` record у `manager/api/Device.java` has a 5th `isThisDevice: boolean` field but `ListDevicesCommand.java:67 @ bda4e7fc` drops it from the JSON projection (consumed only by PlainText writer for `" (this device)"` annotation). DO NOT add `IsThisDevice` to the .NET `Device` record — would lie about wire shape. If consumers need self-id, expose via separate API. See `research/wave-5-device-management.md`.
-  - `RemoveDeviceParameters.cs`
-  - `UpdateDeviceParameters.cs` (account, deviceId, deviceName)
-- [ ] 5.2 Register у `SignalJsonContext` + `List<Device>` wrapper.
-- [ ] 5.3 `ISignalDevices` — 4 нові методи з XMLDoc що clearly distinguish primary-perspective methods (`AddDevice`/`ListDevices`/`RemoveDevice`/`UpdateDevice`) vs existing secondary-perspective (`StartLink`/`FinishLink`).
-- [ ] 5.4 `SignalDevices.cs` — implementations. **§F11 reminder:** `AddDeviceAsync` MUST restore base64 `=` padding on `pub_key` substring BEFORE calling `Convert.FromBase64String`. Upstream `DeviceLinkUrl.java:48 @ bda4e7fc` strips padding when generating the link URI; without restoration, `Convert.FromBase64String` throws `FormatException`. Helper: count `pub_key.Length % 4` and append `=` chars to reach multiple-of-4. See `research/wave-5-device-management.md` addDevice quirks.
-- [ ] 5.5 `SignalDevicesLog.cs` — +12 `[LoggerMessage]` у block 500-549. **§F12 reminder:** `UpdateDevice` log templates MUST NOT include `{DeviceName}` parameter at `Information+` level. `deviceName` value is encrypted server-side (Signal protocol device-name encryption) — bytes are opaque ciphertext, leaking them above Trace violates CLAUDE.md Critical rule #1 (privacy). At Trace only, OR not at all in templates. See `research/wave-5-device-management.md` privacy note.
-- [ ] 5.6 Serialization + service tests (~12 unit).
-- [ ] 5.7 E2E: `SignalCliE2EDevicesTests.cs.ListDevices_ReturnsAtLeastSelf` — read-only; env-gated через `TestAccountFixture.GetOrSkip()`.
-- [ ] 5.8 Update `SignalCli.public-api.txt` baseline.
-- [ ] 5.9 Build + test (count ~396 → ~408 unit + 3 E2E).
-- [ ] 5.10 Bump 4.4.0 → 4.5.0 + CHANGELOG.
-- [ ] 5.11 Commit `feat(4.5.0): device management — add/list/remove/update from primary perspective`, push, merge, tag.
+- [x] 5.1 `src/SignalCli/Models/Signal/Devices/`: AddDeviceParameters, Device record (§F6 — 4 fields only), ListDevicesParameters/Response (wrapper), RemoveDeviceParameters (int), UpdateDeviceParameters.
+- [x] 5.2 Register у `SignalJsonContext` + `List<Device>` wrapper.
+- [x] 5.3 `ISignalDevices` — 4 нові методи з XMLDoc що чітко differentiate primary-перспективу (Add/List/Remove/Update) vs existing secondary-перспективу (StartLink/FinishLink).
+- [x] 5.4 `SignalDevices.cs` — implementations. **§F11 deviation:** padding-restoration helper НЕ доданий — `AddDeviceAsync` pure pass-through URI без декодування `pub_key`, тож padding не потрібен (Java Base64 lenient до padding'у). Documented як non-issue у XMLDoc.
+- [x] 5.5 `SignalDevicesLog.cs` — 5 нових `[LoggerMessage]` у block **820-829** (existing Devices range; **task plan мав помилку — вказував 500-549, виправлено**; 500-549 належить SignalEventServiceLog). §F12 enforced: жодних `{DeviceName}` у Information+ шаблонах — лише `{DeviceId}`.
+- [x] 5.6 Serialization (8) + service (10) tests = **18 unit** (Plan: ~12).
+- [x] 5.7 E2E: `SignalCliE2EDevicesTests.ListDevices_ReturnsAtLeastSelf` — env-gated.
+- [x] 5.8 Update `SignalCli.public-api.txt` baseline: 1785 → **1853** lines (+68 entries).
+- [x] 5.9 Build + test: 416 → **434** (+18 unit). `TreatWarningsAsErrors=true` зелений.
+- [x] 5.10 Bump 4.4.0 → 4.5.0 + CHANGELOG.
+- [ ] 5.11 Commit `feat(4.5.0): device management — add/list/remove/update from primary perspective`. (Local-only.)
 
 ## 6. Wave 6 — `account-lifecycle` *(4.6.0)* — **opt-in gated**
 
