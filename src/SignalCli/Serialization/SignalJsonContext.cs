@@ -152,6 +152,17 @@ namespace SignalCli.Serialization;
 [JsonSerializable(typeof(SendReceiptParameters))]
 [JsonSerializable(typeof(SendTypingParameters))]
 [JsonSerializable(typeof(RemoteDeleteParameters))]
+// Wave 7a polls + messaging-power-user (signal-cli-api-coverage):
+// 8 send-side methods. PollCreate/Vote/Terminate/AdminDelete/Pin/Unpin/PaymentNotification reuse
+// SendMessageResponse; MessageRequestResponse — void → JsonElement.
+[JsonSerializable(typeof(SendPollCreateParameters))]
+[JsonSerializable(typeof(SendPollVoteParameters))]
+[JsonSerializable(typeof(SendPollTerminateParameters))]
+[JsonSerializable(typeof(SendAdminDeleteParameters))]
+[JsonSerializable(typeof(SendPinMessageParameters))]
+[JsonSerializable(typeof(SendUnpinMessageParameters))]
+[JsonSerializable(typeof(SendMessageRequestResponseParameters))]
+[JsonSerializable(typeof(SendPaymentNotificationParameters))]
 // post-modernize-tuning §6.7 (audit P6): JsonElement використовується як TResponse
 // у SignalEventService.SubscribeAsync (signal-cli повертає raw id або помилку); після
 // AOT-міграції потрібен JsonTypeInfo<JsonElement>. Source-gen надає pass-through-typeinfo.

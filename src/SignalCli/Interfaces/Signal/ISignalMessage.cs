@@ -256,5 +256,55 @@ namespace SignalCli.Interfaces.Signal
         /// <exception cref="TimeoutException">При тайм-ауті.</exception>
         /// <param name="cancellationToken">Токен скасування.</param>
         public Task<SendMessageResponse> SendRemoteDeleteAsync(RemoteDeleteOptions options, CancellationToken cancellationToken = default);
+
+        // ===== signal-cli-api-coverage Wave 7 (`polls` + `messaging-power-user`) =====
+
+        /// <summary>Створює новий poll. §F15 client-side validation (2-10 options, ≤100 chars кожен). §F21 polarity-inverted на wire.</summary>
+        /// <remarks>signal-cli RPC mapping: see <c>SendPollCreateCommand.java</c> @ <c>bda4e7fc</c>.</remarks>
+        Task<SendMessageResponse> SendPollCreateAsync(SendPollCreateOptions options, CancellationToken cancellationToken = default);
+
+        /// <summary>Voteєш у polls. §F22 zero-based indexes. VoteCount monotonic per-voter.</summary>
+        /// <remarks>signal-cli RPC mapping: see <c>SendPollVoteCommand.java</c> @ <c>bda4e7fc</c>.</remarks>
+        Task<SendMessageResponse> SendPollVoteAsync(SendPollVoteOptions options, CancellationToken cancellationToken = default);
+
+        /// <summary>Завершує poll. No poll-author — terminator MUST be original author.</summary>
+        /// <remarks>signal-cli RPC mapping: see <c>SendPollTerminateCommand.java</c> @ <c>bda4e7fc</c>.</remarks>
+        Task<SendMessageResponse> SendPollTerminateAsync(SendPollTerminateOptions options, CancellationToken cancellationToken = default);
+
+        /// <summary>Admin-delete повідомлення у групі. <b>Group-only</b>.</summary>
+        /// <remarks>signal-cli RPC mapping: see <c>SendAdminDeleteCommand.java</c> @ <c>bda4e7fc</c>. Server-side rejects if не admin.</remarks>
+        Task<SendMessageResponse> SendAdminDeleteAsync(SendAdminDeleteOptions options, CancellationToken cancellationToken = default);
+
+        /// <summary>Pin повідомлення. §F23 PinDurationSeconds=-1 sentinel = forever.</summary>
+        /// <remarks>signal-cli RPC mapping: see <c>SendPinMessageCommand.java</c> @ <c>bda4e7fc</c>.</remarks>
+        Task<SendMessageResponse> SendPinMessageAsync(SendPinMessageOptions options, CancellationToken cancellationToken = default);
+
+        /// <summary>Unpin повідомлення. Symmetric до Pin без duration.</summary>
+        /// <remarks>signal-cli RPC mapping: see <c>SendUnpinMessageCommand.java</c> @ <c>bda4e7fc</c>.</remarks>
+        Task<SendMessageResponse> SendUnpinMessageAsync(SendUnpinMessageOptions options, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Sends sync message що ділиться з linked devices acceptance/deletion стану message-request'у.
+        /// §F2: ONLY Accept/Delete supported send-side. Block-стайл — через Wave-3 Block/Unblock.
+        /// </summary>
+        /// <remarks>signal-cli RPC mapping: see <c>SendMessageRequestResponseCommand.java</c> @ <c>bda4e7fc</c>. Wire response empty.</remarks>
+        Task SendMessageRequestResponseAsync(
+            string account,
+            MessageRequestResponseType type,
+            IEnumerable<string>? recipients = null,
+            IEnumerable<string>? groupIds = null,
+            IEnumerable<string>? usernames = null,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Sends payment notification. <b>Single recipient only</b>; <paramref name="receiptBase64"/> — base64 MobileCoin receipt blob.
+        /// </summary>
+        /// <remarks>signal-cli RPC mapping: see <c>SendPaymentNotificationCommand.java</c> @ <c>bda4e7fc</c>.</remarks>
+        Task<SendMessageResponse> SendPaymentNotificationAsync(
+            string account,
+            string recipient,
+            string receiptBase64,
+            string? note = null,
+            CancellationToken cancellationToken = default);
     }
 }

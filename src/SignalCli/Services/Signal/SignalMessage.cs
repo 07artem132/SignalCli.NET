@@ -471,6 +471,178 @@ namespace SignalCli.Services.Signal
             return response;
         }
 
+        // ===== signal-cli-api-coverage Wave 7a (polls + messaging-power-user) =====
+
+        /// <inheritdoc/>
+        public async Task<SendMessageResponse> SendPollCreateAsync(SendPollCreateOptions options, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(options);
+            // §F21 polarity invert: AllowMultipleVotes → noMulti.
+            var parameters = new SendPollCreateParameters(
+                Account: options.Account,
+                Recipients: options.Recipients, GroupIds: options.GroupIds, Usernames: options.Usernames,
+                NoteToSelf: options.NoteToSelf, NotifySelf: options.NotifySelf,
+                Question: options.Question,
+                NoMulti: !options.AllowMultipleVotes,
+                Options: options.Options);
+            var response = await _signalCliClient.InvokeMethodAsync(
+                "sendPollCreate", parameters,
+                SignalJsonContext.Default.SendPollCreateParameters,
+                SignalJsonContext.Default.SendMessageResponse, cancellationToken).ConfigureAwait(false);
+            if (response == null) { SignalMessageLog.SendNullResponse(_logger); throw new InvalidOperationException("Null response from server"); }
+            SignalMessageLog.PollCreateOk(_logger, response.TimeStamp);
+            return response;
+        }
+
+        /// <inheritdoc/>
+        public async Task<SendMessageResponse> SendPollVoteAsync(SendPollVoteOptions options, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(options);
+            var parameters = new SendPollVoteParameters(
+                Account: options.Account,
+                Recipients: options.Recipients, GroupIds: options.GroupIds, Usernames: options.Usernames,
+                NoteToSelf: options.NoteToSelf, NotifySelf: options.NotifySelf,
+                PollAuthor: options.PollAuthor,
+                PollTimestamp: options.PollTimestamp,
+                OptionIndexes: options.OptionIndexes,
+                VoteCount: options.VoteCount);
+            var response = await _signalCliClient.InvokeMethodAsync(
+                "sendPollVote", parameters,
+                SignalJsonContext.Default.SendPollVoteParameters,
+                SignalJsonContext.Default.SendMessageResponse, cancellationToken).ConfigureAwait(false);
+            if (response == null) { SignalMessageLog.SendNullResponse(_logger); throw new InvalidOperationException("Null response from server"); }
+            SignalMessageLog.PollVoteOk(_logger, response.TimeStamp);
+            return response;
+        }
+
+        /// <inheritdoc/>
+        public async Task<SendMessageResponse> SendPollTerminateAsync(SendPollTerminateOptions options, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(options);
+            var parameters = new SendPollTerminateParameters(
+                Account: options.Account,
+                Recipients: options.Recipients, GroupIds: options.GroupIds, Usernames: options.Usernames,
+                NoteToSelf: options.NoteToSelf, NotifySelf: options.NotifySelf,
+                PollTimestamp: options.PollTimestamp);
+            var response = await _signalCliClient.InvokeMethodAsync(
+                "sendPollTerminate", parameters,
+                SignalJsonContext.Default.SendPollTerminateParameters,
+                SignalJsonContext.Default.SendMessageResponse, cancellationToken).ConfigureAwait(false);
+            if (response == null) { SignalMessageLog.SendNullResponse(_logger); throw new InvalidOperationException("Null response from server"); }
+            SignalMessageLog.PollTerminateOk(_logger, response.TimeStamp);
+            return response;
+        }
+
+        /// <inheritdoc/>
+        public async Task<SendMessageResponse> SendAdminDeleteAsync(SendAdminDeleteOptions options, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(options);
+            var parameters = new SendAdminDeleteParameters(
+                Account: options.Account,
+                GroupIds: options.GroupIds,
+                NotifySelf: options.NotifySelf,
+                TargetAuthor: options.TargetAuthor,
+                TargetTimestamp: options.TargetTimestamp,
+                Story: options.Story);
+            var response = await _signalCliClient.InvokeMethodAsync(
+                "sendAdminDelete", parameters,
+                SignalJsonContext.Default.SendAdminDeleteParameters,
+                SignalJsonContext.Default.SendMessageResponse, cancellationToken).ConfigureAwait(false);
+            if (response == null) { SignalMessageLog.SendNullResponse(_logger); throw new InvalidOperationException("Null response from server"); }
+            SignalMessageLog.AdminDeleteOk(_logger, response.TimeStamp);
+            return response;
+        }
+
+        /// <inheritdoc/>
+        public async Task<SendMessageResponse> SendPinMessageAsync(SendPinMessageOptions options, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(options);
+            var parameters = new SendPinMessageParameters(
+                Account: options.Account,
+                Recipients: options.Recipients, GroupIds: options.GroupIds, Usernames: options.Usernames,
+                NoteToSelf: options.NoteToSelf, NotifySelf: options.NotifySelf,
+                PinDuration: options.PinDurationSeconds,
+                TargetAuthor: options.TargetAuthor,
+                TargetTimestamp: options.TargetTimestamp,
+                Story: options.Story);
+            var response = await _signalCliClient.InvokeMethodAsync(
+                "sendPinMessage", parameters,
+                SignalJsonContext.Default.SendPinMessageParameters,
+                SignalJsonContext.Default.SendMessageResponse, cancellationToken).ConfigureAwait(false);
+            if (response == null) { SignalMessageLog.SendNullResponse(_logger); throw new InvalidOperationException("Null response from server"); }
+            SignalMessageLog.PinMessageOk(_logger, response.TimeStamp);
+            return response;
+        }
+
+        /// <inheritdoc/>
+        public async Task<SendMessageResponse> SendUnpinMessageAsync(SendUnpinMessageOptions options, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(options);
+            var parameters = new SendUnpinMessageParameters(
+                Account: options.Account,
+                Recipients: options.Recipients, GroupIds: options.GroupIds, Usernames: options.Usernames,
+                NoteToSelf: options.NoteToSelf, NotifySelf: options.NotifySelf,
+                TargetAuthor: options.TargetAuthor,
+                TargetTimestamp: options.TargetTimestamp,
+                Story: options.Story);
+            var response = await _signalCliClient.InvokeMethodAsync(
+                "sendUnpinMessage", parameters,
+                SignalJsonContext.Default.SendUnpinMessageParameters,
+                SignalJsonContext.Default.SendMessageResponse, cancellationToken).ConfigureAwait(false);
+            if (response == null) { SignalMessageLog.SendNullResponse(_logger); throw new InvalidOperationException("Null response from server"); }
+            SignalMessageLog.UnpinMessageOk(_logger, response.TimeStamp);
+            return response;
+        }
+
+        /// <inheritdoc/>
+        public async Task SendMessageRequestResponseAsync(
+            string account,
+            MessageRequestResponseType type,
+            IEnumerable<string>? recipients = null,
+            IEnumerable<string>? groupIds = null,
+            IEnumerable<string>? usernames = null,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentException.ThrowIfNullOrEmpty(account);
+            // §F2: enum → lowercase wire string.
+            var typeWire = type switch
+            {
+                MessageRequestResponseType.Accept => "accept",
+                MessageRequestResponseType.Delete => "delete",
+                _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown MessageRequestResponseType"),
+            };
+            await _signalCliClient.InvokeMethodAsync(
+                "sendMessageRequestResponse",
+                new SendMessageRequestResponseParameters(account, recipients, groupIds, usernames, typeWire),
+                SignalJsonContext.Default.SendMessageRequestResponseParameters,
+                SignalJsonContext.Default.JsonElement,
+                cancellationToken).ConfigureAwait(false);
+            SignalMessageLog.MessageRequestResponseOk(_logger, type.ToString());
+        }
+
+        /// <inheritdoc/>
+        public async Task<SendMessageResponse> SendPaymentNotificationAsync(
+            string account,
+            string recipient,
+            string receiptBase64,
+            string? note = null,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentException.ThrowIfNullOrEmpty(account);
+            ArgumentException.ThrowIfNullOrEmpty(recipient);
+            ArgumentException.ThrowIfNullOrEmpty(receiptBase64);
+            // Optional client-side: validate base64. Спрощено — upstream'у decode'ить.
+            var response = await _signalCliClient.InvokeMethodAsync(
+                "sendPaymentNotification",
+                new SendPaymentNotificationParameters(account, recipient, receiptBase64, note),
+                SignalJsonContext.Default.SendPaymentNotificationParameters,
+                SignalJsonContext.Default.SendMessageResponse,
+                cancellationToken).ConfigureAwait(false);
+            if (response == null) { SignalMessageLog.SendNullResponse(_logger); throw new InvalidOperationException("Null response from server"); }
+            SignalMessageLog.PaymentNotificationOk(_logger, response.TimeStamp);
+            return response;
+        }
+
         /// <summary>
         /// Перевіряє, що список отримувачів не порожній.
         /// </summary>

@@ -1695,6 +1695,43 @@
             <exception cref="T:System.TimeoutException">При тайм-ауті.</exception>
             <param name="cancellationToken">Токен скасування.</param>
         </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalMessage.SendPollCreateAsync(SignalCli.Models.Signal.Message.SendPollCreateOptions,System.Threading.CancellationToken)">
+            <summary>Створює новий poll. §F15 client-side validation (2-10 options, ≤100 chars кожен). §F21 polarity-inverted на wire.</summary>
+            <remarks>signal-cli RPC mapping: see <c>SendPollCreateCommand.java</c> @ <c>bda4e7fc</c>.</remarks>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalMessage.SendPollVoteAsync(SignalCli.Models.Signal.Message.SendPollVoteOptions,System.Threading.CancellationToken)">
+            <summary>Voteєш у polls. §F22 zero-based indexes. VoteCount monotonic per-voter.</summary>
+            <remarks>signal-cli RPC mapping: see <c>SendPollVoteCommand.java</c> @ <c>bda4e7fc</c>.</remarks>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalMessage.SendPollTerminateAsync(SignalCli.Models.Signal.Message.SendPollTerminateOptions,System.Threading.CancellationToken)">
+            <summary>Завершує poll. No poll-author — terminator MUST be original author.</summary>
+            <remarks>signal-cli RPC mapping: see <c>SendPollTerminateCommand.java</c> @ <c>bda4e7fc</c>.</remarks>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalMessage.SendAdminDeleteAsync(SignalCli.Models.Signal.Message.SendAdminDeleteOptions,System.Threading.CancellationToken)">
+            <summary>Admin-delete повідомлення у групі. <b>Group-only</b>.</summary>
+            <remarks>signal-cli RPC mapping: see <c>SendAdminDeleteCommand.java</c> @ <c>bda4e7fc</c>. Server-side rejects if не admin.</remarks>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalMessage.SendPinMessageAsync(SignalCli.Models.Signal.Message.SendPinMessageOptions,System.Threading.CancellationToken)">
+            <summary>Pin повідомлення. §F23 PinDurationSeconds=-1 sentinel = forever.</summary>
+            <remarks>signal-cli RPC mapping: see <c>SendPinMessageCommand.java</c> @ <c>bda4e7fc</c>.</remarks>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalMessage.SendUnpinMessageAsync(SignalCli.Models.Signal.Message.SendUnpinMessageOptions,System.Threading.CancellationToken)">
+            <summary>Unpin повідомлення. Symmetric до Pin без duration.</summary>
+            <remarks>signal-cli RPC mapping: see <c>SendUnpinMessageCommand.java</c> @ <c>bda4e7fc</c>.</remarks>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalMessage.SendMessageRequestResponseAsync(System.String,SignalCli.Models.Signal.Message.MessageRequestResponseType,System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Threading.CancellationToken)">
+            <summary>
+            Sends sync message що ділиться з linked devices acceptance/deletion стану message-request'у.
+            §F2: ONLY Accept/Delete supported send-side. Block-стайл — через Wave-3 Block/Unblock.
+            </summary>
+            <remarks>signal-cli RPC mapping: see <c>SendMessageRequestResponseCommand.java</c> @ <c>bda4e7fc</c>. Wire response empty.</remarks>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalMessage.SendPaymentNotificationAsync(System.String,System.String,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Sends payment notification. <b>Single recipient only</b>; <paramref name="receiptBase64"/> — base64 MobileCoin receipt blob.
+            </summary>
+            <remarks>signal-cli RPC mapping: see <c>SendPaymentNotificationCommand.java</c> @ <c>bda4e7fc</c>.</remarks>
+        </member>
         <member name="T:SignalCli.Interfaces.Signal.ISignalResources">
             <summary>
             Сервіс для отримання binary ресурсів з кешу signal-cli (signal-cli-api-coverage Wave 4).
@@ -6651,6 +6688,29 @@
             </summary>
             <value>Унікальний ідентифікатор групи в Signal.</value>
         </member>
+        <member name="T:SignalCli.Models.Signal.Message.MessageRequestResponseType">
+            <summary>
+            Type для <c>sendMessageRequestResponse</c> — лише 2 send-side values per §F2.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 7 (`messaging-power-user`). Pinned до
+            <c>src/main/java/org/asamk/signal/commands/MessageRequestResponseType.java @ bda4e7fc</c>
+            (CLI-layer 2-value enum).
+            <para>
+            <b>§F2 critical:</b> upstream <i>send-side</i> CLI restricts до ACCEPT/DELETE. Receive-side
+            <c>MessageEnvelope.Sync.MessageRequestResponse.Type</c> має 8 значень
+            (UNKNOWN/ACCEPT/DELETE/BLOCK/BLOCK_AND_DELETE/UNBLOCK_AND_ACCEPT/SPAM/BLOCK_AND_SPAM) —
+            але вони доступні ЛИШЕ для decoding incoming sync messages, не для send. Block-style
+            operations виконуй через Wave-3 <c>BlockAsync</c>/<c>UnblockAsync</c>.
+            </para>
+            </remarks>
+        </member>
+        <member name="F:SignalCli.Models.Signal.Message.MessageRequestResponseType.Accept">
+            <summary>Прийняти message-request — unblocks conversation.</summary>
+        </member>
+        <member name="F:SignalCli.Models.Signal.Message.MessageRequestResponseType.Delete">
+            <summary>Видалити message-request — removes з inbox.</summary>
+        </member>
         <member name="T:SignalCli.Models.Signal.Message.ReactionOptions">
             <summary>
             Опції для відправки <b>reaction</b>-повідомлення (emoji-реакція на існуюче повідомлення)
@@ -6933,6 +6993,54 @@
         <member name="P:SignalCli.Models.Signal.Message.RemoteDeleteParameters.NoteToSelf">
             <summary>Слати у noteToSelf-thread.</summary>
         </member>
+        <member name="T:SignalCli.Models.Signal.Message.SendAdminDeleteOptions">
+            <summary>Опції для <c>sendAdminDelete</c>. <b>Group-only</b> — no DM support.</summary>
+            <remarks>
+            signal-cli-api-coverage Wave 7. Pinned до <c>SendAdminDeleteCommand.java @ bda4e7fc</c>.
+            Server-side rejects if sender не admin групи; client-side НЕ pre-validates.
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendAdminDeleteOptions.Account">
+            <summary>E.164.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendAdminDeleteOptions.GroupIds">
+            <summary>Group ids (required — group-only operation).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendAdminDeleteOptions.NotifySelf">
+            <summary>NotifySelf.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendAdminDeleteOptions.TargetAuthor">
+            <summary>Phone-number автора повідомлення, що видаляється.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendAdminDeleteOptions.TargetTimestamp">
+            <summary>Timestamp повідомлення, що видаляється.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendAdminDeleteOptions.Story">
+            <summary>Якщо true — admin-delete story замість звичайного message.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Message.SendAdminDeleteOptions.Builder">
+            <summary>Builder.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendAdminDeleteOptions.Builder.#ctor(System.String,System.String,System.Int64,System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Ctor required: account + targetAuthor + targetTimestamp + ≥1 group.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendAdminDeleteOptions.Builder.WithNotifySelf(System.Boolean)">
+            <summary>NotifySelf.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendAdminDeleteOptions.Builder.AsStoryDelete">
+            <summary>Mark as story.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendAdminDeleteOptions.Builder.Build">
+            <summary>Build.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Message.SendAdminDeleteParameters">
+            <summary>Wire-DTO для <c>sendAdminDelete</c>.</summary>
+            <remarks>signal-cli-api-coverage Wave 7. Pinned до <c>SendAdminDeleteCommand.java @ bda4e7fc</c>.</remarks>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendAdminDeleteParameters.#ctor(System.String,System.Collections.Generic.IEnumerable{System.String},System.Boolean,System.String,System.Int64,System.Boolean)">
+            <summary>Wire-DTO для <c>sendAdminDelete</c>.</summary>
+            <remarks>signal-cli-api-coverage Wave 7. Pinned до <c>SendAdminDeleteCommand.java @ bda4e7fc</c>.</remarks>
+        </member>
         <member name="T:SignalCli.Models.Signal.Message.SendMessageFullParameters">
             <summary>
             Повний набір параметрів для відправки повідомлення через Signal.
@@ -7068,6 +7176,22 @@
         <member name="P:SignalCli.Models.Signal.Message.SendMessageFullParameters.EditTimestamp">
             <summary>Часова мітка повідомлення, яке редагується.</summary>
         </member>
+        <member name="T:SignalCli.Models.Signal.Message.SendMessageRequestResponseParameters">
+            <summary>Wire-DTO для <c>sendMessageRequestResponse</c>.</summary>
+            <remarks>
+            signal-cli-api-coverage Wave 7. §F2: send-side <see cref="P:SignalCli.Models.Signal.Message.SendMessageRequestResponseParameters.Type"/> wire — lowercase
+            <c>"accept"</c>/<c>"delete"</c> (argparse <c>.choices(...)</c> з lowercase). Service-метод
+            мапить .NET <see cref="T:SignalCli.Models.Signal.Message.MessageRequestResponseType"/> у відповідну lowercase string.
+            </remarks>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendMessageRequestResponseParameters.#ctor(System.String,System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.String)">
+            <summary>Wire-DTO для <c>sendMessageRequestResponse</c>.</summary>
+            <remarks>
+            signal-cli-api-coverage Wave 7. §F2: send-side <see cref="P:SignalCli.Models.Signal.Message.SendMessageRequestResponseParameters.Type"/> wire — lowercase
+            <c>"accept"</c>/<c>"delete"</c> (argparse <c>.choices(...)</c> з lowercase). Service-метод
+            мапить .NET <see cref="T:SignalCli.Models.Signal.Message.MessageRequestResponseType"/> у відповідну lowercase string.
+            </remarks>
+        </member>
         <member name="T:SignalCli.Models.Signal.Message.SendMessageResponse">
             <summary>
             Відповідь на запит відправки повідомлення.
@@ -7145,6 +7269,333 @@
         </member>
         <member name="P:SignalCli.Models.Signal.Message.SendMessageResult.Type">
             <summary>Тип результату (наприклад, "SUCCESS", "ERROR").</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Message.SendPaymentNotificationParameters">
+            <summary>Wire-DTO для <c>sendPaymentNotification</c>. <b>Single recipient only</b>.</summary>
+            <remarks>
+            signal-cli-api-coverage Wave 7. Pinned до <c>SendPaymentNotificationCommand.java @ bda4e7fc</c>.
+            <para>
+            <see cref="P:SignalCli.Models.Signal.Message.SendPaymentNotificationParameters.Receipt"/> — base64-encoded MobileCoin receipt blob; signal-cli decodes server-side
+            через <c>Base64.getDecoder().decode</c>. NO note-to-self / notify-self / group support.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер відправника.</param>
+            <param name="Recipient">Single recipient (NOT list). Phone/UUID.</param>
+            <param name="Receipt">Base64-encoded MobileCoin receipt bytes.</param>
+            <param name="Note">Optional plain-text note.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPaymentNotificationParameters.#ctor(System.String,System.String,System.String,System.String)">
+            <summary>Wire-DTO для <c>sendPaymentNotification</c>. <b>Single recipient only</b>.</summary>
+            <remarks>
+            signal-cli-api-coverage Wave 7. Pinned до <c>SendPaymentNotificationCommand.java @ bda4e7fc</c>.
+            <para>
+            <see cref="P:SignalCli.Models.Signal.Message.SendPaymentNotificationParameters.Receipt"/> — base64-encoded MobileCoin receipt blob; signal-cli decodes server-side
+            через <c>Base64.getDecoder().decode</c>. NO note-to-self / notify-self / group support.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер відправника.</param>
+            <param name="Recipient">Single recipient (NOT list). Phone/UUID.</param>
+            <param name="Receipt">Base64-encoded MobileCoin receipt bytes.</param>
+            <param name="Note">Optional plain-text note.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPaymentNotificationParameters.Account">
+            <summary>E.164 номер відправника.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPaymentNotificationParameters.Recipient">
+            <summary>Single recipient (NOT list). Phone/UUID.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPaymentNotificationParameters.Receipt">
+            <summary>Base64-encoded MobileCoin receipt bytes.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPaymentNotificationParameters.Note">
+            <summary>Optional plain-text note.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Message.SendPinMessageOptions">
+            <summary>Опції для <c>sendPinMessage</c>.</summary>
+            <remarks>
+            signal-cli-api-coverage Wave 7. Pinned до <c>SendPinMessageCommand.java @ bda4e7fc</c>.
+            <para><b>§F23 sentinel:</b> <see cref="P:SignalCli.Models.Signal.Message.SendPinMessageOptions.PinDurationSeconds"/> = <c>-1</c> означає pin-forever.
+            Positive — seconds until auto-unpin. Default <c>-1</c>.</para>
+            <para><b>§F16:</b> send-side <c>int</c>; receive-side <c>JsonPinMessage.pinDurationSeconds</c> — <c>long</c>.</para>
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPinMessageOptions.Account">
+            <summary>E.164.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPinMessageOptions.Recipients">
+            <summary>Recipients.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPinMessageOptions.GroupIds">
+            <summary>Group ids.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPinMessageOptions.Usernames">
+            <summary>Usernames.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPinMessageOptions.NoteToSelf">
+            <summary>NoteToSelf.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPinMessageOptions.NotifySelf">
+            <summary>NotifySelf.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPinMessageOptions.PinDurationSeconds">
+            <summary>§F23: <c>-1</c> = forever (default).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPinMessageOptions.TargetAuthor">
+            <summary>Phone-number автора повідомлення, що пиниться.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPinMessageOptions.TargetTimestamp">
+            <summary>Timestamp повідомлення, що пиниться.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPinMessageOptions.Story">
+            <summary>Pin story замість message.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Message.SendPinMessageOptions.Builder">
+            <summary>Builder.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPinMessageOptions.Builder.#ctor(System.String,System.String,System.Int64)">
+            <summary>Ctor required: account + targetAuthor + targetTimestamp.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPinMessageOptions.Builder.WithRecipients(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Recipients.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPinMessageOptions.Builder.WithGroupIds(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Group ids.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPinMessageOptions.Builder.WithUsernames(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Usernames.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPinMessageOptions.Builder.WithNoteToSelf(System.Boolean)">
+            <summary>NoteToSelf.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPinMessageOptions.Builder.WithNotifySelf(System.Boolean)">
+            <summary>NotifySelf.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPinMessageOptions.Builder.WithPinDurationSeconds(System.Int32)">
+            <summary>§F23: positive seconds. Pass <c>-1</c> (or skip) для pin-forever.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPinMessageOptions.Builder.AsStoryPin">
+            <summary>Pin story.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPinMessageOptions.Builder.Build">
+            <summary>Build.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Message.SendPinMessageParameters">
+            <summary>Wire-DTO для <c>sendPinMessage</c>. §F23 <c>pinDuration=-1</c> = forever.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPinMessageParameters.#ctor(System.String,System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Boolean,System.Boolean,System.Int32,System.String,System.Int64,System.Boolean)">
+            <summary>Wire-DTO для <c>sendPinMessage</c>. §F23 <c>pinDuration=-1</c> = forever.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Message.SendPollCreateOptions">
+            <summary>
+            Опції для <c>sendPollCreate</c>. Створюється через <see cref="T:SignalCli.Models.Signal.Message.SendPollCreateOptions.Builder"/>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 7. Pinned до
+            <c>SendPollCreateCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>§F15 validation:</b> options.Count має бути 2-10, кожен option ≤100 chars.
+            Builder.Build() pre-validates client-side щоб уникнути upstream UserError.
+            </para>
+            <para>
+            <b>§F21 polarity:</b> .NET API expose'ить <c>AllowMultipleVotes</c> (default <c>true</c>),
+            яке мапиться у wire <c>noMulti = !AllowMultipleVotes</c> (upstream CLI flag inverted).
+            </para>
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollCreateOptions.Account">
+            <summary>E.164 номер.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollCreateOptions.Recipients">
+            <summary>Recipients (опційно — комбінується з інших targeting fields).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollCreateOptions.GroupIds">
+            <summary>Group-ids (опційно).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollCreateOptions.Usernames">
+            <summary>Usernames (опційно).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollCreateOptions.NoteToSelf">
+            <summary>Send до noteToSelf.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollCreateOptions.NotifySelf">
+            <summary>Self-copy semantics.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollCreateOptions.Question">
+            <summary>Poll question text (required).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollCreateOptions.AllowMultipleVotes">
+            <summary>§F21 polarity: default <c>true</c> (multi-vote дозволено).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollCreateOptions.Options">
+            <summary>Poll options (2-10 strings, кожен ≤100 chars per §F15).</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Message.SendPollCreateOptions.Builder">
+            <summary>Builder.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollCreateOptions.Builder.#ctor(System.String,System.String,System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Ctor з required fields.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollCreateOptions.Builder.WithRecipients(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Recipients.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollCreateOptions.Builder.WithGroupIds(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Group ids.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollCreateOptions.Builder.WithUsernames(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Usernames.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollCreateOptions.Builder.WithNoteToSelf(System.Boolean)">
+            <summary>NoteToSelf.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollCreateOptions.Builder.WithNotifySelf(System.Boolean)">
+            <summary>NotifySelf.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollCreateOptions.Builder.WithAllowMultipleVotes(System.Boolean)">
+            <summary>§F21: за замовчуванням true. Виставити false щоб обмежити voter одним варіантом.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollCreateOptions.Builder.Build">
+            <summary>Будує + §F15 validation (2-10 options, ≤100 chars кожен).</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Message.SendPollCreateParameters">
+            <summary>Wire-DTO для <c>sendPollCreate</c>. §F21: wire <c>noMulti</c> = inverted <c>AllowMultipleVotes</c>.</summary>
+            <remarks>signal-cli-api-coverage Wave 7. Pinned до <c>SendPollCreateCommand.java @ bda4e7fc</c>.</remarks>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollCreateParameters.#ctor(System.String,System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Boolean,System.Boolean,System.String,System.Boolean,System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Wire-DTO для <c>sendPollCreate</c>. §F21: wire <c>noMulti</c> = inverted <c>AllowMultipleVotes</c>.</summary>
+            <remarks>signal-cli-api-coverage Wave 7. Pinned до <c>SendPollCreateCommand.java @ bda4e7fc</c>.</remarks>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Message.SendPollTerminateOptions">
+            <summary>Опції для <c>sendPollTerminate</c>. NO poll-author — terminator MUST be original author.</summary>
+            <remarks>signal-cli-api-coverage Wave 7. Pinned до <c>SendPollTerminateCommand.java @ bda4e7fc</c>.</remarks>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollTerminateOptions.Account">
+            <summary>E.164.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollTerminateOptions.Recipients">
+            <summary>Recipients.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollTerminateOptions.GroupIds">
+            <summary>Group ids.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollTerminateOptions.Usernames">
+            <summary>Usernames.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollTerminateOptions.NoteToSelf">
+            <summary>NoteToSelf.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollTerminateOptions.NotifySelf">
+            <summary>NotifySelf.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollTerminateOptions.PollTimestamp">
+            <summary>Timestamp оригіналу poll-create.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Message.SendPollTerminateOptions.Builder">
+            <summary>Builder.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollTerminateOptions.Builder.#ctor(System.String,System.Int64)">
+            <summary>Ctor required: account + pollTimestamp.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollTerminateOptions.Builder.WithRecipients(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Recipients.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollTerminateOptions.Builder.WithGroupIds(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Group ids.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollTerminateOptions.Builder.WithUsernames(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Usernames.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollTerminateOptions.Builder.WithNoteToSelf(System.Boolean)">
+            <summary>NoteToSelf.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollTerminateOptions.Builder.WithNotifySelf(System.Boolean)">
+            <summary>NotifySelf.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollTerminateOptions.Builder.Build">
+            <summary>Build.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Message.SendPollTerminateParameters">
+            <summary>Wire-DTO для <c>sendPollTerminate</c>.</summary>
+            <remarks>signal-cli-api-coverage Wave 7. Pinned до <c>SendPollTerminateCommand.java @ bda4e7fc</c>.</remarks>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollTerminateParameters.#ctor(System.String,System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Boolean,System.Boolean,System.Int64)">
+            <summary>Wire-DTO для <c>sendPollTerminate</c>.</summary>
+            <remarks>signal-cli-api-coverage Wave 7. Pinned до <c>SendPollTerminateCommand.java @ bda4e7fc</c>.</remarks>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Message.SendPollVoteOptions">
+            <summary>Опції для <c>sendPollVote</c>.</summary>
+            <remarks>
+            signal-cli-api-coverage Wave 7. Pinned до <c>SendPollVoteCommand.java @ bda4e7fc</c>.
+            <para><b>§F22:</b> <see cref="P:SignalCli.Models.Signal.Message.SendPollVoteOptions.OptionIndexes"/> — zero-based індекси в original poll's options[].</para>
+            <para><b>VoteCount</b> — monotonic per-voter counter; consumer must increment by 1 on re-vote.</para>
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollVoteOptions.Account">
+            <summary>E.164 номер.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollVoteOptions.Recipients">
+            <summary>Recipients.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollVoteOptions.GroupIds">
+            <summary>Group ids.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollVoteOptions.Usernames">
+            <summary>Usernames.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollVoteOptions.NoteToSelf">
+            <summary>NoteToSelf.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollVoteOptions.NotifySelf">
+            <summary>NotifySelf.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollVoteOptions.PollAuthor">
+            <summary>Phone-number of poll author (null = self).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollVoteOptions.PollTimestamp">
+            <summary>Timestamp оригіналу poll-create (identifies which poll).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollVoteOptions.OptionIndexes">
+            <summary>§F22 zero-based indexes до original options[]. Empty = clear vote.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendPollVoteOptions.VoteCount">
+            <summary>Monotonic per-voter counter. Increment by 1 on re-vote.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Message.SendPollVoteOptions.Builder">
+            <summary>Builder.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollVoteOptions.Builder.#ctor(System.String,System.Int64,System.Int32)">
+            <summary>Ctor з required fields.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollVoteOptions.Builder.WithRecipients(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Recipients.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollVoteOptions.Builder.WithGroupIds(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Group ids.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollVoteOptions.Builder.WithUsernames(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Usernames.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollVoteOptions.Builder.WithNoteToSelf(System.Boolean)">
+            <summary>NoteToSelf.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollVoteOptions.Builder.WithNotifySelf(System.Boolean)">
+            <summary>NotifySelf.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollVoteOptions.Builder.WithPollAuthor(System.String)">
+            <summary>Explicit poll-author (null defaults to self при wire-dispatch).</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollVoteOptions.Builder.WithOptionIndexes(System.Collections.Generic.IEnumerable{System.Int32})">
+            <summary>§F22 zero-based option indexes. Empty list = clear vote.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollVoteOptions.Builder.Build">
+            <summary>Build.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Message.SendPollVoteParameters">
+            <summary>Wire-DTO для <c>sendPollVote</c>.</summary>
+            <remarks>signal-cli-api-coverage Wave 7. Pinned до <c>SendPollVoteCommand.java @ bda4e7fc</c>.</remarks>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendPollVoteParameters.#ctor(System.String,System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Boolean,System.Boolean,System.String,System.Int64,System.Collections.Generic.IEnumerable{System.Int32},System.Int32)">
+            <summary>Wire-DTO для <c>sendPollVote</c>.</summary>
+            <remarks>signal-cli-api-coverage Wave 7. Pinned до <c>SendPollVoteCommand.java @ bda4e7fc</c>.</remarks>
         </member>
         <member name="T:SignalCli.Models.Signal.Message.SendReactionParameters">
             <summary>
@@ -7324,6 +7775,70 @@
         </member>
         <member name="P:SignalCli.Models.Signal.Message.SendTypingParameters.Stop">
             <summary>START (<c>false</c>) або STOP (<c>true</c>).</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Message.SendUnpinMessageOptions">
+            <summary>Опції для <c>sendUnpinMessage</c>. Symmetric до Pin минус <c>PinDurationSeconds</c>.</summary>
+            <remarks>signal-cli-api-coverage Wave 7. Pinned до <c>SendUnpinMessageCommand.java @ bda4e7fc</c>.</remarks>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendUnpinMessageOptions.Account">
+            <summary>E.164.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendUnpinMessageOptions.Recipients">
+            <summary>Recipients.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendUnpinMessageOptions.GroupIds">
+            <summary>Group ids.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendUnpinMessageOptions.Usernames">
+            <summary>Usernames.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendUnpinMessageOptions.NoteToSelf">
+            <summary>NoteToSelf.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendUnpinMessageOptions.NotifySelf">
+            <summary>NotifySelf.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendUnpinMessageOptions.TargetAuthor">
+            <summary>Phone-number автора оригіналу.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendUnpinMessageOptions.TargetTimestamp">
+            <summary>Timestamp оригіналу.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Message.SendUnpinMessageOptions.Story">
+            <summary>Unpin story.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Message.SendUnpinMessageOptions.Builder">
+            <summary>Builder.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendUnpinMessageOptions.Builder.#ctor(System.String,System.String,System.Int64)">
+            <summary>Ctor required: account + targetAuthor + targetTimestamp.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendUnpinMessageOptions.Builder.WithRecipients(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Recipients.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendUnpinMessageOptions.Builder.WithGroupIds(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Group ids.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendUnpinMessageOptions.Builder.WithUsernames(System.Collections.Generic.IEnumerable{System.String})">
+            <summary>Usernames.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendUnpinMessageOptions.Builder.WithNoteToSelf(System.Boolean)">
+            <summary>NoteToSelf.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendUnpinMessageOptions.Builder.WithNotifySelf(System.Boolean)">
+            <summary>NotifySelf.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendUnpinMessageOptions.Builder.AsStoryUnpin">
+            <summary>Unpin story.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendUnpinMessageOptions.Builder.Build">
+            <summary>Build.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Message.SendUnpinMessageParameters">
+            <summary>Wire-DTO для <c>sendUnpinMessage</c>.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Message.SendUnpinMessageParameters.#ctor(System.String,System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Boolean,System.Boolean,System.String,System.Int64,System.Boolean)">
+            <summary>Wire-DTO для <c>sendUnpinMessage</c>.</summary>
         </member>
         <member name="T:SignalCli.Models.Signal.Message.StickerMessageOptions">
             <summary>Опції для відправки стікера. Створюється через <see cref="T:SignalCli.Models.Signal.Message.StickerMessageOptions.Builder"/>.</summary>
@@ -8526,7 +9041,17 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.SendAdminDeleteParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.SendMessageFullParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.SendMessageRequestResponseParameters">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -8537,6 +9062,31 @@
             </summary>
         </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.SendMessageResult">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.SendPaymentNotificationParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.SendPinMessageParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.SendPollCreateParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.SendPollTerminateParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.SendPollVoteParameters">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -8552,6 +9102,11 @@
             </summary>
         </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.SendTypingParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.SendUnpinMessageParameters">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -8627,6 +9182,11 @@
             </summary>
         </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.VersionResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.IEnumerableInt32">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -9562,6 +10122,30 @@
             <inheritdoc/>
         </member>
         <member name="M:SignalCli.Services.Signal.SignalMessage.SendRemoteDeleteAsync(SignalCli.Models.Signal.Message.RemoteDeleteOptions,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalMessage.SendPollCreateAsync(SignalCli.Models.Signal.Message.SendPollCreateOptions,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalMessage.SendPollVoteAsync(SignalCli.Models.Signal.Message.SendPollVoteOptions,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalMessage.SendPollTerminateAsync(SignalCli.Models.Signal.Message.SendPollTerminateOptions,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalMessage.SendAdminDeleteAsync(SignalCli.Models.Signal.Message.SendAdminDeleteOptions,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalMessage.SendPinMessageAsync(SignalCli.Models.Signal.Message.SendPinMessageOptions,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalMessage.SendUnpinMessageAsync(SignalCli.Models.Signal.Message.SendUnpinMessageOptions,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalMessage.SendMessageRequestResponseAsync(System.String,SignalCli.Models.Signal.Message.MessageRequestResponseType,System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalMessage.SendPaymentNotificationAsync(System.String,System.String,System.String,System.String,System.Threading.CancellationToken)">
             <inheritdoc/>
         </member>
         <member name="M:SignalCli.Services.Signal.SignalMessage.ValidateRecipients(System.Collections.Generic.IEnumerable{SignalCli.Interfaces.Signal.IRecipient},System.String)">

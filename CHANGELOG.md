@@ -3,6 +3,87 @@
 Формат заснований на [Keep a Changelog](https://keepachangelog.com/),
 проєкт дотримується [семантичного версіонування](https://semver.org/lang/uk/).
 
+## [4.7.0] — 2026-05-25
+
+Minor-реліз. **`ISignalMessage` отримує 8 нових power-user methods** (polls, admin-delete, pin/unpin, message-request response, payment notification). Send-side only — receive-side decoders для PollCreate/Vote/Terminate/Pin/Unpin/AdminDelete/Payment events deferred to **Wave 7b → 4.7.1** (бо вимагають SignalEventService dispatch refactor + 7 нових event-streams + RG06 update). Backward-compatible.
+
+### ✨ Нове
+
+- **`ISignalMessage` +8 методів:**
+  ```csharp
+  // Polls (§F15 validation 2-10 options ≤100 chars, §F21 polarity, §F22 zero-based indexes)
+  var poll = await signalMessage.SendPollCreateAsync(
+      new SendPollCreateOptions.Builder(account, "Best framework?", ["React", "Vue", "Svelte"])
+          .WithRecipients(["+380..."]).WithAllowMultipleVotes(false).Build());
+  // ... later, vote on it ...
+  await signalMessage.SendPollVoteAsync(
+      new SendPollVoteOptions.Builder(account, pollTimestamp: poll.TimeStamp, voteCount: 1)
+          .WithRecipients(["+380..."]).WithOptionIndexes([0, 2]).Build());
+  // ... finally terminate ...
+  await signalMessage.SendPollTerminateAsync(
+      new SendPollTerminateOptions.Builder(account, poll.TimeStamp).WithRecipients(["+380..."]).Build());
+
+  // Group admin-delete (group-only operation)
+  await signalMessage.SendAdminDeleteAsync(
+      new SendAdminDeleteOptions.Builder(account, targetAuthor: "+offender", targetTimestamp: 100L, groupIds: ["g=="]).Build());
+
+  // Pin / Unpin (§F23 PinDurationSeconds=-1 sentinel = forever)
+  await signalMessage.SendPinMessageAsync(
+      new SendPinMessageOptions.Builder(account, targetAuthor: "+author", targetTimestamp: 100L)
+          .WithGroupIds(["g=="]).WithPinDurationSeconds(3600).Build());
+  await signalMessage.SendUnpinMessageAsync(
+      new SendUnpinMessageOptions.Builder(account, "+author", 100L).WithGroupIds(["g=="]).Build());
+
+  // Message-request response (§F2 — лише Accept/Delete on send-side)
+  await signalMessage.SendMessageRequestResponseAsync(account, MessageRequestResponseType.Accept, recipients: ["+380..."]);
+
+  // Payment notification (single recipient; base64 MobileCoin receipt)
+  await signalMessage.SendPaymentNotificationAsync(account, recipient: "+380...", receiptBase64: "abc=", note: "thanks!");
+  ```
+
+- **`MessageRequestResponseType` enum** — 2 values {Accept, Delete}. Wire — lowercase string per upstream argparse `.choices(...)`. §F2: receive-side має 8 values (UNKNOWN/ACCEPT/DELETE/BLOCK/BLOCK_AND_DELETE/UNBLOCK_AND_ACCEPT/SPAM/BLOCK_AND_SPAM), але send-side restricted до 2.
+
+### 🛠 Інше
+
+- **§F15 client-side poll validation у Builder.** PollCreate enforces 2-10 options, ≤100 chars кожен, no empty. Уникає upstream UserError за рахунок early ArgumentException.
+- **§F21 polarity:** `AllowMultipleVotes` (default `true`) maps to wire `noMulti` (inverted). .NET API mirrors internal Java API polarity, не CLI flag.
+- **§F22 zero-based int indexes** для `OptionIndexes` (vote indexes у original options[]). Empty list = clear vote.
+- **§F23 sentinel:** `PinDurationSeconds = -1` означає pin-forever. Positive — seconds до auto-unpin.
+- **§F16 wire-type asymmetry:** send-side `pinDuration: int`, receive-side `pinDurationSeconds: long`. Mirror верифіковано через research.
+- **AdminDelete — group-only** (no DM): Builder вимагає ≥1 groupId; reciever validates admin-status server-side.
+- **PaymentNotification — single recipient only** (no group/note-to-self/notify-self): `recipient: string`, не List.
+- **All 7 methods + MessageRequestResponse — reuse `SendMessageResponse`** для timestamp+results (MessageRequestResponse — void, returns nothing на wire).
+
+### 🛡️ Захист від регресій
+
+- **`PollsAndPowerUserSerializationTests` — 6 тестів** пінять wire-shape: §F21 noMulti polarity, §F22 zero-based indexes, §F23 -1 sentinel, §F2 lowercase type string, single-recipient PaymentNotification, group-only AdminDelete.
+- **`PollOptionsBuilderTests` — 9 builder тестів:** §F15 (2-10/≤100/empty validation), §F21 default polarity, §F23 default sentinel, §AdminDelete group-only enforce, happy paths.
+
+### 📊 Тестова статистика
+
+- Unit: 459 → **474** (+15 unit тестів).
+- Integration: 11 (без змін — polls/admin-delete потребують групи з ≥2 members, не CI-friendly).
+- Public API baseline: 2020 → ~2150 lines (+~130 entries: 8 methods + 14 DTOs + 1 enum).
+- Build на src/ + Tests/: 0 warnings, 0 errors з `TreatWarningsAsErrors=true`.
+
+### 📦 Coverage progress
+
+9 + 4 + 3 + 9 + 6 + 4 + 8 + 8 = **51 з ~54 = 94%** signal-cli JSON-RPC API (send-side). Залишилось: **Wave 7b** (7 receive-side decoders для PollCreate/Vote/Terminate/Payment/Pin/Unpin/AdminDelete events) + **Wave 8** utility-rpc (getUserStatus/submitRateLimitChallenge/sendContacts) до повного 98% target'у.
+
+### 📦 Why receive-side deferred до 7b
+
+Receive-side decoders для всіх 7 нових даних потребують:
+1. Расширення `JsonDataMessage` 7 nullable полями.
+2. Виправлення existing `JsonPayment(amount, currency)` → правильна wire-shape `(note, receipt: byte[])` — pre-existing bug (поле ніколи не отримувало real wire-data; speculative original).
+3. 7 нових `*EventArgs` records.
+4. Розширення `ISignalEventService` 7 IObservable + 7 IAsyncEnumerable (RG06 compliance).
+5. Розширення `SignalEventService.OnNotificationReceived` 7 dispatch-branches + 7 Subject/Channel pairs.
+6. Update RG06 (`EventApiSymmetryTests`) — 17 нових pairs замість 10.
+
+Це окрема велика capability (~10 файлів, refactor SignalEventService 682-line dispatch). Зробимо у 4.7.1 patch.
+
+---
+
 ## [4.6.0] — 2026-05-25
 
 Minor-реліз. ⚠ **HIGH-RISK destructive operations** — `ISignalAccounts` отримує 8 нових методів (unregister/wipe local data/change phone number/set-remove PIN/update account/configuration), які gated за `SignalCliOptions.EnableDestructiveOperations` (default `false`). Без opt-in — `InvalidOperationException` ПЕРЕД RPC dispatch. Backward-compatible: existing `ListAccountsAsync`/`SyncAccountAsync` без змін.
