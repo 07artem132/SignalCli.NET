@@ -7,7 +7,7 @@ paths:
 
 ## FakeTimeProvider / wall-clock-independent suites
 
-- **Tests in `SignalCliHealthMonitor/` and `SignalCliHostedService/Restart*/` must not call `Task.Delay(>10ms)`.** Use `FakeTimeProvider.Advance(...)`. If you find yourself wanting to wait for real time in those suites, you are reaching for the wrong tool. See root CLAUDE.md § Critical rule #11 ("No wall-clock in tests").
+- **Tests in `SignalCliHealthMonitor/` and `SignalCliHostedService/Restart*/` must not call `Task.Delay(>10ms)`.** Use `FakeTimeProvider.Advance(...)`. If you find yourself wanting to wait for real time in those suites, you are reaching for the wrong tool. See the root-CLAUDE.md "No wall-clock in tests" rule.
 - **.NET 10 `BackgroundService.ExecuteAsync` runs entirely on a background thread** ([compatibility breaking change](https://learn.microsoft.com/dotnet/core/compatibility/extensions/10.0/backgroundservice-executeasync-task)) — when writing a test that fires `StartAsync` and expects the first iteration to have run synchronously, that assumption no longer holds; await a signal (semaphore / `TaskCompletionSource`) instead of fire-and-poll. See `.claude/rules/patterns.md` § Background loops + time for the production-side details.
 
 ## Regression guards (reflection-based defensive tests)
@@ -19,7 +19,7 @@ These tests pin CLAUDE.md-declared invariants at build time. Each is small (~50-
 - **`EventIdBlockTests`** (shipped in `audit-followup-2026/regression-guards`, v4.0.0) — every `[LoggerMessage(EventId = X)]` lies inside the block reserved for its `*Log.cs` class per the "Logging" table in `.claude/rules/patterns.md`. A new `[LoggerMessage(EventId = 250)]` on `JsonRpcClientLog` (whose block is 300-399) fails the build.
 - **`PublicApiSurfaceTests`** (shipped in `audit-followup-2026/regression-guards`, v4.0.0) — baseline-diff at `Tests/SignalCli.Tests/RegressionGuards/SignalCli.public-api.txt` (1087 lines as of v4.0). Intentional public-API changes update the baseline in the same PR; accidental ones are caught immediately with unified-diff output telling the developer exactly which member to add/remove.
 
-Privacy-guard tests (`PrivacyLoggingTests`, `ObservabilityPrivacyTests` with `MeterTagValues_AreOnlyKnownEnumLiterals`) are part of this family too — they pin root CLAUDE.md § Critical rule #1.
+Privacy-guard tests (`PrivacyLoggingTests`, `ObservabilityPrivacyTests` with `MeterTagValues_AreOnlyKnownEnumLiterals`) are part of this family too — they pin the root-CLAUDE.md privacy contract (the first numbered rule there).
 
 ## Test hygiene
 
