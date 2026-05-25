@@ -48,7 +48,11 @@ public class ClaudeMdSplitConsistencyTests
 
         foreach (var ruleFile in Directory.EnumerateFiles(rulesDir, "*.md"))
         {
-            var content = File.ReadAllText(ruleFile);
+            // CRLF→LF normalization: на Windows runner'ах git checkout конвертує
+            // text files у CRLF (через `* text=auto` у .gitattributes), і
+            // `StartsWith("---\n")` падає, бо actual content = "---\r\n".
+            // Нормалізуємо до LF щоб тест працював cross-platform.
+            var content = File.ReadAllText(ruleFile).Replace("\r\n", "\n");
 
             // Either YAML frontmatter:  ---\npaths:\n  - "..."\n---
             // OR explicit always-load:  <!-- always-load: no paths -->  (as first non-blank line).
