@@ -27,6 +27,10 @@ public sealed class EventIdBlockTests
         // signal-cli-api-coverage Wave 3 (contacts-identity): new SignalContactsLog
         // shares the 800-899 block (Contacts uses 830-849 sub-range).
         [typeof(SignalContactsLog), 800, 899],
+        // signal-cli-api-coverage Wave 4: Stickers/Resources logs share 800-899
+        // (Stickers uses 850-859, Resources uses 860-869).
+        [typeof(SignalStickersLog), 800, 899],
+        [typeof(SignalResourcesLog), 800, 899],
         [typeof(ProcessRunnerLog), 900, 999],
         [typeof(ProcessStateManagerLog), 900, 999],
     ];

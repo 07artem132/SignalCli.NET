@@ -3,6 +3,78 @@
 Формат заснований на [Keep a Changelog](https://keepachangelog.com/),
 проєкт дотримується [семантичного версіонування](https://semver.org/lang/uk/).
 
+## [4.4.0] — 2026-05-25
+
+Minor-реліз. **Якщо твій бот хоче читати attachments / avatars / sticker bytes з кешу signal-cli або деплоїти sticker pack'и — це нарешті є.** 2 нові interfaces (`ISignalStickers` + `ISignalResources`) з 6 RPC методами. Усі read-only (крім sticker upload/install). Backward-compatible.
+
+### ✨ Нове
+
+- **`ISignalStickers` — 3 методи для роботи зі sticker pack'ами:**
+  ```csharp
+  // Upload pack з manifest.json або .zip на daemon-side ФС → отримуєш URL
+  var upload = await signalStickers.UploadStickerPackAsync(account, "/srv/signal/my-pack.zip");
+  Console.WriteLine(upload.Url);  // https://signal.art/addstickers/#pack_id=...&pack_key=...
+
+  // List усіх відомих pack'ів (installed + seen via incoming sync)
+  var packs = await signalStickers.ListStickerPacksAsync(account);
+  foreach (var pack in packs) {
+      Console.WriteLine($"{pack.Title} by {pack.Author} ({pack.Stickers.Count} stickers)");
+  }
+
+  // Install (один або кілька pack'ів за один виклик)
+  await signalStickers.AddStickerPackAsync(account, [upload.Url, "https://signal.art/#..."]);
+  ```
+
+- **`ISignalResources` — 3 read-only методи що повертають raw `byte[]`** (декодовані з base64 wire-shape):
+  ```csharp
+  // Attachment з incoming message (потрібен Id з DataMessage.Attachments[].Id)
+  byte[] attachmentBytes = await signalResources.GetAttachmentAsync(account, attachmentId);
+
+  // Avatar — §F19 3-way XOR enforced у Builder
+  byte[] avatarBytes = await signalResources.GetAvatarAsync(
+      new GetAvatarOptions.Builder(account)
+          .WithContact("+380...")  // OR .WithProfile("+380...") OR .WithGroupId("g==")
+          .Build());
+
+  // Sticker (потрібен packId 32-char hex + 0-based stickerId)
+  byte[] stickerBytes = await signalResources.GetStickerAsync(account, "abcdef0123456789abcdef0123456789", stickerId: 0);
+  ```
+
+### 🛠 Інше
+
+- **§F19 GetAvatar 3-way XOR enforced у Builder + defense-in-depth service.** Upstream argparse mutex group `.required(true)` enforce'иться на argparse-рівні (CLI), а на JSON-RPC шарі НЕ enforce'иться — silent first-wins. Наш Builder валідує client-side; service-метод робить додатковий guard на випадок прямої record-construction.
+
+- **Client-side hex-validation у `GetStickerAsync`.** Upstream `Hex.toByteArray` на malformed hex кидає uncaught IOException → `-32603 INTERNAL_ERROR` (без діагностики). Service-метод pre-validates 32-char lowercase-hex і кидає чіткий `ArgumentException`.
+
+- **Invalid-base64 → `InvalidOperationException` (not raw `FormatException`).** Якщо upstream повернув payload що не декодується — clear diagnostic message з method-name (`getAttachment`/`getAvatar`/`getSticker`). Це protocol-drift, не user-input error; ловиться окремо від argument validation.
+
+- **`AddStickerPackAsync` приймає `IEnumerable<string>` URI list.** Upstream argparse `nargs("+")` дозволяє кілька URL за виклик. Caveat: upstream aborts на першому failure без rollback'у вже-installed packs — partial-application можлива.
+
+- **`uploadStickerPack` повертає лише URL (не raw packId+packKey).** Upstream collapse'ує `StickerPackUrl(packId, packKey)` у URL-string. Для raw bytes потрібно парсити URL fragment самостійно — це upstream-quirk.
+
+- **Receive-side sticker-pack-install events НЕ surface'яться** (per research §F1, `proposal.md` "Out of scope"). Upstream silently auto-installs у `IncomingMessageHandler.java:659-672` без bubble'у до `JsonSyncMessage`. Якщо consumer попросить — буде окремий OpenSpec change.
+
+### 🛡️ Захист від регресій
+
+- **`StickersAndResourcesSerializationTests` — 7 тестів** пінять wire-shape: flat `{url}` для UploadStickerPackResponse, JsonStickerPack title/author empty-string default, JsonAttachmentData envelope shape, GetAvatarParameters XOR null-fields, GetSticker int stickerId.
+
+- **`SignalStickersTests` (4) + `SignalResourcesTests` (10) + `GetAvatarOptionsTests` (7) = 21 тестів.** Включає invalid-base64 contract, hex-pack-id validation (length/case/charset), §F19 XOR-defense-in-depth.
+
+- **`EventIdBlockTests` extended** — додано `[typeof(SignalStickersLog), 800, 899]` + `[typeof(SignalResourcesLog), 800, 899]` (Stickers займає 850-859, Resources — 860-869 within shared 800-899).
+
+### 📊 Тестова статистика
+
+- Unit: 387 → **416** (+29 unit тестів — Wave 4 закрив усі XOR/base64/hex edge-cases).
+- Integration: 10 (без змін; sticker-pack upload потребує мережі + Signal account, не CI-friendly).
+- Public API baseline: 1642 → ~1830 lines (+~190 entries: 2 interfaces × 3 methods + Options-builder + 11 DTOs).
+- Build на src/ + Tests/: 0 warnings, 0 errors з `TreatWarningsAsErrors=true`.
+
+### 📦 Coverage progress
+
+9 + 4 + 3 + 9 + 6 = **31 з ~54 = 57%** signal-cli JSON-RPC API. Залишилось 4 wave'и (device-management, account-lifecycle opt-in, polls/power-user, utility-rpc) до target'у **98%** у 4.8.0.
+
+---
+
 ## [4.3.0] — 2026-05-25
 
 Minor-реліз. **Якщо твій бот колись хотів читати контакти, керувати identity-trust або blocklist'ом з .NET — це нарешті є.** Новий `ISignalContacts` interface (8 RPC методів signal-cli) + перший env-gated E2E test проти реального signal-cli. Backward-compatible — інші 4 facades (Message/Groups/Devices/Accounts) без змін.

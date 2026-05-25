@@ -8,6 +8,8 @@ using SignalCli.Models.Signal.Devices;
 using SignalCli.Models.Signal.Events;
 using SignalCli.Models.Signal.Groups;
 using SignalCli.Models.Signal.Message;
+using SignalCli.Models.Signal.Resources;
+using SignalCli.Models.Signal.Stickers;
 using SignalCli.Models.SignalCli;
 
 namespace SignalCli.Serialization;
@@ -100,6 +102,23 @@ namespace SignalCli.Serialization;
 [JsonSerializable(typeof(UpdateProfileParameters))]
 [JsonSerializable(typeof(BlockParameters))]
 [JsonSerializable(typeof(UnblockParameters))]
+// Stickers — Wave 4 sticker-packs (signal-cli-api-coverage):
+// uploadStickerPack returns flat { url: string }; listStickerPacks returns flat array
+// (wrapper-record pattern); addStickerPack returns {} (JsonElement reuse).
+[JsonSerializable(typeof(UploadStickerPackParameters))]
+[JsonSerializable(typeof(UploadStickerPackResponse))]
+[JsonSerializable(typeof(ListStickerPacksParameters))]
+[JsonSerializable(typeof(ListStickerPacksResponse))]
+[JsonSerializable(typeof(List<JsonStickerPack>))]
+[JsonSerializable(typeof(JsonStickerPack))]
+[JsonSerializable(typeof(JsonStickerPackItem))]
+[JsonSerializable(typeof(AddStickerPackParameters))]
+// Resources — Wave 4 binary-resource-fetch (signal-cli-api-coverage):
+// 3 read-only методи що повертають shared { data: base64 } envelope JsonAttachmentData.
+[JsonSerializable(typeof(JsonAttachmentData))]
+[JsonSerializable(typeof(GetAttachmentParameters))]
+[JsonSerializable(typeof(GetAvatarParameters))]
+[JsonSerializable(typeof(GetStickerParameters))]
 // Message
 [JsonSerializable(typeof(SendMessageFullParameters))]
 [JsonSerializable(typeof(SendMessageResponse))]

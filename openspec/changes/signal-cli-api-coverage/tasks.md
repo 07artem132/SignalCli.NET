@@ -135,20 +135,20 @@
 
 ## 4. Wave 4 — `sticker-packs` + `binary-resource-fetch` *(4.4.0)*
 
-- [ ] 4.1 Нові папки `src/SignalCli/Models/Signal/Stickers/` + `Resources/`.
-  - Stickers: 6 DTOs (3 methods × 2) + nested `StickerPack` record (packId, packKey, url, title, author, installed, etc.).
-  - Resources: 6 DTOs. Response містить base64-string `Data` field. **§F19 reminder:** `GetAvatarOptions` має `Contact`/`Profile`/`GroupId` 3-way XOR — Builder MUST validate "exactly one of three" set client-side; upstream `GetAvatarCommand.java @ bda4e7fc` mutex argparse-only. See `research/wave-4-sticker-packs-binary-resource-fetch.md` getAvatar section.
-- [ ] 4.2 Register 12 нових DTOs у `SignalJsonContext` (+ `List<StickerPack>` wrapper).
-- [ ] 4.3 `ISignalStickers` + `SignalStickers.cs` (NEW), `ISignalResources` + `SignalResources.cs` (NEW). Resources service декодує base64 у `byte[]` перед return; невалідний base64 = `InvalidOperationException("invalid base64 payload from signal-cli")`.
-- [ ] 4.4 Logging: `SignalStickersLog.cs` (block 650-679, ~9 methods), `SignalResourcesLog.cs` (block 680-699, ~9 methods).
-- [ ] 4.5 DI registration двох нових services у `ServiceCollectionExtensions`.
-- [ ] 4.6 Serialization + service + base64-decoding tests (~18 unit), включаючи edge case "invalid base64 payload → throw".
-- [ ] 4.7 Update `SignalCli.public-api.txt` baseline.
-- [ ] 4.8 Update `R02` — додати reservations 650-679, 680-699.
-- [ ] 4.9 Build + test (count ~378 → ~393, +15 unit).
-- [ ] ~~4.10 Receive-side sticker-pack-install event decoder~~ **REMOVED 2026-05-25** — research at `bda4e7fc` shows `JsonSyncMessage.java` has no `stickerPackOperations` field; upstream silently auto-installs without bubbling to JSON-RPC layer (`IncomingMessageHandler.java:659-672`). Moved to `proposal.md` "Out of scope" until upstream adds the field or a consumer requests a storage-layer-wrapping change. See `research/SUMMARY.md` §F1.
-- [ ] 4.11 Bump 4.3.0 → 4.4.0 + CHANGELOG.
-- [ ] 4.12 Commit `feat(4.4.0): sticker packs + binary resource fetch`, push, merge, tag.
+- [x] 4.1 Нові папки `src/SignalCli/Models/Signal/Stickers/` + `Resources/`.
+  - Stickers: 6 DTOs (Upload/List/Add Parameters + Upload/List Response + JsonStickerPack + **JsonStickerPackItem** [renamed з JsonSticker щоб уникнути колізії з existing event-side type `SignalCli.Models.Signal.JsonSticker`]).
+  - Resources: 5 DTOs (GetAttachment/Avatar/Sticker Parameters + GetAvatarOptions Builder + shared JsonAttachmentData envelope). §F19 enforced у Builder + service defense-in-depth.
+- [x] 4.2 Register 11 нових DTOs у `SignalJsonContext` (+ `List<JsonStickerPack>` wrapper-collection).
+- [x] 4.3 `ISignalStickers` + `SignalStickers.cs` (NEW), `ISignalResources` + `SignalResources.cs` (NEW). Resources service декодує base64 у `byte[]`; invalid base64 = `InvalidOperationException` з diagnostic method-name. `GetStickerAsync` робить client-side hex-validation packId (32-char lowercase) щоб уникнути upstream `-32603 INTERNAL_ERROR`.
+- [x] 4.4 Logging: `SignalStickersLog.cs` (block **850-859**, 3 methods), `SignalResourcesLog.cs` (block **860-869**, 4 methods). **Deviation:** task plan вказував blocks 650-679/680-699, але ті range'и належать SignalServiceLog per `.claude/rules/patterns.md`. Stickers/Resources розміщені у shared 800-899 разом з іншими signal-protocol facades.
+- [x] 4.5 DI registration двох нових services у `ServiceCollectionExtensions`.
+- [x] 4.6 Serialization (7) + service (4 Stickers + 10 Resources) + builder (7 GetAvatar) tests = **28 unit**. Включно з invalid-base64 edge case + hex-validation (3 negative tests).
+- [x] 4.7 Update `SignalCli.public-api.txt` baseline: 1642 → **1785** lines (+143 entries).
+- [x] 4.8 Update `RG02` — додано `[typeof(SignalStickersLog), 800, 899]` + `[typeof(SignalResourcesLog), 800, 899]`.
+- [x] 4.9 Build + test: 387 → **416** (+29 unit). `TreatWarningsAsErrors=true` зелений.
+- [x] ~~4.10 Receive-side sticker-pack-install event decoder~~ Out of scope per §F1 (no upstream wire field).
+- [x] 4.11 Bump 4.3.0 → 4.4.0 + CHANGELOG.
+- [ ] 4.12 Commit `feat(4.4.0): sticker packs + binary resource fetch`. (Local-only per user instruction.)
 
 ## 5. Wave 5 — `device-management` *(4.5.0)*
 

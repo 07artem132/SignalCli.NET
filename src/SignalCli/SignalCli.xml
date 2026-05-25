@@ -1575,6 +1575,127 @@
             <exception cref="T:System.TimeoutException">При тайм-ауті.</exception>
             <param name="cancellationToken">Токен скасування.</param>
         </member>
+        <member name="T:SignalCli.Interfaces.Signal.ISignalResources">
+            <summary>
+            Сервіс для отримання binary ресурсів з кешу signal-cli (signal-cli-api-coverage Wave 4).
+            </summary>
+            <remarks>
+            3 read-only RPC методи. Усі повертають bytes (декодовані з base64 wire-shape). Помилка
+            base64 deserialization → <see cref="T:System.InvalidOperationException"/> з diagnostic message.
+            <para>
+            Усі ресурси читаються з ЛОКАЛЬНОГО кешу signal-cli — НЕ тригерять re-download з CDN.
+            Якщо ресурс не у кеші (наприклад, attachment не processed через <c>receive</c> попередньо)
+            — отримаєш <c>-1 UserError</c> з повідомленням "Could not find attachment with ID:" /
+            "Could not find avatar" / "Could not find sticker with ID:".
+            </para>
+            </remarks>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalResources.GetAttachmentAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Читає attachment з локального кешу signal-cli за ID.
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see
+            <c>src/main/java/org/asamk/signal/commands/GetAttachmentCommand.java</c> @ <c>bda4e7fc</c>.
+            </remarks>
+            <param name="account">E.164 номер акаунту.</param>
+            <param name="id">ID attachment'а (з <c>DataMessage.Attachments[].Id</c>).</param>
+            <param name="cancellationToken">Токен скасування.</param>
+            <returns>Raw bytes attachment'а (декодовані з base64 wire-shape).</returns>
+            <exception cref="T:SignalCli.Exceptions.JsonRpcException"><c>-1 UserError</c> якщо ID не знайдено у кеші.</exception>
+            <exception cref="T:System.InvalidOperationException">Якщо upstream повернув invalid base64.</exception>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalResources.GetAvatarAsync(SignalCli.Models.Signal.Resources.GetAvatarOptions,System.Threading.CancellationToken)">
+            <summary>
+            Читає avatar (contact-list, public profile, або group) з локального кешу.
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see
+            <c>src/main/java/org/asamk/signal/commands/GetAvatarCommand.java</c> @ <c>bda4e7fc</c>.
+            <para>
+            <b>§F19 3-way XOR:</b> <see cref="T:SignalCli.Models.Signal.Resources.GetAvatarOptions.Builder"/> enforce'ить вибір рівно
+            одного з Contact/Profile/GroupId.
+            </para>
+            </remarks>
+            <param name="options">Options з §F19 XOR-enforced джерелом avatar'а.</param>
+            <param name="cancellationToken">Токен скасування.</param>
+            <returns>Raw bytes avatar image (зазвичай image/jpeg або image/webp).</returns>
+            <exception cref="T:SignalCli.Exceptions.JsonRpcException"><c>-1 UserError</c> якщо avatar не знайдено.</exception>
+            <exception cref="T:System.InvalidOperationException">Якщо upstream повернув invalid base64.</exception>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalResources.GetStickerAsync(System.String,System.String,System.Int32,System.Threading.CancellationToken)">
+            <summary>
+            Читає sticker з локального кешу за packId + stickerId.
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see
+            <c>src/main/java/org/asamk/signal/commands/GetStickerCommand.java</c> @ <c>bda4e7fc</c>.
+            </remarks>
+            <param name="account">E.164 номер акаунту.</param>
+            <param name="packId">Lowercase-hex 32-char StickerPackId.</param>
+            <param name="stickerId">0-based sticker index у pack'у.</param>
+            <param name="cancellationToken">Токен скасування.</param>
+            <returns>Raw bytes sticker image (зазвичай image/webp).</returns>
+            <exception cref="T:System.ArgumentException">Якщо <paramref name="packId"/> — не valid lowercase-hex 32-char.</exception>
+            <exception cref="T:SignalCli.Exceptions.JsonRpcException"><c>-1 UserError</c> якщо sticker не знайдено.</exception>
+        </member>
+        <member name="T:SignalCli.Interfaces.Signal.ISignalStickers">
+            <summary>
+            Сервіс для роботи зі sticker pack'ами Signal (signal-cli-api-coverage Wave 4).
+            </summary>
+            <remarks>
+            3 RPC методи: upload (network mutating), list (read-only), add/install (network mutating).
+            signal-cli НЕ надає <c>remove</c>/<c>uninstall</c> RPC — для виключення pack'у потрібен
+            ручний edit local-store з боку upstream (out of scope для .NET wrapper'у).
+            </remarks>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalStickers.UploadStickerPackAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Завантажує sticker pack на Signal CDN з manifest.json або .zip файла на daemon-side ФС.
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see
+            <c>src/main/java/org/asamk/signal/commands/UploadStickerPackCommand.java</c> @ <c>bda4e7fc</c>.
+            <para>
+            Після успішного upload'у pack автоматично НЕ install'иться для uploader'а — треба
+            окремо викликати <see cref="M:SignalCli.Interfaces.Signal.ISignalStickers.AddStickerPackAsync(System.String,System.Collections.Generic.IEnumerable{System.String},System.Threading.CancellationToken)"/> з повернутим URL.
+            </para>
+            </remarks>
+            <param name="account">E.164 номер акаунту.</param>
+            <param name="path">Daemon-side ФС-шлях до manifest.json або .zip pack'у.</param>
+            <param name="cancellationToken">Токен скасування.</param>
+            <returns>Shareable URL pack'у (<c>https://signal.art/addstickers/#pack_id=...&amp;pack_key=...</c>).</returns>
+            <exception cref="T:SignalCli.Exceptions.JsonRpcException"><c>-1 UserError</c> якщо pack invalid (missing manifest/limit exceeded); <c>-3 IoError</c> при network/image-size failure.</exception>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalStickers.ListStickerPacksAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Список усіх відомих sticker pack'ів акаунту (installed + seen via incoming sync).
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see
+            <c>src/main/java/org/asamk/signal/commands/ListStickerPacksCommand.java</c> @ <c>bda4e7fc</c>.
+            Read-only.
+            </remarks>
+            <param name="account">E.164 номер акаунту.</param>
+            <param name="cancellationToken">Токен скасування.</param>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalStickers.AddStickerPackAsync(System.String,System.Collections.Generic.IEnumerable{System.String},System.Threading.CancellationToken)">
+            <summary>
+            Install'ить один або кілька sticker pack'ів за URL'ами.
+            </summary>
+            <remarks>
+            signal-cli RPC mapping: see
+            <c>src/main/java/org/asamk/signal/commands/AddStickerPackCommand.java</c> @ <c>bda4e7fc</c>.
+            <para>
+            <b>Caveat:</b> upstream обробляє URL'и послідовно — failure на будь-якому aborts BEZ
+            rollback'у вже-installed pack'ів. Partial-application можлива.
+            </para>
+            </remarks>
+            <param name="account">E.164 номер акаунту.</param>
+            <param name="uris">Один або кілька <c>https://signal.art/addstickers/#...</c> URL'ів.</param>
+            <param name="cancellationToken">Токен скасування.</param>
+            <exception cref="T:System.ArgumentException">Якщо <paramref name="uris"/> порожній.</exception>
+        </member>
         <member name="T:SignalCli.Logging.JsonRpcClientHostedServiceLog">
             <summary>
             C.3: source-generated логи для <see cref="T:SignalCli.Services.Rpc.JsonRpcClientHostedService"/>
@@ -1653,10 +1774,28 @@
             EventId-блок 700–799.
             </summary>
         </member>
+        <member name="T:SignalCli.Logging.SignalResourcesLog">
+            <summary>
+            signal-cli-api-coverage Wave 4 (binary-resource-fetch): source-generated логи для
+            <see cref="T:SignalCli.Services.Signal.SignalResources"/>. EventId-блок <b>860–869</b>
+            (within shared 800-899).
+            </summary>
+            <remarks>
+            Privacy (CLAUDE.md rule #1): жодних path/id/packId у Information+. Лише byte-count
+            (corollary'й leak — розмір ресурсу — minimal, не fingerprint'абельний).
+            </remarks>
+        </member>
         <member name="T:SignalCli.Logging.SignalServiceLog">
             <summary>
             C.5: source-generated логи для <see cref="T:SignalCli.Services.Signal.SignalService"/>.
             EventId-блок 600–699.
+            </summary>
+        </member>
+        <member name="T:SignalCli.Logging.SignalStickersLog">
+            <summary>
+            signal-cli-api-coverage Wave 4 (sticker-packs): source-generated логи для
+            <see cref="T:SignalCli.Services.Signal.SignalStickers"/>. EventId-блок <b>850–859</b>
+            (within shared 800-899 з Accounts/Devices/Groups/Contacts).
             </summary>
         </member>
         <member name="T:SignalCli.Models.Rpc.JsonRpcError">
@@ -6515,6 +6654,480 @@
             <see cref="M:System.ArgumentException.ThrowIfNullOrEmpty(System.String,System.String)"/> робить цей розподіл правильно.
             </remarks>
         </member>
+        <member name="T:SignalCli.Models.Signal.Resources.GetAttachmentParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>getAttachment</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 4. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/GetAttachmentCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>Quirk:</b> upstream argparse має mutex-required group <c>recipient</c>/<c>groupId</c>,
+            але <c>handleCommand</c> їх НЕ читає — vestigial argparse-noise. Ми НЕ відсилаємо ці поля
+            на wire — інакше довелось би вибрати фіктивний recipient, що додавало б risk silent
+            argparse-fail у майбутніх версіях. Якщо integration-test показує що signal-cli
+            reject'ить виклик без них — додамо optional поля у follow-up.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Id">ID attachment'а у локальному кеші signal-cli.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Resources.GetAttachmentParameters.#ctor(System.String,System.String)">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>getAttachment</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 4. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/GetAttachmentCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>Quirk:</b> upstream argparse має mutex-required group <c>recipient</c>/<c>groupId</c>,
+            але <c>handleCommand</c> їх НЕ читає — vestigial argparse-noise. Ми НЕ відсилаємо ці поля
+            на wire — інакше довелось би вибрати фіктивний recipient, що додавало б risk silent
+            argparse-fail у майбутніх версіях. Якщо integration-test показує що signal-cli
+            reject'ить виклик без них — додамо optional поля у follow-up.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Id">ID attachment'а у локальному кеші signal-cli.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Resources.GetAttachmentParameters.Account">
+            <summary>E.164 номер акаунту.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Resources.GetAttachmentParameters.Id">
+            <summary>ID attachment'а у локальному кеші signal-cli.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Resources.GetAvatarOptions">
+            <summary>
+            Опції для <c>getAvatar</c>. Точно ОДНЕ з <see cref="P:SignalCli.Models.Signal.Resources.GetAvatarOptions.Contact"/>/<see cref="P:SignalCli.Models.Signal.Resources.GetAvatarOptions.Profile"/>/<see cref="P:SignalCli.Models.Signal.Resources.GetAvatarOptions.GroupId"/>
+            має бути виставлено. Створюється через <see cref="T:SignalCli.Models.Signal.Resources.GetAvatarOptions.Builder"/> (§F19 3-way XOR enforced).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 4. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/GetAvatarCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>§F19 3-way XOR:</b> upstream argparse mutex group <c>.required(true)</c> enforce'ить
+            це на argparse-рівні; у JSON-RPC шарі mutex НЕ enforce'иться — upstream silently
+            first-wins. Builder валідує XOR client-side щоб уникнути ambiguous wire payload.
+            </para>
+            <para>
+            <b>Contact vs Profile semantic:</b> <see cref="P:SignalCli.Models.Signal.Resources.GetAvatarOptions.Contact"/> читає avatar з ЛОКАЛЬНОЇ
+            контакт-карти (синхронізовано з address book linked-device); <see cref="P:SignalCli.Models.Signal.Resources.GetAvatarOptions.Profile"/>
+            читає public profile avatar (Signal-server-stored). Document'уй цю різницю для
+            consumer'ів — вони НЕ еквівалентні.
+            </para>
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Resources.GetAvatarOptions.Account">
+            <summary>E.164 номер акаунту.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Resources.GetAvatarOptions.Contact">
+            <summary>Phone/UUID recipient'а — avatar з local contact-карти. Mutex з <see cref="P:SignalCli.Models.Signal.Resources.GetAvatarOptions.Profile"/>/<see cref="P:SignalCli.Models.Signal.Resources.GetAvatarOptions.GroupId"/>.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Resources.GetAvatarOptions.Profile">
+            <summary>Phone/UUID recipient'а — public profile avatar. Mutex з <see cref="P:SignalCli.Models.Signal.Resources.GetAvatarOptions.Contact"/>/<see cref="P:SignalCli.Models.Signal.Resources.GetAvatarOptions.GroupId"/>.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Resources.GetAvatarOptions.GroupId">
+            <summary>Base64 group-id — group avatar. Mutex з <see cref="P:SignalCli.Models.Signal.Resources.GetAvatarOptions.Contact"/>/<see cref="P:SignalCli.Models.Signal.Resources.GetAvatarOptions.Profile"/>.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Resources.GetAvatarOptions.Builder">
+            <summary>Builder для <see cref="T:SignalCli.Models.Signal.Resources.GetAvatarOptions"/> з §F19 3-way XOR enforcement.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Resources.GetAvatarOptions.Builder.#ctor(System.String)">
+            <summary>Створює builder з обов'язковим account'ом. Одне з 3 джерел треба додати перед Build.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Resources.GetAvatarOptions.Builder.WithContact(System.String)">
+            <summary>Вибрати джерело avatar'а — local contact-карту recipient'а.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Resources.GetAvatarOptions.Builder.WithProfile(System.String)">
+            <summary>Вибрати джерело — public profile avatar recipient'а.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Resources.GetAvatarOptions.Builder.WithGroupId(System.String)">
+            <summary>Вибрати джерело — group avatar.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Resources.GetAvatarOptions.Builder.Build">
+            <summary>Будує <see cref="T:SignalCli.Models.Signal.Resources.GetAvatarOptions"/>.</summary>
+            <exception cref="T:System.InvalidOperationException">Якщо жодного джерела не виставлено.</exception>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Resources.GetAvatarParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>getAvatar</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 4. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/GetAvatarCommand.java @ bda4e7fc</c>.
+            <para>
+            §F19 3-way XOR: рівно одне з <see cref="P:SignalCli.Models.Signal.Resources.GetAvatarParameters.Contact"/>/<see cref="P:SignalCli.Models.Signal.Resources.GetAvatarParameters.Profile"/>/<see cref="P:SignalCli.Models.Signal.Resources.GetAvatarParameters.GroupId"/>
+            має бути non-null. Service-метод гарантує це через <see cref="T:SignalCli.Models.Signal.Resources.GetAvatarOptions.Builder"/>.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Contact">Phone/UUID — local contact-карта. XOR.</param>
+            <param name="Profile">Phone/UUID — public profile avatar. XOR.</param>
+            <param name="GroupId">Base64 group-id. XOR.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Resources.GetAvatarParameters.#ctor(System.String,System.String,System.String,System.String)">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>getAvatar</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 4. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/GetAvatarCommand.java @ bda4e7fc</c>.
+            <para>
+            §F19 3-way XOR: рівно одне з <see cref="P:SignalCli.Models.Signal.Resources.GetAvatarParameters.Contact"/>/<see cref="P:SignalCli.Models.Signal.Resources.GetAvatarParameters.Profile"/>/<see cref="P:SignalCli.Models.Signal.Resources.GetAvatarParameters.GroupId"/>
+            має бути non-null. Service-метод гарантує це через <see cref="T:SignalCli.Models.Signal.Resources.GetAvatarOptions.Builder"/>.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Contact">Phone/UUID — local contact-карта. XOR.</param>
+            <param name="Profile">Phone/UUID — public profile avatar. XOR.</param>
+            <param name="GroupId">Base64 group-id. XOR.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Resources.GetAvatarParameters.Account">
+            <summary>E.164 номер акаунту.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Resources.GetAvatarParameters.Contact">
+            <summary>Phone/UUID — local contact-карта. XOR.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Resources.GetAvatarParameters.Profile">
+            <summary>Phone/UUID — public profile avatar. XOR.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Resources.GetAvatarParameters.GroupId">
+            <summary>Base64 group-id. XOR.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Resources.GetStickerParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>getSticker</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 4. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/GetStickerCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>Quirk:</b> <see cref="P:SignalCli.Models.Signal.Resources.GetStickerParameters.PackId"/> — lowercase-hex 32-char string (16 bytes after decode).
+            Upstream <c>Hex.toByteArray</c> на malformed hex кидає uncaught IOException →
+            <c>-32603 INTERNAL_ERROR</c>. Service-метод робить client-side hex validation і
+            throw'ить <see cref="T:System.ArgumentException"/> до wire'у.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="PackId">Lowercase-hex 32-char StickerPackId.</param>
+            <param name="StickerId">0-based sticker index у pack'у.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Resources.GetStickerParameters.#ctor(System.String,System.String,System.Int32)">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>getSticker</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 4. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/GetStickerCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>Quirk:</b> <see cref="P:SignalCli.Models.Signal.Resources.GetStickerParameters.PackId"/> — lowercase-hex 32-char string (16 bytes after decode).
+            Upstream <c>Hex.toByteArray</c> на malformed hex кидає uncaught IOException →
+            <c>-32603 INTERNAL_ERROR</c>. Service-метод робить client-side hex validation і
+            throw'ить <see cref="T:System.ArgumentException"/> до wire'у.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="PackId">Lowercase-hex 32-char StickerPackId.</param>
+            <param name="StickerId">0-based sticker index у pack'у.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Resources.GetStickerParameters.Account">
+            <summary>E.164 номер акаунту.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Resources.GetStickerParameters.PackId">
+            <summary>Lowercase-hex 32-char StickerPackId.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Resources.GetStickerParameters.StickerId">
+            <summary>0-based sticker index у pack'у.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Resources.JsonAttachmentData">
+            <summary>
+            Shared envelope для відповідей <c>getAttachment</c>, <c>getAvatar</c>, <c>getSticker</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 4 (`binary-resource-fetch`). Pinned до
+            <c>src/main/java/org/asamk/signal/json/JsonAttachmentData.java @ bda4e7fc</c>.
+            <para>
+            Base64-encoding — standard alphabet (RFC 4648, з <c>+</c>/<c>/</c>), НЕ URL-safe.
+            <see cref="M:System.Convert.FromBase64String(System.String)"/> на .NET-сайті приймає standard.
+            </para>
+            </remarks>
+            <param name="Data">Base64-encoded bytes ресурсу.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Resources.JsonAttachmentData.#ctor(System.String)">
+            <summary>
+            Shared envelope для відповідей <c>getAttachment</c>, <c>getAvatar</c>, <c>getSticker</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 4 (`binary-resource-fetch`). Pinned до
+            <c>src/main/java/org/asamk/signal/json/JsonAttachmentData.java @ bda4e7fc</c>.
+            <para>
+            Base64-encoding — standard alphabet (RFC 4648, з <c>+</c>/<c>/</c>), НЕ URL-safe.
+            <see cref="M:System.Convert.FromBase64String(System.String)"/> на .NET-сайті приймає standard.
+            </para>
+            </remarks>
+            <param name="Data">Base64-encoded bytes ресурсу.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Resources.JsonAttachmentData.Data">
+            <summary>Base64-encoded bytes ресурсу.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Stickers.AddStickerPackParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>addStickerPack</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 4. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/AddStickerPackCommand.java @ bda4e7fc</c>.
+            <para>
+            Argparse <c>--uri ... +</c> (nargs="+") — приймає кілька URI у одному виклику.
+            Upstream loops через список послідовно; failure на ANY uri aborts без rollback
+            уже-installed packs (partial-application caveat).
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Uri">Один або кілька <c>https://signal.art/addstickers/#pack_id=...&amp;pack_key=...</c> URLs.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Stickers.AddStickerPackParameters.#ctor(System.String,System.Collections.Generic.IEnumerable{System.String})">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>addStickerPack</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 4. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/AddStickerPackCommand.java @ bda4e7fc</c>.
+            <para>
+            Argparse <c>--uri ... +</c> (nargs="+") — приймає кілька URI у одному виклику.
+            Upstream loops через список послідовно; failure на ANY uri aborts без rollback
+            уже-installed packs (partial-application caveat).
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Uri">Один або кілька <c>https://signal.art/addstickers/#pack_id=...&amp;pack_key=...</c> URLs.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Stickers.AddStickerPackParameters.Account">
+            <summary>E.164 номер акаунту.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Stickers.AddStickerPackParameters.Uri">
+            <summary>Один або кілька <c>https://signal.art/addstickers/#pack_id=...&amp;pack_key=...</c> URLs.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Stickers.JsonStickerPack">
+            <summary>
+            Один sticker pack у відповіді <c>listStickerPacks</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 4. Pinned до
+            <c>ListStickerPacksCommand.java:53-70 @ bda4e7fc</c> (private JsonStickerPack record).
+            <para>
+            Quirks: <see cref="P:SignalCli.Models.Signal.Stickers.JsonStickerPack.Title"/>/<see cref="P:SignalCli.Models.Signal.Stickers.JsonStickerPack.Author"/> можуть бути empty strings (НЕ null) —
+            upstream <c>StickerPack</c> constructor default'ить на <c>""</c>. <see cref="P:SignalCli.Models.Signal.Stickers.JsonStickerPack.Stickers"/> може
+            бути empty <c>[]</c> якщо манифест ще не fetched з CDN. <see cref="P:SignalCli.Models.Signal.Stickers.JsonStickerPack.Cover"/> — єдине поле
+            що може бути <c>null</c>.
+            </para>
+            </remarks>
+            <param name="PackId">Lowercase-hex 16-byte StickerPackId.</param>
+            <param name="Url">Full <c>https://signal.art/addstickers/#...</c> URL.</param>
+            <param name="Installed">Чи цей account має pack як installed.</param>
+            <param name="Title">Title (empty string якщо unknown).</param>
+            <param name="Author">Author (empty string якщо unknown).</param>
+            <param name="Cover">Cover sticker (single), <c>null</c> якщо absent.</param>
+            <param name="Stickers">Повний список стікерів (empty <c>[]</c> якщо манифест ще не fetched).</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Stickers.JsonStickerPack.#ctor(System.String,System.String,System.Boolean,System.String,System.String,SignalCli.Models.Signal.Stickers.JsonStickerPackItem,System.Collections.Generic.IReadOnlyList{SignalCli.Models.Signal.Stickers.JsonStickerPackItem})">
+            <summary>
+            Один sticker pack у відповіді <c>listStickerPacks</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 4. Pinned до
+            <c>ListStickerPacksCommand.java:53-70 @ bda4e7fc</c> (private JsonStickerPack record).
+            <para>
+            Quirks: <see cref="P:SignalCli.Models.Signal.Stickers.JsonStickerPack.Title"/>/<see cref="P:SignalCli.Models.Signal.Stickers.JsonStickerPack.Author"/> можуть бути empty strings (НЕ null) —
+            upstream <c>StickerPack</c> constructor default'ить на <c>""</c>. <see cref="P:SignalCli.Models.Signal.Stickers.JsonStickerPack.Stickers"/> може
+            бути empty <c>[]</c> якщо манифест ще не fetched з CDN. <see cref="P:SignalCli.Models.Signal.Stickers.JsonStickerPack.Cover"/> — єдине поле
+            що може бути <c>null</c>.
+            </para>
+            </remarks>
+            <param name="PackId">Lowercase-hex 16-byte StickerPackId.</param>
+            <param name="Url">Full <c>https://signal.art/addstickers/#...</c> URL.</param>
+            <param name="Installed">Чи цей account має pack як installed.</param>
+            <param name="Title">Title (empty string якщо unknown).</param>
+            <param name="Author">Author (empty string якщо unknown).</param>
+            <param name="Cover">Cover sticker (single), <c>null</c> якщо absent.</param>
+            <param name="Stickers">Повний список стікерів (empty <c>[]</c> якщо манифест ще не fetched).</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Stickers.JsonStickerPack.PackId">
+            <summary>Lowercase-hex 16-byte StickerPackId.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Stickers.JsonStickerPack.Url">
+            <summary>Full <c>https://signal.art/addstickers/#...</c> URL.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Stickers.JsonStickerPack.Installed">
+            <summary>Чи цей account має pack як installed.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Stickers.JsonStickerPack.Title">
+            <summary>Title (empty string якщо unknown).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Stickers.JsonStickerPack.Author">
+            <summary>Author (empty string якщо unknown).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Stickers.JsonStickerPack.Cover">
+            <summary>Cover sticker (single), <c>null</c> якщо absent.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Stickers.JsonStickerPack.Stickers">
+            <summary>Повний список стікерів (empty <c>[]</c> якщо манифест ще не fetched).</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Stickers.JsonStickerPackItem">
+            <summary>
+            Sticker у sticker pack'у.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 4. Pinned до <c>ListStickerPacksCommand.java:73-78 @ bda4e7fc</c>.
+            </remarks>
+            <param name="Id">0-based sticker index у pack'у.</param>
+            <param name="Emoji">Emoji-асоціація.</param>
+            <param name="ContentType">MIME type (<c>"image/webp"</c>).</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Stickers.JsonStickerPackItem.#ctor(System.Int32,System.String,System.String)">
+            <summary>
+            Sticker у sticker pack'у.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 4. Pinned до <c>ListStickerPacksCommand.java:73-78 @ bda4e7fc</c>.
+            </remarks>
+            <param name="Id">0-based sticker index у pack'у.</param>
+            <param name="Emoji">Emoji-асоціація.</param>
+            <param name="ContentType">MIME type (<c>"image/webp"</c>).</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Stickers.JsonStickerPackItem.Id">
+            <summary>0-based sticker index у pack'у.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Stickers.JsonStickerPackItem.Emoji">
+            <summary>Emoji-асоціація.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Stickers.JsonStickerPackItem.ContentType">
+            <summary>MIME type (<c>"image/webp"</c>).</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Stickers.ListStickerPacksParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>listStickerPacks</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 4. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/ListStickerPacksCommand.java @ bda4e7fc</c>.
+            Read-only. Argparse не має своїх аргументів — лише dispatcher-param <c>account</c>.
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Stickers.ListStickerPacksParameters.#ctor(System.String)">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>listStickerPacks</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 4. Pinned до
+            <c>src/main/java/org/asamk/signal/commands/ListStickerPacksCommand.java @ bda4e7fc</c>.
+            Read-only. Argparse не має своїх аргументів — лише dispatcher-param <c>account</c>.
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Stickers.ListStickerPacksParameters.Account">
+            <summary>E.164 номер акаунту.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Stickers.ListStickerPacksResponse">
+            <summary>
+            Відповідь на <c>listStickerPacks</c> — flat JSON-масив <see cref="T:SignalCli.Models.Signal.Stickers.JsonStickerPack"/>-записів.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 4. Wrapper-record + custom converter per CLAUDE.md
+            "AOT readiness" pattern (як <see cref="T:SignalCli.Models.Signal.Accounts.ListAccountsResponse"/>).
+            </remarks>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Stickers.ListStickerPacksResponse.#ctor(System.Collections.Generic.IReadOnlyList{SignalCli.Models.Signal.Stickers.JsonStickerPack})">
+            <summary>
+            Відповідь на <c>listStickerPacks</c> — flat JSON-масив <see cref="T:SignalCli.Models.Signal.Stickers.JsonStickerPack"/>-записів.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 4. Wrapper-record + custom converter per CLAUDE.md
+            "AOT readiness" pattern (як <see cref="T:SignalCli.Models.Signal.Accounts.ListAccountsResponse"/>).
+            </remarks>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Stickers.ListStickerPacksResponse.Count">
+            <summary>Кількість sticker pack'ів.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Stickers.ListStickerPacksResponse.Item(System.Int32)">
+            <summary>Доступ за індексом.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Stickers.ListStickerPacksResponse.GetEnumerator">
+            <inheritdoc/>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Stickers.ListStickerPacksResponseConverter">
+            <summary>Конвертер, що читає/пише <see cref="T:SignalCli.Models.Signal.Stickers.ListStickerPacksResponse"/> як плоский JSON-масив.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Stickers.UploadStickerPackParameters">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>uploadStickerPack</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 4 (`sticker-packs`). Pinned до
+            <c>src/main/java/org/asamk/signal/commands/UploadStickerPackCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>Daemon-side filesystem:</b> <see cref="P:SignalCli.Models.Signal.Stickers.UploadStickerPackParameters.Path"/> інтерпретується signal-cli-процесом
+            на його ФС (не клієнтом). Daemon-mode consumers повинні мати файл доступним сервер-side.
+            Файл — або <c>manifest.json</c>, або <c>.zip</c> з sticker pack.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Path">Filesystem-шлях до manifest.json або .zip sticker pack'у.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Stickers.UploadStickerPackParameters.#ctor(System.String,System.String)">
+            <summary>
+            Wire-DTO для JSON-RPC методу <c>uploadStickerPack</c>.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 4 (`sticker-packs`). Pinned до
+            <c>src/main/java/org/asamk/signal/commands/UploadStickerPackCommand.java @ bda4e7fc</c>.
+            <para>
+            <b>Daemon-side filesystem:</b> <see cref="P:SignalCli.Models.Signal.Stickers.UploadStickerPackParameters.Path"/> інтерпретується signal-cli-процесом
+            на його ФС (не клієнтом). Daemon-mode consumers повинні мати файл доступним сервер-side.
+            Файл — або <c>manifest.json</c>, або <c>.zip</c> з sticker pack.
+            </para>
+            </remarks>
+            <param name="Account">E.164 номер акаунту.</param>
+            <param name="Path">Filesystem-шлях до manifest.json або .zip sticker pack'у.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Stickers.UploadStickerPackParameters.Account">
+            <summary>E.164 номер акаунту.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Stickers.UploadStickerPackParameters.Path">
+            <summary>Filesystem-шлях до manifest.json або .zip sticker pack'у.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Stickers.UploadStickerPackResponse">
+            <summary>
+            Відповідь на <c>uploadStickerPack</c>: shareable URL зі шляху + ключем pack'у.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 4. Wire-shape — flat <c>{ "url": "..." }</c> object per
+            <c>UploadStickerPackCommand.java:49-51 @ bda4e7fc</c> (writer.write(Map.of("url", url.getUrl()))).
+            <para>
+            <b>Quirk:</b> upstream НЕ повертає separately packId+packKey — лише URL з вшитими hex-fragment'ами.
+            Для raw bytes — parse URL fragment самостійно (e.g. regex on <c>#pack_id=&lt;hex&gt;&amp;pack_key=&lt;hex&gt;</c>).
+            </para>
+            </remarks>
+            <param name="Url">Full <c>https://signal.art/addstickers/#pack_id=...&amp;pack_key=...</c> URL.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Stickers.UploadStickerPackResponse.#ctor(System.String)">
+            <summary>
+            Відповідь на <c>uploadStickerPack</c>: shareable URL зі шляху + ключем pack'у.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 4. Wire-shape — flat <c>{ "url": "..." }</c> object per
+            <c>UploadStickerPackCommand.java:49-51 @ bda4e7fc</c> (writer.write(Map.of("url", url.getUrl()))).
+            <para>
+            <b>Quirk:</b> upstream НЕ повертає separately packId+packKey — лише URL з вшитими hex-fragment'ами.
+            Для raw bytes — parse URL fragment самостійно (e.g. regex on <c>#pack_id=&lt;hex&gt;&amp;pack_key=&lt;hex&gt;</c>).
+            </para>
+            </remarks>
+            <param name="Url">Full <c>https://signal.art/addstickers/#pack_id=...&amp;pack_key=...</c> URL.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.Stickers.UploadStickerPackResponse.Url">
+            <summary>Full <c>https://signal.art/addstickers/#pack_id=...&amp;pack_key=...</c> URL.</summary>
+        </member>
         <member name="T:SignalCli.Serialization.SignalJson">
             <summary>
             Спільні налаштування System.Text.Json для протоколу signal-cli JSON-RPC.
@@ -7001,6 +7614,61 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.GetAttachmentParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.GetAvatarParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.GetStickerParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonAttachmentData">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.AddStickerPackParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonStickerPack">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonStickerPackItem">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListStickerPacksParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListStickerPacksResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.UploadStickerPackParameters">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.UploadStickerPackResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.TextAttachment">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
@@ -7022,6 +7690,11 @@
             </summary>
         </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.IEnumerableString">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.IReadOnlyListJsonStickerPackItem">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -7097,6 +7770,11 @@
             </summary>
         </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.ListSendMessageResult">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListJsonStickerPack">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -7901,6 +8579,59 @@
             <see cref="T:System.Runtime.CompilerServices.CallerArgumentExpressionAttribute"/>;
             викликачу не треба явно передавати ім’я (рефакторинг безпечний).
             </remarks>
+        </member>
+        <member name="T:SignalCli.Services.Signal.SignalResources">
+            <summary>
+            signal-cli-api-coverage Wave 4 (binary-resource-fetch). 3 read-only методи що повертають
+            raw bytes після base64-decode.
+            </summary>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalResources.#ctor(SignalCli.Interfaces.SignalCli.ISignalCliClient,Microsoft.Extensions.Logging.ILogger{SignalCli.Services.Signal.SignalResources})">
+            <summary>
+            signal-cli-api-coverage Wave 4 (binary-resource-fetch). 3 read-only методи що повертають
+            raw bytes після base64-decode.
+            </summary>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalResources.GetAttachmentAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalResources.GetAvatarAsync(SignalCli.Models.Signal.Resources.GetAvatarOptions,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalResources.GetStickerAsync(System.String,System.String,System.Int32,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalResources.ValidateHexPackId(System.String)">
+            <summary>
+            Client-side hex-валідація packId перед wire'ом. Запобігає upstream
+            IOException → -32603 INTERNAL_ERROR і дає чіткіший <see cref="T:System.ArgumentException"/>.
+            </summary>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalResources.DecodeBase64OrThrow(System.String,System.String)">
+            <summary>
+            Декодує base64 з diagnostic-friendly помилкою. Per task §4.6: invalid base64 →
+            <see cref="T:System.InvalidOperationException"/>, не <see cref="T:System.FormatException"/> (clearer
+            для wrapper consumer'ів — це не їх формат-помилка, а upstream-protocol drift).
+            </summary>
+        </member>
+        <member name="T:SignalCli.Services.Signal.SignalStickers">
+            <summary>
+            signal-cli-api-coverage Wave 4 (sticker-packs).
+            </summary>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalStickers.#ctor(SignalCli.Interfaces.SignalCli.ISignalCliClient,Microsoft.Extensions.Logging.ILogger{SignalCli.Services.Signal.SignalStickers})">
+            <summary>
+            signal-cli-api-coverage Wave 4 (sticker-packs).
+            </summary>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalStickers.UploadStickerPackAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalStickers.ListStickerPacksAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalStickers.AddStickerPackAsync(System.String,System.Collections.Generic.IEnumerable{System.String},System.Threading.CancellationToken)">
+            <inheritdoc/>
         </member>
         <member name="T:SignalCli.Services.Signal.UnifiedSendRequest">
             <summary>
