@@ -258,8 +258,47 @@ Per service нових методів ~3-5 messages (Requested, NullResponse, Va
 **Per wave** (mandatory):
 5. **PublicApiSurfaceTests** baseline update — `SignalCli.public-api.txt` оновлюється з новим API.
 
-**E2E** (per matrix table в proposal — тільки для безпечних read-only методів):
-6. `Tests/SignalCli.Tests.Integration/SignalCliE2E<Method>Tests.cs` — запускає реальний signal-cli (bundled-JRE), викликає метод, assertion'ить shape (`Assert.NotEmpty(response.Items)` тощо). НЕ виставляє reception, НЕ мутує persistent state.
+**E2E** (per matrix table в proposal — тільки для безпечних read-only методів, env-gated):
+6. `Tests/SignalCli.Tests.Integration/SignalCliE2E<Method>Tests.cs` — запускає реальний signal-cli (bundled-JRE), викликає метод, assertion'ить shape. НЕ мутує persistent state.
+
+**Env-gating helper** (нова утиліта, lands у Wave 3 разом з першим account-залежним E2E):
+
+```csharp
+// Tests/SignalCli.Tests.Integration/TestAccountFixture.cs
+internal static class TestAccountFixture
+{
+    public const string EnvVar = "SIGNALCLI_TEST_ACCOUNT";
+
+    public static string? TryGet() => Environment.GetEnvironmentVariable(EnvVar);
+
+    public static string GetOrSkip()
+    {
+        var account = TryGet();
+        if (string.IsNullOrEmpty(account))
+            throw SkipException.ForReason(
+                $"No {EnvVar} env var; integration test requires registered test account. " +
+                "Set e.g. SIGNALCLI_TEST_ACCOUNT=+12025550100 to run.");
+        return account;
+    }
+}
+```
+
+(`SkipException` — xunit-skip-ext або власний `DynamicSkipException : Exception` що xunit-runner трактує як skip; existing `TryBuildHost` уже використовує `out string skipReason` + `Assert.Skip` — той самий механізм.)
+
+Кожен account-залежний E2E тест починається з:
+```csharp
+[Fact]
+public async Task ListContacts_Returns_Empty_Or_Populated()
+{
+    var account = TestAccountFixture.GetOrSkip();   // ← skip if env var missing
+    var host = TryBuildHost(out var skipReason);
+    if (host is null) { Assert.Skip(skipReason); return; }
+    await using var _ = host;
+    // ... test body uses `account` ...
+}
+```
+
+CI на public runners (без registered тестового номера) пропускає ці тести з clear reason; local developer setup з env-var — запускає реально. Жоден тест НЕ мутує persistent state account'а — лише read.
 
 **Очікувана тестова дельта:**
 - Wave 1: +12 unit + 0 E2E (всі mutating)
@@ -272,6 +311,80 @@ Per service нових методів ~3-5 messages (Requested, NullResponse, Va
 - Wave 8: +9 unit + 1 E2E (getUserStatus)
 
 **Total: +132 unit + 4 E2E**. Поточна планка 287 → ~419 unit; E2E 2 → 6.
+
+### 1.9 Receive-side event decoding — sourced from signal-cli's Java records
+
+signal-cli `master` branch (verified at 2026-05-25) ships stable Jackson Java records у `src/main/java/org/asamk/signal/json/` що описують точний JSON envelope shape emitted на `subscribeReceive` notifications. Ці records — наш authoritative spec для decoder DTOs (не треба E2E capture).
+
+Файли upstream'у з яких re-engineer'имо:
+
+| signal-cli source | .NET decoder DTO | Used by event |
+|---|---|---|
+| `JsonDataMessage.java` (existing — extended with new fields) | `JsonDataMessage` (existing — `Envelope.cs`) | base envelope для нижче |
+| `JsonPollCreate.java` (`question, allowMultiple, options`) | `JsonPollCreate` (new) | poll-create event |
+| `JsonPollVote.java` | `JsonPollVote` (new) | poll-vote event |
+| `JsonPollTerminate.java` | `JsonPollTerminate` (new) | poll-terminate event |
+| `JsonPayment.java` | `JsonPayment` (new) | payment-notification event |
+| `JsonPinMessage.java` | `JsonPinMessage` (new) | pin-message event |
+| `JsonUnpinMessage.java` | `JsonUnpinMessage` (new) | unpin-message event |
+| `JsonAdminDelete.java` | `JsonAdminDelete` (new) | admin-delete event |
+| `JsonSyncMessage.java` *(extended sticker-pack-operation field)* | extend existing `JsonSyncMessage` | sticker-pack-install sync event |
+| `JsonSyncMessage.sentMessage` *(message-request-response sub-field)* | extend existing | message-request-response sync event |
+
+**`Envelope.cs` extension shape** (Wave 7 — додає 7 nullable record fields у `JsonDataMessage`):
+
+```csharp
+public record JsonDataMessage(
+    // ... existing fields ...
+    [property: JsonPropertyName("pollCreate")] JsonPollCreate? PollCreate,
+    [property: JsonPropertyName("pollVote")] JsonPollVote? PollVote,
+    [property: JsonPropertyName("pollTerminate")] JsonPollTerminate? PollTerminate,
+    [property: JsonPropertyName("payment")] JsonPayment? Payment,
+    [property: JsonPropertyName("pinMessage")] JsonPinMessage? PinMessage,
+    [property: JsonPropertyName("unpinMessage")] JsonUnpinMessage? UnpinMessage,
+    [property: JsonPropertyName("adminDelete")] JsonAdminDelete? AdminDelete);
+```
+
+**`ISignalEventService` extension shape** (Wave 7 — додає 7 пар IObservable + IAsyncEnumerable; RG06 `EventApiSymmetryTests` enforce'ить парність):
+
+```csharp
+// IObservable side
+IObservable<PollCreateEventArgs> PollCreates { get; }
+IObservable<PollVoteEventArgs> PollVotes { get; }
+IObservable<PollTerminateEventArgs> PollTerminates { get; }
+IObservable<PaymentNotificationEventArgs> PaymentNotifications { get; }
+IObservable<PinMessageEventArgs> PinMessages { get; }
+IObservable<UnpinMessageEventArgs> UnpinMessages { get; }
+IObservable<AdminDeleteEventArgs> AdminDeletes { get; }
+
+// IAsyncEnumerable side (RG06 — кожен IObservable МАЄ паир)
+IAsyncEnumerable<PollCreateEventArgs> PollCreatesAsync(CancellationToken ct = default);
+IAsyncEnumerable<PollVoteEventArgs> PollVotesAsync(CancellationToken ct = default);
+// ... etc ...
+```
+
+**Wave 4 окремо** — додає `IObservable<StickerPackInstallEventArgs> StickerPackInstalls` + `StickerPackInstallsAsync` через extension `JsonSyncMessage.StickerPackOperations: IReadOnlyList<JsonStickerPackOperation>?`.
+
+**`SignalEventService.DispatchDataMessage` extension** — додає 7 нових `if`-emissions у same presence-based union pattern (critical rule #4: `DataMessage` — presence-based union; жодного early `return` між payload checks; кожен payload emit'ить і IObservable і paired Channel):
+
+```csharp
+if (dm.PollCreate is not null)
+{
+    var args = new PollCreateEventArgs(envelope, dm.PollCreate);
+    _pollCreateSubject.OnNext(args);
+    _pollCreateChannel.Writer.TryWrite(args);  // bounded — back-pressure per existing pattern
+}
+// ... + 6 more ...
+```
+
+**SignalJsonContext** додатки: 7 нових `[JsonSerializable(typeof(Json*))]` entries + 7 `[JsonSerializable(typeof(*EventArgs))]` для `JsonNotificationRaw` deserialization.
+
+**Тестова стратегія для decoders** — НЕ потребує live signal-cli (бо ми re-engineer'имо з source):
+- Serialization roundtrip test з inline-literal JSON envelope crafted to match signal-cli's `JsonDataMessage` Java-record output (`Jackson default mapping` = camelCase fields, null-skip on write).
+- DataMessage union-test: створити envelope з кількома payloads одночасно (e.g., `text + reaction + pollVote`) і assert що ВСІ три emit'ять у відповідні streams (critical rule #4 regression).
+- Channel back-pressure test: 1001 events на capacity-1000 channel → 1 drop + counter increment (mirror existing pattern from `post-modernize-tuning §8c`).
+
+**Реальний live E2E capture робиться лише ОДИН раз перед merge'ом Wave 7**, як sanity check: developer з env-var-account викликає `sendPollCreate` із другого пристрою свого ж акаунта, ловить notification, dump'ить raw JSON через `_logger.LogTrace`, порівнює з нашим inline-literal-snapshot. Якщо drift — оновлюємо snapshot ДО merge. Це 5-хвилинна manual procedure documented у `tasks.md §7.X`, НЕ automated CI test (бо потребує 2 пристрої).
 
 ## 2. Per-wave design summary
 
@@ -572,10 +685,9 @@ signal-cli має `--receive-mode=manual` що дозволяє capture real RPC
 - Debug-experience: stepping into generated method — гірше за stepping into hand-written.
 **Verdict:** manual write — мінімум 50 LOC × 44 method = ~2200 LOC, але кожна одиниця human-grok'абельна.
 
-### A4. Reactive-replay для new event-types (poll-vote, payment) у Wave 7
+### A4. ~~Reactive-replay для new event-types як окремий follow-up~~
 
-`SignalEventService` зараз має 10 IObservable streams. Додавання poll-vote-receive, payment-receive, sticker-install-receive — потенційно +3 streams + 6 async-channel methods + serialization context entries + RG06 (`EventApiSymmetryTests`) update.
-**Verdict:** out-of-scope для цього change'у — `event-decoding-expansion` follow-up коли capture'имо реальні envelope shapes через `subscribeReceive` E2E. Wave 7 covers тільки **SEND**-side polls/payment; receive-side — окремо.
+**Skipped (initially planned as out-of-scope, then pulled INTO scope after review).** Original concern was that wire-shape capture would require live E2E sessions; investigation проти signal-cli `master` source (2026-05-25 fetch) showed all 7 new receive-side records (`JsonPollCreate`/`JsonPollVote`/`JsonPollTerminate`/`JsonPayment`/`JsonPinMessage`/`JsonUnpinMessage`/`JsonAdminDelete`) are stable Java records у `org.asamk.signal.json` package, identical Jackson-default-mapping (camelCase). Re-engineer'имо DTOs з source — це detereministic, не speculative. Manual live-capture sanity check (single dev, 5 min) before Wave 7 merge confirms drift-free; documented у `tasks.md §7.X.5`. See §1.9 для повного дизайну.
 
 ## 6. Validation checklist
 

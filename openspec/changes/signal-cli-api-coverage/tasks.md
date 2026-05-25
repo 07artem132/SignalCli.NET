@@ -6,7 +6,49 @@
 
 - [ ] 0.1 Branch `claude/signal-cli-api-coverage` from current `main` (вже існує — продовжуємо).
 - [ ] 0.2 `npx -y @fission-ai/openspec@latest validate signal-cli-api-coverage --strict` — green.
-- [ ] 0.3 Capture сирі JSON-RPC payloads для всіх 44 нових методів через signal-cli running locally з `--verbose`, embed як inline-literals у serialization-tests (so wire-shape pinned від day 1, не reverse-engineered).
+- [ ] 0.3 Clone signal-cli source locally for read-only reference: `git clone https://github.com/AsamK/signal-cli.git ../signal-cli-source` (sibling до repo). Pin SHA = upstream `master` HEAD на момент старту Wave 1; record SHA у CLAUDE.md "signal-cli-protocol.md" як `bda4e7f`-style reference.
+
+## 0.5 **MANDATORY per-method source-of-truth protocol — anti-hallucination guard** ⚠
+
+**Мета: уникнути LLM-галюцинацій про signal-cli API.** Wire-shape, field names, enum values, validation rules, error codes, side-effects — все має бути прочитане з upstream Java source, НЕ згенероване з training-data, НЕ виведене з docs (signal-cli man-pages неповні), НЕ вгадане з аналогії до similar method'у. Source — єдине джерело істини. Документація може бути застарілою, training-data моя може мати pre-0.14 shape — Jackson Java records у `src/main/java/org/asamk/signal/json/*.java` на pinned commit'і НЕ можуть бути неправильними (компілятор upstream'у виконує enforce).
+
+**Anti-hallucination checklist для КОЖНОГО з 44 нових RPC методів** (перед написанням DTO або service-методу):
+
+1. **Read signal-cli source command handler** — `src/main/java/org/asamk/signal/json/JsonRpcCommand<Method>.java` (або equivalent для command name). Записати:
+   - Точну сигнатуру `params` record'у (Jackson Java record = source-of-truth для wire shape).
+   - Точну сигнатуру `result` record'у.
+   - Field naming (Jackson default = camelCase; перевірити чи немає `@JsonProperty("snake_case")` overrides).
+   - Required vs optional fields (`@JsonProperty(required = true)` vs nullable).
+   - Enum values (наприклад `MessageRequestResponseType`: `ACCEPT`/`DELETE`/`BLOCK`/`BLOCK_AND_DELETE`/`UNBLOCK` — UPPER_SNAKE_CASE, не camelCase).
+
+2. **Read upstream impl** — actual logic у `lib/src/main/java/org/asamk/signal/manager/*` / commands package. Записати:
+   - Validation rules (e.g., "options array MUST have 2-10 items" для polls).
+   - Error codes конкретно для цього методу (chained `throw new UserErrorException(...)` стайтменти).
+   - Side-effects (e.g., `sendContacts` triggers sync notification — у XMLDoc remark).
+
+3. **Embed source citation у service-method's XMLDoc** — формат:
+   ```csharp
+   /// <remarks>
+   /// signal-cli RPC mapping: see <c>src/main/java/org/asamk/signal/commands/SendReactionCommand.java</c>
+   /// @ <c>&lt;commit-sha&gt;</c>. Field names mirror Jackson Java record exactly.
+   /// </remarks>
+   ```
+
+4. **Embed source citation у DTO's XMLDoc** — same формат, але посилання на `org.asamk.signal.json.Json*` record.
+
+5. **Snapshot test з real signal-cli payload** — _додатково_ до source-reading, capture один real RPC roundtrip через signal-cli running locally (`signal-cli --verbose jsonRpc < request.json`) і embed payload як inline-literal у serialization-test. Це безпекова сітка на випадок коли signal-cli ship'не behavior change який не помітний з source-reading.
+
+**Чому це обов'язково (хвороби які лікуємо):**
+1. **Галюцинації LLM** — без source-reading, агент придумає правдоподібний field name (`recipientNumber` замість `recipient`), правдоподібну enum value (`AcceptRequest` замість `ACCEPT`), правдоподібну required-flag — і compiler сглотне, бо JSON tolerant; runtime fail тільки на production envelope.
+2. **Moving target** — signal-cli ship'ить releases кожні 1-2 місяці. Single source of truth = upstream Jackson records на pinned commit. Wrapping based на docs/guess = drift class з аудиту v2.0/v2.1 (див. `audit-debt.md` §"Doc/code constant drift").
+3. **Re-verify cost** — citation у XMLDoc дозволяє future maintainer'у (людині або агенту) перевірити за 1 хв проти upstream'у, без вгадування звідки взялась shape.
+
+**Enforcement (3 шари):**
+- **Review-time** (primary): PR review checklist має punkt "every new service method's XMLDoc cites `org.asamk.signal.*` source path + commit SHA, AND every DTO's XMLDoc cites matching `org.asamk.signal.json.Json*` record". Без citation — PR rejected.
+- **Build-time** (secondary): новий regression guard `RG10` (`SourceCitationConsistencyTests`) reflectively енумерує всі публічні методи на `ISignalAccounts`/`ISignalDevices`/`ISignalGroups`/`ISignalMessage`/`ISignalContacts`/`ISignalResources`/`ISignalStickers` і витягує XMLDoc через `XmlDocumentationReader`; assert'ить що `<remarks>` містить регекс `org\.asamk\.signal\.[a-z.]+\.\w+\.java\s*@\s*[0-9a-f]{7,40}`. Build fails якщо method не процитував source.
+- **Snapshot-time** (tertiary): inline-literal JSON у serialization-test'ах capture'ені з real signal-cli running, не написані з пам'яті. Якщо упустимо source-reading — snapshot test впаде при першому upstream wire-shape drift'і.
+
+- [ ] 0.4 Capture сирі JSON-RPC payloads для всіх 44 нових методів через signal-cli running locally з `--verbose`, embed як inline-literals у serialization-tests (so wire-shape pinned від day 1, не reverse-engineered).
 
 ## 1. Wave 1 — `messaging-interactive` *(4.1.0)*
 
@@ -81,7 +123,8 @@
 - [ ] 3.5 `src/SignalCli/Logging/SignalContactsLog.cs` — NEW, ~24 `[LoggerMessage]` методів у NEW EventId block 600-649.
 - [ ] 3.6 `src/SignalCli/Extensions/ServiceCollectionExtensions.cs` — `services.TryAddSingleton<ISignalContacts, SignalContacts>()` у `AddSignalCli`.
 - [ ] 3.7 Serialization + service + validation tests (~24 unit).
-- [ ] 3.8 E2E: `Tests/SignalCli.Tests.Integration/SignalCliE2EContactsTests.cs` — `ListContacts_Returns_Empty_Or_Populated`, `ListIdentities_Returns_Own_Identity_AtMinimum`. Both read-only.
+- [ ] 3.8 Створити `Tests/SignalCli.Tests.Integration/TestAccountFixture.cs` (per design §1.8) — `EnvVar = "SIGNALCLI_TEST_ACCOUNT"`, `TryGet()`, `GetOrSkip()`.
+- [ ] 3.8.1 E2E: `Tests/SignalCli.Tests.Integration/SignalCliE2EContactsTests.cs` — `ListContacts_Returns_Empty_Or_Populated`, `ListIdentities_Returns_Own_Identity_AtMinimum`. Both read-only. ОБИДВА тести стартують з `var account = TestAccountFixture.GetOrSkip();` — skip clean якщо env var відсутній (CI без registered тестового номера).
 - [ ] 3.9 Update `SignalCli.public-api.txt` baseline (new namespace + interface + 8 methods).
 - [ ] 3.10 Update `R02` (`EventIdBlockTests`) — додати reservation 600-649 для `SignalContactsLog`.
 - [ ] 3.11 Build + test (count ~352 → ~378 unit + 2 E2E).
@@ -101,8 +144,16 @@
 - [ ] 4.7 Update `SignalCli.public-api.txt` baseline.
 - [ ] 4.8 Update `R02` — додати reservations 650-679, 680-699.
 - [ ] 4.9 Build + test (count ~378 → ~396).
-- [ ] 4.10 Bump 4.3.0 → 4.4.0 + CHANGELOG.
-- [ ] 4.11 Commit `feat(4.4.0): sticker packs + binary resource fetch — getAttachment/getAvatar/getSticker + list/upload/addStickerPack`, push, merge, tag.
+- [ ] 4.10 Receive-side sticker-pack-install event decoder (design §1.9):
+  - Extend `Envelope.cs` `JsonSyncMessage` 1-м nullable полем: `StickerPackOperations: IReadOnlyList<JsonStickerPackOperation>?`.
+  - Re-engineer `JsonStickerPackOperation` з `org.asamk.signal.json.JsonSyncMessage.java @ <pinned-sha>` (per §0.5 protocol).
+  - New `StickerPackInstallEventArgs` у `Events/`.
+  - Register у `SignalJsonContext`.
+  - Add `IObservable<StickerPackInstallEventArgs> StickerPackInstalls` + `StickerPackInstallsAsync` пара до `ISignalEventService`. RG06 enforce.
+  - Emission block у `SignalEventService.DispatchSyncMessage` (existing sync-event dispatch path).
+  - Serialization-roundtrip test + 1 union test.
+- [ ] 4.11 Bump 4.3.0 → 4.4.0 + CHANGELOG.
+- [ ] 4.12 Commit `feat(4.4.0): sticker packs + binary resource fetch + sticker-pack-install receive event`, push, merge, tag.
 
 ## 5. Wave 5 — `device-management` *(4.5.0)*
 
@@ -116,7 +167,7 @@
 - [ ] 5.4 `SignalDevices.cs` — implementations.
 - [ ] 5.5 `SignalDevicesLog.cs` — +12 `[LoggerMessage]` у block 500-549.
 - [ ] 5.6 Serialization + service tests (~12 unit).
-- [ ] 5.7 E2E: `SignalCliE2EDevicesTests.cs.ListDevices_ReturnsAtLeastSelf` — read-only.
+- [ ] 5.7 E2E: `SignalCliE2EDevicesTests.cs.ListDevices_ReturnsAtLeastSelf` — read-only; env-gated через `TestAccountFixture.GetOrSkip()`.
 - [ ] 5.8 Update `SignalCli.public-api.txt` baseline.
 - [ ] 5.9 Build + test (count ~396 → ~408 unit + 3 E2E).
 - [ ] 5.10 Bump 4.4.0 → 4.5.0 + CHANGELOG.
@@ -184,10 +235,35 @@
 - [ ] 7.5 `SignalMessage.cs` — implementations.
 - [ ] 7.6 `SignalMessageLog.cs` — +24 `[LoggerMessage]` у block 400-449.
 - [ ] 7.7 Tests (~24 unit + 8 builder tests).
-- [ ] 7.8 Update `SignalCli.public-api.txt`.
-- [ ] 7.9 Build + test (~456 → ~488 unit).
-- [ ] 7.10 Bump 4.6.0 → 4.7.0 + CHANGELOG.
-- [ ] 7.11 Commit `feat(4.7.0): polls + power-user messaging — sendPollCreate/Vote/Terminate, sendAdminDelete, sendPin/Unpin, sendMessageRequestResponse, sendPaymentNotification`, push, merge, tag.
+
+### 7.8 Receive-side event decoders (design §1.9 — sourced from signal-cli Java records)
+
+- [ ] 7.8.1 Re-engineer 7 DTOs з upstream'у (per source-of-truth protocol §0.5):
+  - `src/SignalCli/Models/Signal/Envelope.cs` — extend `JsonDataMessage` 7-ма nullable полями: `PollCreate`, `PollVote`, `PollTerminate`, `Payment`, `PinMessage`, `UnpinMessage`, `AdminDelete`.
+  - Add 7 nested records `JsonPollCreate`/`JsonPollVote`/`JsonPollTerminate`/`JsonPayment`/`JsonPinMessage`/`JsonUnpinMessage`/`JsonAdminDelete` — кожен з citation у XMLDoc на `src/main/java/org/asamk/signal/json/Json<X>.java @ <pinned-sha>`.
+- [ ] 7.8.2 New event-args в `src/SignalCli/Models/Signal/Events/`:
+  - `PollCreateEventArgs`, `PollVoteEventArgs`, `PollTerminateEventArgs`, `PaymentNotificationEventArgs`, `PinMessageEventArgs`, `UnpinMessageEventArgs`, `AdminDeleteEventArgs`. Кожен містить `Envelope` + relevant nested payload (no PII у XMLDoc).
+- [ ] 7.8.3 Register 7 нових `Json*` + 7 `*EventArgs` у `SignalJsonContext`.
+- [ ] 7.8.4 `ISignalEventService` — додати 7 пар `IObservable<T> Foo { get; }` + `IAsyncEnumerable<T> FoosAsync(CancellationToken ct = default)`. RG06 `EventApiSymmetryTests` auto-enforce.
+- [ ] 7.8.5 `SignalEventService.cs` — додати 7 `Subject<T>` + 7 `Channel<T>` (bounded capacity = existing `NotificationChannelCapacity`), 7 emission блоків у `DispatchDataMessage` (per critical rule #4: presence-based union, NO early return).
+- [ ] 7.8.6 `SignalEventServiceLog.cs` — +14 `[LoggerMessage]` (Received + DroppedFromChannel per event type, у block 300-399).
+- [ ] 7.8.7 Tests:
+  - 7 serialization-roundtrip tests з inline-literal JSON envelopes crafted to match Jackson Java-record output.
+  - 1 union-test: envelope з `text + reaction + pollVote` → assert всі три emit'ять (regression for critical rule #4).
+  - 1 back-pressure test для одного з нових channels (mirror existing pattern).
+- [ ] 7.8.8 **Manual live-capture sanity check** (5-min procedure, NOT automated CI):
+  - Developer з 2 пристроями того ж акаунта.
+  - Викликати `await message.SendPollCreateAsync(...)` з пристрою A.
+  - Subscribe на `events.PollCreates.Subscribe(arg => ...)` на пристрої B.
+  - Capture raw JSON envelope через `_logger.LogTrace`.
+  - Diff проти inline-literal-snapshot у `Tests/SignalCli.Tests/Serialization/EventDecodersSerializationTests.cs`.
+  - Якщо drift — оновити snapshot ДО Wave 7 merge.
+  - Document procedure step-by-step у `docs/dev-event-decoder-sanity-check.md` (новий файл — лише розробницька внутрішня doc).
+
+- [ ] 7.9 Update `SignalCli.public-api.txt` (включно з 14 нових ISignalEventService API surface members).
+- [ ] 7.10 Build + test (~456 → ~497 unit, +9 тестів від event-decoders).
+- [ ] 7.11 Bump 4.6.0 → 4.7.0 + CHANGELOG.
+- [ ] 7.12 Commit `feat(4.7.0): polls + power-user messaging — send-side + receive-side event decoders`, push, merge, tag.
 
 ## 8. Wave 8 — `utility-rpc` *(4.8.0)*
 
@@ -200,7 +276,7 @@
 - [ ] 8.4 `SignalAccounts.cs` — implementations.
 - [ ] 8.5 `SignalAccountsLog.cs` — +9 `[LoggerMessage]` (still block 450-499).
 - [ ] 8.6 Tests (~9 unit).
-- [ ] 8.7 E2E: `SignalCliE2EUserStatusTests.cs.GetUserStatus_KnownRegistered_ReturnsTrue` — використовує номер з registered тестового акаунта (E2E baseline вже має).
+- [ ] 8.7 E2E: `SignalCliE2EUserStatusTests.cs.GetUserStatus_KnownRegistered_ReturnsTrue` — env-gated через `TestAccountFixture.GetOrSkip()`; передає self-номер як queryRecipient (always Registered=true).
 - [ ] 8.8 Update `SignalCli.public-api.txt` baseline (last update).
 - [ ] 8.9 Build + test (~488 → ~497 unit + 4 E2E).
 - [ ] 8.10 Bump 4.7.0 → 4.8.0 + CHANGELOG.
@@ -209,17 +285,21 @@
 ## 9. Final cleanup
 
 - [ ] 9.1 Перевірити що actual coverage: `grep -c '"' src/SignalCli/Services/Signal/*.cs | grep -E 'send|list|get|update|remove|add|trust|block|unblock|join|quit|set|unregister|submit|finish|start'` → ≥49 unique RPC method literals.
-- [ ] 9.2 Update root CLAUDE.md "Implemented, merged, archived" — додати entry `signal-cli-api-coverage (4.1.0–4.8.0, archived YYYY-MM-DD)` з summary "raised JSON-RPC coverage 18% → 98%".
-- [ ] 9.3 Update root CLAUDE.md "Audit baseline → Тестова база": **unit tests ≥ 495** (від 290), **E2E tests ≥ 6** (від 2).
-- [ ] 9.4 `npx -y @fission-ai/openspec@latest archive signal-cli-api-coverage --yes --skip-specs` (after all waves merged).
-- [ ] 9.5 Commit `chore(openspec): archive signal-cli-api-coverage → YYYY-MM-DD`. Push.
+- [ ] 9.2 Verify RG10 (`SourceCitationConsistencyTests`) green — every public service method on the 7 facades carries `org.asamk.signal.*.java @ <sha>` citation у `<remarks>`. Build fail без exhaustive coverage.
+- [ ] 9.3 Update root CLAUDE.md "Implemented, merged, archived" — додати entry `signal-cli-api-coverage (4.1.0–4.8.0, archived YYYY-MM-DD)` з summary "raised JSON-RPC coverage 18% → 98%; introduced §0.5 source-of-truth anti-hallucination protocol; added RG10 regression guard".
+- [ ] 9.4 Update root CLAUDE.md "Critical rules" — додати rule #20: "Every new RPC service-method MUST cite `org.asamk.signal.*.java @ <commit-sha>` у XMLDoc `<remarks>`. Enforced by RG10 build-time test. Rationale: anti-LLM-hallucination guard — wire shapes come from source-reading, not training-data inference. See §0.5 у `signal-cli-api-coverage` proposal."
+- [ ] 9.5 Update root CLAUDE.md "Audit baseline → Тестова база": **unit tests ≥ 506** (від 290), **E2E tests ≥ 6** (від 2; env-gated через `SIGNALCLI_TEST_ACCOUNT`).
+- [ ] 9.6 Update `.claude/rules/signal-cli-protocol.md` — додати entry "Wire shapes for receive-side payload types (poll/payment/pin/admin-delete/sticker-pack-install) sourced from `org.asamk.signal.json.Json*.java` records @ pinned SHA (see proposal §1.9)".
+- [ ] 9.7 `npx -y @fission-ai/openspec@latest archive signal-cli-api-coverage --yes --skip-specs` (after all waves merged).
+- [ ] 9.8 Commit `chore(openspec): archive signal-cli-api-coverage → YYYY-MM-DD`. Push.
 
 ## 10. Risk register
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | Wave 6 destructive op accidentally fires у production без `EnableDestructiveOperations` | low (default `false`) | **catastrophic** (data loss) | Gate test 6.3.2 + RG09 regression guard + opt-in flag + XMLDoc warning + README warning + CLAUDE.md critical rule #19 |
-| signal-cli wire-shape для нового method'у відрізняється від нашого DTO | medium (no schema upstream) | medium (runtime serialization fail) | Inline-literal JSON snapshots з real signal-cli `--verbose` capture (task 0.3) |
+| **LLM-галюцинації про signal-cli API surface** — field name guessed замість source-read | **high without protocol** | **catastrophic** (runtime serialization fail на production envelope; bug invisible до first real RPC) | §0.5 mandatory source-of-truth protocol: read upstream Java record per кожен method, cite path+SHA у XMLDoc, RG10 build-time guard (`SourceCitationConsistencyTests`), snapshot tests з real signal-cli capture, review-time checkpoint |
+| signal-cli wire-shape для нового method'у відрізняється від нашого DTO | medium (no schema upstream) | medium (runtime serialization fail) | Inline-literal JSON snapshots з real signal-cli `--verbose` capture (task 0.4) + source-citation (§0.5) — drift одразу видно при upstream release bump |
 | EventId collision у `[LoggerMessage]` методах | low | medium (build fail) | `R02` EventIdBlockTests pin'ає blocks + per-wave reservation (600-649 contacts, 650-679 stickers, 680-699 resources) |
 | Public API baseline drift не помічений | low | low (release with API surprise) | `R03` PublicApiSurfaceTests blocks build until baseline updated; task 1.3.5/2.7/3.9/4.7/5.8/6.3.5/7.8/8.8 explicit |
 | Wave breaks existing 9 methods через cross-cutting change у Wave 1 (typed exceptions) | low | high | Existing tests covering 9 methods МАЮТЬ всі pass'ити; додати explicit regression test що `catch (JsonRpcException)` continues to catch all error codes (backward compat) |

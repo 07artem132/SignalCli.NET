@@ -20,12 +20,14 @@ CLI-only методи signal-cli (`register`, `verify`, `link`, `daemon`, `jsonR
 |---|---|---|---|---|---|
 | 1 | `messaging-interactive` | sendReaction, sendReceipt, sendTyping, remoteDelete | **4.1.0** | low | mock-only |
 | 2 | `groups-crud` | joinGroup, updateGroup, quitGroup | **4.2.0** | medium | mock-only |
-| 3 | `contacts-identity` | listContacts, listIdentities, trust, updateContact, removeContact, updateProfile, block, unblock | **4.3.0** | low | mock + E2E listContacts/listIdentities |
-| 4 | `sticker-packs` + `binary-resource-fetch` | uploadStickerPack, listStickerPacks, addStickerPack, getAttachment, getAvatar, getSticker | **4.4.0** | low | mock-only |
-| 5 | `device-management` | addDevice, listDevices, removeDevice, updateDevice | **4.5.0** | medium | mock + E2E listDevices |
+| 3 | `contacts-identity` | listContacts, listIdentities, trust, updateContact, removeContact, updateProfile, block, unblock | **4.3.0** | low | mock + E2E listContacts/listIdentities *(env-gated)* |
+| 4 | `sticker-packs` + `binary-resource-fetch` *(+ sticker-install event decode)* | uploadStickerPack, listStickerPacks, addStickerPack, getAttachment, getAvatar, getSticker | **4.4.0** | low | mock-only |
+| 5 | `device-management` | addDevice, listDevices, removeDevice, updateDevice | **4.5.0** | medium | mock + E2E listDevices *(env-gated)* |
 | 6 | `account-lifecycle` *(opt-in)* | updateAccount, unregister, deleteLocalAccountData, startChangeNumber, finishChangeNumber, updateConfiguration, setPin, removePin | **4.6.0** | **HIGH** | mock-only — гейт за `SignalCliOptions.EnableDestructiveOperations` |
-| 7 | `polls` + `messaging-power-user` | sendPollCreate, sendPollVote, sendPollTerminate, sendAdminDelete, sendPinMessage, sendUnpinMessage, sendMessageRequestResponse, sendPaymentNotification | **4.7.0** | medium | mock-only |
-| 8 | `utility-rpc` | getUserStatus, submitRateLimitChallenge, sendContacts | **4.8.0** | low | mock + E2E getUserStatus |
+| 7 | `polls` + `messaging-power-user` *(+ receive-side event decoders)* | sendPollCreate, sendPollVote, sendPollTerminate, sendAdminDelete, sendPinMessage, sendUnpinMessage, sendMessageRequestResponse, sendPaymentNotification | **4.7.0** | medium | mock-only |
+| 8 | `utility-rpc` | getUserStatus, submitRateLimitChallenge, sendContacts | **4.8.0** | low | mock + E2E getUserStatus *(env-gated)* |
+
+*E2E "env-gated"* означає: тест шукає environment variable `SIGNALCLI_TEST_ACCOUNT` (формат `+1234567890`); якщо змінна відсутня — тест skip'ається з reason `"No SIGNALCLI_TEST_ACCOUNT env var; integration test requires registered test account"`. На CI runners без registered тестового номера E2E ці тести пропускаються; локально (developer setup) — запускаються. Read-only методи (`listContacts`, `listIdentities`, `listDevices`, `getUserStatus`) — НЕ мутують state, тож безпечно ділити account між test runs.
 
 **Підсумок:** 9 існуючих + 44 нових = **53 / 54 = 98% coverage** (єдиний пропущений — `receive` polling, бо `subscribeReceive` є його кращою альтернативою; залишити з poll-API в окремому OpenSpec якщо хтось попросить).
 
@@ -53,6 +55,7 @@ CLI-only методи signal-cli (`register`, `verify`, `link`, `daemon`, `jsonR
 - `polls`: extension до `ISignalMessage` SHALL додати `sendPollCreate`, `sendPollVote`, `sendPollTerminate` + decoding poll-events у `SignalEventService`.
 - `messaging-power-user`: extension до `ISignalMessage` SHALL додати `sendAdminDelete`, `sendPinMessage`, `sendUnpinMessage`, `sendMessageRequestResponse`, `sendPaymentNotification`.
 - `utility-rpc`: нові методи на existing services — `getUserStatus` (`ISignalAccounts`), `submitRateLimitChallenge` (`ISignalAccounts`), `sendContacts` (`ISignalAccounts`).
+- `event-decoding-expansion`: розширення `Envelope.cs` + `SignalEventService` 7 нових паралельних event-stream'ів (IObservable + IAsyncEnumerable, RG06-compliant) для receive-side подій що відповідають Wave-4 і Wave-7 send-side методам. Wire-shape DTOs (`JsonPollCreate`/`JsonPollVote`/`JsonPollTerminate`/`JsonPayment`/`JsonPinMessage`/`JsonUnpinMessage`/`JsonAdminDelete` + sync-side `messageRequestResponse`/`stickerPackOperation`) ре-engineered з signal-cli source — usptream вже має stable Java records у `src/main/java/org/asamk/signal/json/Json*.java` (підтверджено fetch'ем `JsonDataMessage.java` / `JsonSyncMessage.java` / `JsonPollCreate.java` на 2026-05-25). Доставка: Wave 4 (sticker-pack-install sync event) + Wave 7 (polls/payment/pin/unpin/admin-delete/message-request-response data events).
 
 ### Modified Capabilities
 
@@ -65,7 +68,6 @@ CLI-only методи signal-cli (`register`, `verify`, `link`, `daemon`, `jsonR
 - **`receive` polling RPC** — застаріле; `subscribeReceive` (event-driven) — кращий dual-API. Якщо consumer ASK'не, додамо окремим OpenSpec change як `messaging-polling-receive`.
 - **CLI-only commands** (`register`, `verify`, `link`, `daemon`, `jsonRpc`) — поза JSON-RPC surface за дизайном upstream'у. Consumer запускає signal-cli з CLI вручну для bootstrap'у акаунта, далі лінкується через `startLink`/`finishLink`.
 - **Реальні E2E integration tests для destructive методів** (unregister, deleteLocalAccountData, setPin, changeNumber) — потребують registered тестового номера + CAPTCHA solving; неможливо стабілізувати в CI. Тільки serialization + mock-RPC tests.
-- **`SignalEventService` event decoding для нових event-типів** (poll-vote events, payment-notification-receive, sticker-pack-install-receive) — окремий follow-up `event-decoding-expansion` коли упевнимось у wire-shape'ах через E2E (signal-cli docs для `receive`-envelope не повні; треба capture'ити реальні payload'и спочатку).
-- **Async-stream pairs для нових event-типів** — те ж саме, follow-up.
+- **Інтерактивні E2E (send-and-verify-receipt)** — потребують ДВА registered тестових номера що відправляють/отримують між собою. CI infrastructure не підтримує. Single-account env-gated E2E (read-only `list*`/`getUserStatus`) — у скоупі (див. §1.8 design.md).
 - **HealthChecks-адаптер** для нових методів — `SignalCli.NET.HealthChecks` ping'ає `version`; решта методів не входять у health-check semantics.
 - **OpenTelemetry trace tags** з PII полів (recipient phone, message body, attachment paths) — critical rule #1 забороняє. Tag'и обмежені `method`, `status`, `trigger`, `event_type`; нові `event_type`-значення для polls/admin-delete/тощо додаються через `event_type` enum extension.

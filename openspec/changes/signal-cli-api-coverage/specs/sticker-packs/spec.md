@@ -30,3 +30,18 @@ Each method invokes the matching signal-cli JSON-RPC method (`listStickerPacks`,
 - **WHEN** `AddStickerPackAsync("+1", packId, packKey)` is invoked
 - **THEN** RPC method `"addStickerPack"` is called
 - **AND** pack appears in subsequent `ListStickerPacksAsync` results with `Installed = true`
+
+### Requirement: `ISignalEventService` SHALL expose sticker-pack-install sync event stream
+
+`ISignalEventService` SHALL gain one new event-stream pair (IObservable + IAsyncEnumerable per RG06):
+
+- `IObservable<StickerPackInstallEventArgs> StickerPackInstalls`
+- `IAsyncEnumerable<StickerPackInstallEventArgs> StickerPackInstallsAsync(CancellationToken ct = default)`
+
+`JsonStickerPackOperation` DTO SHALL be re-engineered from upstream `org.asamk.signal.json.JsonSyncMessage.java` per §0.5 source-of-truth protocol. The event fires from `syncMessage` envelope, dispatched via `DispatchSyncMessage` (existing path, not the data-message path).
+
+#### Scenario: Receive a sticker-pack-install sync event from a linked device
+- **GIVEN** secondary device installed a sticker pack via `addStickerPack`
+- **WHEN** primary device receives `syncMessage.stickerPackOperations = [{packId, packKey, type: "INSTALL"}]`
+- **THEN** `StickerPackInstalls` IObservable emits one `StickerPackInstallEventArgs` per operation
+- **AND** consumer can refresh local sticker-pack cache

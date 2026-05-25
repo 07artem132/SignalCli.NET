@@ -35,3 +35,20 @@ Task<SendPollTerminateResponse> SendPollTerminateAsync(PollTerminateOptions opti
 - **WHEN** `SendPollTerminateAsync(PollTerminateOptions(Account: "+1", GroupIds: ["<id>"], PollTimestamp: 1700000000000L))` is invoked
 - **THEN** RPC method `"sendPollTerminate"` is invoked
 - **AND** subsequent vote attempts from other members are rejected server-side
+
+### Requirement: `ISignalEventService` SHALL expose 3 receive-side poll event streams
+
+`ISignalEventService` SHALL gain three new event-stream pairs (IObservable + IAsyncEnumerable per RG06 symmetry):
+
+- `IObservable<PollCreateEventArgs> PollCreates` + `IAsyncEnumerable<PollCreateEventArgs> PollCreatesAsync(CancellationToken ct = default)`
+- `IObservable<PollVoteEventArgs> PollVotes` + `PollVotesAsync(...)`
+- `IObservable<PollTerminateEventArgs> PollTerminates` + `PollTerminatesAsync(...)`
+
+DTOs `JsonPollCreate`/`JsonPollVote`/`JsonPollTerminate` SHALL be re-engineered from upstream Java records (`src/main/java/org/asamk/signal/json/JsonPoll*.java`) per §0.5 source-of-truth protocol. Field names mirror Jackson Java-record output verbatim.
+
+#### Scenario: Receive a poll-create from another participant
+- **GIVEN** active `subscribeReceive` subscription
+- **WHEN** signal-cli emits notification with `dataMessage.pollCreate = {question, allowMultiple, options}`
+- **THEN** `PollCreates` IObservable emits `PollCreateEventArgs(envelope, payload)` 
+- **AND** `PollCreatesAsync` channel receives the same args (RG06 symmetry)
+- **AND** other applicable event streams (e.g. `TextMessages` if accompanying caption) also emit (critical rule #4: presence-based union — no early return)

@@ -57,3 +57,25 @@ Task<SendPaymentNotificationResponse> SendPaymentNotificationAsync(PaymentNotifi
 - **WHEN** `SendPaymentNotificationAsync(opts)` is invoked
 - **THEN** RPC method `"sendPaymentNotification"` is invoked
 - **AND** recipient receives the payment-notification message with receipt attached
+
+### Requirement: `ISignalEventService` SHALL expose 4 receive-side power-user event streams
+
+`ISignalEventService` SHALL gain four new event-stream pairs (IObservable + IAsyncEnumerable per RG06):
+
+- `PaymentNotifications` / `PaymentNotificationsAsync` (from `dataMessage.payment`)
+- `PinMessages` / `PinMessagesAsync` (from `dataMessage.pinMessage`)
+- `UnpinMessages` / `UnpinMessagesAsync` (from `dataMessage.unpinMessage`)
+- `AdminDeletes` / `AdminDeletesAsync` (from `dataMessage.adminDelete`)
+
+DTOs `JsonPayment` / `JsonPinMessage` / `JsonUnpinMessage` / `JsonAdminDelete` SHALL be re-engineered from upstream Java records (`src/main/java/org/asamk/signal/json/Json*.java`) per §0.5 source-of-truth protocol.
+
+#### Scenario: Receive admin-delete notification on a group message
+- **GIVEN** group admin invoked `sendAdminDelete` on member's message
+- **WHEN** signal-cli emits notification with `dataMessage.adminDelete = {targetSentTimestamp}`
+- **THEN** `AdminDeletes` IObservable emits `AdminDeleteEventArgs(envelope, payload)`
+- **AND** consumer can update local UI to remove the message
+
+#### Scenario: Multiple payloads in a single envelope all emit
+- **GIVEN** envelope з `dataMessage.text = "📌"` + `dataMessage.pinMessage = {timestamp: 1700...}`
+- **WHEN** `DispatchDataMessage` processes it
+- **THEN** `TextMessages` emits AND `PinMessages` emits (critical rule #4 — presence-based union; no early return)
