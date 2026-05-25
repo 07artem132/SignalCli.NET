@@ -1383,6 +1383,48 @@
         <member name="M:SignalCli.Interfaces.Signal.ISignalEventService.RemoteDeletesAsync(System.Threading.CancellationToken)">
             <summary>Async-stream-варіант <see cref="P:SignalCli.Interfaces.Signal.ISignalEventService.RemoteDeletes"/> (exclusive consumption).</summary>
         </member>
+        <member name="P:SignalCli.Interfaces.Signal.ISignalEventService.PollCreates">
+            <summary>Wave 7b: poll-create receive events.</summary>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalEventService.PollCreatesAsync(System.Threading.CancellationToken)">
+            <summary>Async-stream варіант <see cref="P:SignalCli.Interfaces.Signal.ISignalEventService.PollCreates"/>.</summary>
+        </member>
+        <member name="P:SignalCli.Interfaces.Signal.ISignalEventService.PollVotes">
+            <summary>Wave 7b: poll-vote receive events.</summary>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalEventService.PollVotesAsync(System.Threading.CancellationToken)">
+            <summary>Async-stream варіант <see cref="P:SignalCli.Interfaces.Signal.ISignalEventService.PollVotes"/>.</summary>
+        </member>
+        <member name="P:SignalCli.Interfaces.Signal.ISignalEventService.PollTerminates">
+            <summary>Wave 7b: poll-terminate receive events.</summary>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalEventService.PollTerminatesAsync(System.Threading.CancellationToken)">
+            <summary>Async-stream варіант <see cref="P:SignalCli.Interfaces.Signal.ISignalEventService.PollTerminates"/>.</summary>
+        </member>
+        <member name="P:SignalCli.Interfaces.Signal.ISignalEventService.Payments">
+            <summary>Wave 7b: payment-notification receive events (JsonPayment shape-fixed у цьому wave).</summary>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalEventService.PaymentsAsync(System.Threading.CancellationToken)">
+            <summary>Async-stream варіант <see cref="P:SignalCli.Interfaces.Signal.ISignalEventService.Payments"/>.</summary>
+        </member>
+        <member name="P:SignalCli.Interfaces.Signal.ISignalEventService.PinMessages">
+            <summary>Wave 7b: pin-message receive events.</summary>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalEventService.PinMessagesAsync(System.Threading.CancellationToken)">
+            <summary>Async-stream варіант <see cref="P:SignalCli.Interfaces.Signal.ISignalEventService.PinMessages"/>.</summary>
+        </member>
+        <member name="P:SignalCli.Interfaces.Signal.ISignalEventService.UnpinMessages">
+            <summary>Wave 7b: unpin-message receive events.</summary>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalEventService.UnpinMessagesAsync(System.Threading.CancellationToken)">
+            <summary>Async-stream варіант <see cref="P:SignalCli.Interfaces.Signal.ISignalEventService.UnpinMessages"/>.</summary>
+        </member>
+        <member name="P:SignalCli.Interfaces.Signal.ISignalEventService.AdminDeletes">
+            <summary>Wave 7b: admin-delete receive events (group moderation signal).</summary>
+        </member>
+        <member name="M:SignalCli.Interfaces.Signal.ISignalEventService.AdminDeletesAsync(System.Threading.CancellationToken)">
+            <summary>Async-stream варіант <see cref="P:SignalCli.Interfaces.Signal.ISignalEventService.AdminDeletes"/>.</summary>
+        </member>
         <member name="T:SignalCli.Interfaces.Signal.ISignalGroups">
             <summary>
             Сервіс для роботи з групами Signal.
@@ -4642,8 +4684,14 @@
             <param name="TextStyles">Стилі форматування тексту.</param>
             <param name="GroupInfo">Інформація про групу, до якої належить повідомлення.</param>
             <param name="StoryContext">Контекст історії для повідомлення.</param>
+            <param name="PollCreate">Wave 7b: poll-create payload (receive-side).</param>
+            <param name="PollVote">Wave 7b: poll-vote payload.</param>
+            <param name="PollTerminate">Wave 7b: poll-terminate payload.</param>
+            <param name="PinMessage">Wave 7b: pin-message payload.</param>
+            <param name="UnpinMessage">Wave 7b: unpin-message payload.</param>
+            <param name="AdminDelete">Wave 7b: admin-delete payload.</param>
         </member>
-        <member name="M:SignalCli.Models.Signal.JsonDataMessage.#ctor(System.UInt64,System.String,System.Nullable{System.Int32},System.Nullable{System.Boolean},SignalCli.Models.Signal.JsonReaction,SignalCli.Models.Signal.JsonQuote,SignalCli.Models.Signal.JsonPayment,System.Collections.Generic.List{SignalCli.Models.Signal.JsonMention},System.Collections.Generic.List{SignalCli.Models.Signal.JsonPreview},System.Collections.Generic.List{SignalCli.Models.Signal.JsonAttachment},SignalCli.Models.Signal.JsonSticker,SignalCli.Models.Signal.JsonRemoteDelete,System.Collections.Generic.List{SignalCli.Models.Signal.JsonSharedContact},System.Collections.Generic.List{SignalCli.Models.Signal.JsonTextStyle},SignalCli.Models.Signal.JsonGroupInfo,SignalCli.Models.Signal.JsonStoryContext)">
+        <member name="M:SignalCli.Models.Signal.JsonDataMessage.#ctor(System.UInt64,System.String,System.Nullable{System.Int32},System.Nullable{System.Boolean},SignalCli.Models.Signal.JsonReaction,SignalCli.Models.Signal.JsonQuote,SignalCli.Models.Signal.JsonPayment,System.Collections.Generic.List{SignalCli.Models.Signal.JsonMention},System.Collections.Generic.List{SignalCli.Models.Signal.JsonPreview},System.Collections.Generic.List{SignalCli.Models.Signal.JsonAttachment},SignalCli.Models.Signal.JsonSticker,SignalCli.Models.Signal.JsonRemoteDelete,System.Collections.Generic.List{SignalCli.Models.Signal.JsonSharedContact},System.Collections.Generic.List{SignalCli.Models.Signal.JsonTextStyle},SignalCli.Models.Signal.JsonGroupInfo,SignalCli.Models.Signal.JsonStoryContext,SignalCli.Models.Signal.JsonPollCreate,SignalCli.Models.Signal.JsonPollVote,SignalCli.Models.Signal.JsonPollTerminate,SignalCli.Models.Signal.JsonPinMessage,SignalCli.Models.Signal.JsonUnpinMessage,SignalCli.Models.Signal.JsonAdminDelete)">
             <summary>
             Повідомлення з даними, основне повідомлення Signal.
             Містить текст, вкладення, стікери, реакції тощо.
@@ -4664,6 +4712,12 @@
             <param name="TextStyles">Стилі форматування тексту.</param>
             <param name="GroupInfo">Інформація про групу, до якої належить повідомлення.</param>
             <param name="StoryContext">Контекст історії для повідомлення.</param>
+            <param name="PollCreate">Wave 7b: poll-create payload (receive-side).</param>
+            <param name="PollVote">Wave 7b: poll-vote payload.</param>
+            <param name="PollTerminate">Wave 7b: poll-terminate payload.</param>
+            <param name="PinMessage">Wave 7b: pin-message payload.</param>
+            <param name="UnpinMessage">Wave 7b: unpin-message payload.</param>
+            <param name="AdminDelete">Wave 7b: admin-delete payload.</param>
         </member>
         <member name="P:SignalCli.Models.Signal.JsonDataMessage.Timestamp">
             <summary>Часова мітка повідомлення.</summary>
@@ -4712,6 +4766,24 @@
         </member>
         <member name="P:SignalCli.Models.Signal.JsonDataMessage.StoryContext">
             <summary>Контекст історії для повідомлення.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonDataMessage.PollCreate">
+            <summary>Wave 7b: poll-create payload (receive-side).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonDataMessage.PollVote">
+            <summary>Wave 7b: poll-vote payload.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonDataMessage.PollTerminate">
+            <summary>Wave 7b: poll-terminate payload.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonDataMessage.PinMessage">
+            <summary>Wave 7b: pin-message payload.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonDataMessage.UnpinMessage">
+            <summary>Wave 7b: unpin-message payload.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonDataMessage.AdminDelete">
+            <summary>Wave 7b: admin-delete payload.</summary>
         </member>
         <member name="T:SignalCli.Models.Signal.JsonReaction">
             <summary>
@@ -4795,23 +4867,270 @@
         </member>
         <member name="T:SignalCli.Models.Signal.JsonPayment">
             <summary>
-            Інформація про платіж.
+            Дані payment-notification повідомлення.
             </summary>
-            <param name="Amount">Сума платежу.</param>
-            <param name="Currency">Валюта платежу.</param>
+            <remarks>
+            signal-cli-api-coverage Wave 7b: <b>BREAKING shape fix</b>. Previous record had
+            speculative fields <c>(Amount: decimal, Currency: string?)</c> які НІКОЛИ не отримували
+            real wire data — upstream Java <c>src/main/java/org/asamk/signal/json/JsonPayment.java
+            @ bda4e7fc</c> declares <c>record JsonPayment(String note, byte[] receipt)</c>.
+            Existing code що читало <c>Amount</c>/<c>Currency</c> на real envelope ніколи не fire'ило;
+            shape-fix покриває real wire shape.
+            </remarks>
+            <param name="Note">Optional plain-text note що супроводжує payment.</param>
+            <param name="Receipt">MobileCoin receipt blob. Jackson serializes <c>byte[]</c> як base64 string; STJ робить так само.</param>
         </member>
-        <member name="M:SignalCli.Models.Signal.JsonPayment.#ctor(System.Decimal,System.String)">
+        <member name="M:SignalCli.Models.Signal.JsonPayment.#ctor(System.String,System.Byte[])">
             <summary>
-            Інформація про платіж.
+            Дані payment-notification повідомлення.
             </summary>
-            <param name="Amount">Сума платежу.</param>
-            <param name="Currency">Валюта платежу.</param>
+            <remarks>
+            signal-cli-api-coverage Wave 7b: <b>BREAKING shape fix</b>. Previous record had
+            speculative fields <c>(Amount: decimal, Currency: string?)</c> які НІКОЛИ не отримували
+            real wire data — upstream Java <c>src/main/java/org/asamk/signal/json/JsonPayment.java
+            @ bda4e7fc</c> declares <c>record JsonPayment(String note, byte[] receipt)</c>.
+            Existing code що читало <c>Amount</c>/<c>Currency</c> на real envelope ніколи не fire'ило;
+            shape-fix покриває real wire shape.
+            </remarks>
+            <param name="Note">Optional plain-text note що супроводжує payment.</param>
+            <param name="Receipt">MobileCoin receipt blob. Jackson serializes <c>byte[]</c> як base64 string; STJ робить так само.</param>
         </member>
-        <member name="P:SignalCli.Models.Signal.JsonPayment.Amount">
-            <summary>Сума платежу.</summary>
+        <member name="P:SignalCli.Models.Signal.JsonPayment.Note">
+            <summary>Optional plain-text note що супроводжує payment.</summary>
         </member>
-        <member name="P:SignalCli.Models.Signal.JsonPayment.Currency">
-            <summary>Валюта платежу.</summary>
+        <member name="P:SignalCli.Models.Signal.JsonPayment.Receipt">
+            <summary>MobileCoin receipt blob. Jackson serializes <c>byte[]</c> як base64 string; STJ робить так само.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.JsonPollCreate">
+            <summary>
+            Дані poll-create повідомлення (receive-side).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 7b. Pinned до
+            <c>src/main/java/org/asamk/signal/json/JsonPollCreate.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="Question">Текст question'у (non-null).</param>
+            <param name="AllowMultiple">Чи voter може select кілька опцій.</param>
+            <param name="Options">Список option-strings у original order.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.JsonPollCreate.#ctor(System.String,System.Boolean,System.Collections.Generic.List{System.String})">
+            <summary>
+            Дані poll-create повідомлення (receive-side).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 7b. Pinned до
+            <c>src/main/java/org/asamk/signal/json/JsonPollCreate.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="Question">Текст question'у (non-null).</param>
+            <param name="AllowMultiple">Чи voter може select кілька опцій.</param>
+            <param name="Options">Список option-strings у original order.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonPollCreate.Question">
+            <summary>Текст question'у (non-null).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonPollCreate.AllowMultiple">
+            <summary>Чи voter може select кілька опцій.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonPollCreate.Options">
+            <summary>Список option-strings у original order.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.JsonPollVote">
+            <summary>
+            Дані poll-vote повідомлення (receive-side).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 7b. Pinned до
+            <c>src/main/java/org/asamk/signal/json/JsonPollVote.java @ bda4e7fc</c>.
+            <para><b>§F17:</b> <see cref="P:SignalCli.Models.Signal.JsonPollVote.Author"/> upstream @Deprecated — legacy identifier. Mirror з [Obsolete].</para>
+            </remarks>
+            <param name="Author">Legacy address (@Deprecated upstream). Use AuthorNumber/AuthorUuid instead.</param>
+            <param name="AuthorNumber">E.164 phone of voter, nullable.</param>
+            <param name="AuthorUuid">UUID of voter, nullable.</param>
+            <param name="TargetSentTimestamp">Timestamp оригіналу poll-create.</param>
+            <param name="OptionIndexes">Zero-based indexes selected (empty = clear vote).</param>
+            <param name="VoteCount">Per-voter monotonic counter.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.JsonPollVote.#ctor(System.String,System.String,System.String,System.Int64,System.Collections.Generic.List{System.Int32},System.Int32)">
+            <summary>
+            Дані poll-vote повідомлення (receive-side).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 7b. Pinned до
+            <c>src/main/java/org/asamk/signal/json/JsonPollVote.java @ bda4e7fc</c>.
+            <para><b>§F17:</b> <see cref="P:SignalCli.Models.Signal.JsonPollVote.Author"/> upstream @Deprecated — legacy identifier. Mirror з [Obsolete].</para>
+            </remarks>
+            <param name="Author">Legacy address (@Deprecated upstream). Use AuthorNumber/AuthorUuid instead.</param>
+            <param name="AuthorNumber">E.164 phone of voter, nullable.</param>
+            <param name="AuthorUuid">UUID of voter, nullable.</param>
+            <param name="TargetSentTimestamp">Timestamp оригіналу poll-create.</param>
+            <param name="OptionIndexes">Zero-based indexes selected (empty = clear vote).</param>
+            <param name="VoteCount">Per-voter monotonic counter.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonPollVote.Author">
+            <summary>Legacy address (@Deprecated upstream). Use AuthorNumber/AuthorUuid instead.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonPollVote.AuthorNumber">
+            <summary>E.164 phone of voter, nullable.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonPollVote.AuthorUuid">
+            <summary>UUID of voter, nullable.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonPollVote.TargetSentTimestamp">
+            <summary>Timestamp оригіналу poll-create.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonPollVote.OptionIndexes">
+            <summary>Zero-based indexes selected (empty = clear vote).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonPollVote.VoteCount">
+            <summary>Per-voter monotonic counter.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.JsonPollTerminate">
+            <summary>
+            Дані poll-terminate повідомлення (receive-side). NO author field — terminator implicit (original poll creator).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 7b. Pinned до
+            <c>src/main/java/org/asamk/signal/json/JsonPollTerminate.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="TargetSentTimestamp">Timestamp оригіналу poll-create.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.JsonPollTerminate.#ctor(System.Int64)">
+            <summary>
+            Дані poll-terminate повідомлення (receive-side). NO author field — terminator implicit (original poll creator).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 7b. Pinned до
+            <c>src/main/java/org/asamk/signal/json/JsonPollTerminate.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="TargetSentTimestamp">Timestamp оригіналу poll-create.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonPollTerminate.TargetSentTimestamp">
+            <summary>Timestamp оригіналу poll-create.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.JsonPinMessage">
+            <summary>
+            Дані pin-message повідомлення (receive-side).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 7b. Pinned до
+            <c>src/main/java/org/asamk/signal/json/JsonPinMessage.java @ bda4e7fc</c>.
+            <para><b>§F16:</b> wire <see cref="P:SignalCli.Models.Signal.JsonPinMessage.PinDurationSeconds"/> — <c>long</c> (різниться з send-side <c>int</c>).</para>
+            <para><b>§F17:</b> <see cref="P:SignalCli.Models.Signal.JsonPinMessage.TargetAuthor"/> @Deprecated upstream.</para>
+            </remarks>
+            <param name="TargetAuthor">Legacy identifier (@Deprecated). Use TargetAuthorNumber/Uuid.</param>
+            <param name="TargetAuthorNumber">E.164 author of pinned message, nullable.</param>
+            <param name="TargetAuthorUuid">UUID author, nullable.</param>
+            <param name="TargetSentTimestamp">Timestamp pinned message.</param>
+            <param name="PinDurationSeconds">§F16 long: pin duration. <c>-1</c> = forever sentinel.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.JsonPinMessage.#ctor(System.String,System.String,System.String,System.Int64,System.Int64)">
+            <summary>
+            Дані pin-message повідомлення (receive-side).
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 7b. Pinned до
+            <c>src/main/java/org/asamk/signal/json/JsonPinMessage.java @ bda4e7fc</c>.
+            <para><b>§F16:</b> wire <see cref="P:SignalCli.Models.Signal.JsonPinMessage.PinDurationSeconds"/> — <c>long</c> (різниться з send-side <c>int</c>).</para>
+            <para><b>§F17:</b> <see cref="P:SignalCli.Models.Signal.JsonPinMessage.TargetAuthor"/> @Deprecated upstream.</para>
+            </remarks>
+            <param name="TargetAuthor">Legacy identifier (@Deprecated). Use TargetAuthorNumber/Uuid.</param>
+            <param name="TargetAuthorNumber">E.164 author of pinned message, nullable.</param>
+            <param name="TargetAuthorUuid">UUID author, nullable.</param>
+            <param name="TargetSentTimestamp">Timestamp pinned message.</param>
+            <param name="PinDurationSeconds">§F16 long: pin duration. <c>-1</c> = forever sentinel.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonPinMessage.TargetAuthor">
+            <summary>Legacy identifier (@Deprecated). Use TargetAuthorNumber/Uuid.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonPinMessage.TargetAuthorNumber">
+            <summary>E.164 author of pinned message, nullable.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonPinMessage.TargetAuthorUuid">
+            <summary>UUID author, nullable.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonPinMessage.TargetSentTimestamp">
+            <summary>Timestamp pinned message.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonPinMessage.PinDurationSeconds">
+            <summary>§F16 long: pin duration. <c>-1</c> = forever sentinel.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.JsonUnpinMessage">
+            <summary>
+            Дані unpin-message повідомлення (receive-side). Symmetric до JsonPinMessage минус PinDurationSeconds.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 7b. Pinned до
+            <c>src/main/java/org/asamk/signal/json/JsonUnpinMessage.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="TargetAuthor">Legacy identifier (@Deprecated).</param>
+            <param name="TargetAuthorNumber">E.164 author, nullable.</param>
+            <param name="TargetAuthorUuid">UUID author, nullable.</param>
+            <param name="TargetSentTimestamp">Timestamp message being unpinned.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.JsonUnpinMessage.#ctor(System.String,System.String,System.String,System.Int64)">
+            <summary>
+            Дані unpin-message повідомлення (receive-side). Symmetric до JsonPinMessage минус PinDurationSeconds.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 7b. Pinned до
+            <c>src/main/java/org/asamk/signal/json/JsonUnpinMessage.java @ bda4e7fc</c>.
+            </remarks>
+            <param name="TargetAuthor">Legacy identifier (@Deprecated).</param>
+            <param name="TargetAuthorNumber">E.164 author, nullable.</param>
+            <param name="TargetAuthorUuid">UUID author, nullable.</param>
+            <param name="TargetSentTimestamp">Timestamp message being unpinned.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonUnpinMessage.TargetAuthor">
+            <summary>Legacy identifier (@Deprecated).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonUnpinMessage.TargetAuthorNumber">
+            <summary>E.164 author, nullable.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonUnpinMessage.TargetAuthorUuid">
+            <summary>UUID author, nullable.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonUnpinMessage.TargetSentTimestamp">
+            <summary>Timestamp message being unpinned.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.JsonAdminDelete">
+            <summary>
+            Дані admin-delete повідомлення (receive-side). Structurally identical to JsonUnpinMessage.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 7b. Pinned до
+            <c>src/main/java/org/asamk/signal/json/JsonAdminDelete.java @ bda4e7fc</c>.
+            Розрізняється з JsonUnpinMessage лише routing у JsonDataMessage (adminDelete field).
+            </remarks>
+            <param name="TargetAuthor">Legacy identifier (@Deprecated).</param>
+            <param name="TargetAuthorNumber">E.164 author of admin-deleted message.</param>
+            <param name="TargetAuthorUuid">UUID author.</param>
+            <param name="TargetSentTimestamp">Timestamp admin-deleted message.</param>
+        </member>
+        <member name="M:SignalCli.Models.Signal.JsonAdminDelete.#ctor(System.String,System.String,System.String,System.Int64)">
+            <summary>
+            Дані admin-delete повідомлення (receive-side). Structurally identical to JsonUnpinMessage.
+            </summary>
+            <remarks>
+            signal-cli-api-coverage Wave 7b. Pinned до
+            <c>src/main/java/org/asamk/signal/json/JsonAdminDelete.java @ bda4e7fc</c>.
+            Розрізняється з JsonUnpinMessage лише routing у JsonDataMessage (adminDelete field).
+            </remarks>
+            <param name="TargetAuthor">Legacy identifier (@Deprecated).</param>
+            <param name="TargetAuthorNumber">E.164 author of admin-deleted message.</param>
+            <param name="TargetAuthorUuid">UUID author.</param>
+            <param name="TargetSentTimestamp">Timestamp admin-deleted message.</param>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonAdminDelete.TargetAuthor">
+            <summary>Legacy identifier (@Deprecated).</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonAdminDelete.TargetAuthorNumber">
+            <summary>E.164 author of admin-deleted message.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonAdminDelete.TargetAuthorUuid">
+            <summary>UUID author.</summary>
+        </member>
+        <member name="P:SignalCli.Models.Signal.JsonAdminDelete.TargetSentTimestamp">
+            <summary>Timestamp admin-deleted message.</summary>
         </member>
         <member name="T:SignalCli.Models.Signal.JsonMention">
             <summary>
@@ -5533,6 +5852,12 @@
         <member name="P:SignalCli.Models.Signal.JsonTypingMessage.GroupId">
             <summary>Ідентифікатор групи, якщо набір тексту відбувається в групі.</summary>
         </member>
+        <member name="T:SignalCli.Models.Signal.Events.AdminDeleteEventArgs">
+            <summary>signal-cli-api-coverage Wave 7b: admin-delete receive event args (group moderation).</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Events.AdminDeleteEventArgs.#ctor(System.Int32,System.String,SignalCli.Models.Signal.JsonAdminDelete,System.String,System.String,System.String,System.String,System.Nullable{System.Int32},System.Int64,System.Int64,System.Int64)">
+            <summary>signal-cli-api-coverage Wave 7b: admin-delete receive event args (group moderation).</summary>
+        </member>
         <member name="T:SignalCli.Models.Signal.Events.AttachmentEventArgs">
             <summary>
             Аргументи події з вкладеннями.
@@ -5692,6 +6017,36 @@
         </member>
         <member name="P:SignalCli.Models.Signal.Events.EditEventArgs.EditMessage">
             <summary>Повне редагування з новим вмістом і часовою міткою цільового повідомлення.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Events.PaymentEventArgs">
+            <summary>signal-cli-api-coverage Wave 7b: payment-notification receive event args. JsonPayment shape fix.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Events.PaymentEventArgs.#ctor(System.Int32,System.String,SignalCli.Models.Signal.JsonPayment,System.String,System.String,System.String,System.String,System.Nullable{System.Int32},System.Int64,System.Int64,System.Int64)">
+            <summary>signal-cli-api-coverage Wave 7b: payment-notification receive event args. JsonPayment shape fix.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Events.PinMessageEventArgs">
+            <summary>signal-cli-api-coverage Wave 7b: pin-message receive event args.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Events.PinMessageEventArgs.#ctor(System.Int32,System.String,SignalCli.Models.Signal.JsonPinMessage,System.String,System.String,System.String,System.String,System.Nullable{System.Int32},System.Int64,System.Int64,System.Int64)">
+            <summary>signal-cli-api-coverage Wave 7b: pin-message receive event args.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Events.PollCreateEventArgs">
+            <summary>signal-cli-api-coverage Wave 7b: poll-create receive event args.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Events.PollCreateEventArgs.#ctor(System.Int32,System.String,SignalCli.Models.Signal.JsonPollCreate,System.String,System.String,System.String,System.String,System.Nullable{System.Int32},System.Int64,System.Int64,System.Int64)">
+            <summary>signal-cli-api-coverage Wave 7b: poll-create receive event args.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Events.PollTerminateEventArgs">
+            <summary>signal-cli-api-coverage Wave 7b: poll-terminate receive event args.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Events.PollTerminateEventArgs.#ctor(System.Int32,System.String,SignalCli.Models.Signal.JsonPollTerminate,System.String,System.String,System.String,System.String,System.Nullable{System.Int32},System.Int64,System.Int64,System.Int64)">
+            <summary>signal-cli-api-coverage Wave 7b: poll-terminate receive event args.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Events.PollVoteEventArgs">
+            <summary>signal-cli-api-coverage Wave 7b: poll-vote receive event args.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Events.PollVoteEventArgs.#ctor(System.Int32,System.String,SignalCli.Models.Signal.JsonPollVote,System.String,System.String,System.String,System.String,System.Nullable{System.Int32},System.Int64,System.Int64,System.Int64)">
+            <summary>signal-cli-api-coverage Wave 7b: poll-vote receive event args.</summary>
         </member>
         <member name="T:SignalCli.Models.Signal.Events.QuoteEventArgs">
             <summary>
@@ -6136,6 +6491,12 @@
         </member>
         <member name="P:SignalCli.Models.Signal.Events.TypingEventArgs.TypingMessage">
             <summary>Об'єкт з даними про набір тексту.</summary>
+        </member>
+        <member name="T:SignalCli.Models.Signal.Events.UnpinMessageEventArgs">
+            <summary>signal-cli-api-coverage Wave 7b: unpin-message receive event args.</summary>
+        </member>
+        <member name="M:SignalCli.Models.Signal.Events.UnpinMessageEventArgs.#ctor(System.Int32,System.String,SignalCli.Models.Signal.JsonUnpinMessage,System.String,System.String,System.String,System.String,System.Nullable{System.Int32},System.Int64,System.Int64,System.Int64)">
+            <summary>signal-cli-api-coverage Wave 7b: unpin-message receive event args.</summary>
         </member>
         <member name="T:SignalCli.Models.Signal.Events.UnsubscribeReceiveParameters">
             <summary>
@@ -8841,7 +9202,7 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
-        <member name="P:SignalCli.Serialization.SignalJsonContext.Decimal">
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ByteArray">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -9196,6 +9557,11 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonAdminDelete">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.JsonAttachment">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
@@ -9232,6 +9598,26 @@
             </summary>
         </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.JsonPayment">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonPinMessage">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonPollCreate">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonPollTerminate">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonPollVote">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -9317,6 +9703,11 @@
             </summary>
         </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.JsonTypingMessage">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.JsonUnpinMessage">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -9582,6 +9973,11 @@
             </summary>
         </member>
         <member name="P:SignalCli.Serialization.SignalJsonContext.ListJsonStickerPack">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:SignalCli.Serialization.SignalJsonContext.ListInt32">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -10326,6 +10722,27 @@
             </para>
             </remarks>
         </member>
+        <member name="P:SignalCli.Services.Signal.SignalEventService.PollCreates">
+            <inheritdoc/>
+        </member>
+        <member name="P:SignalCli.Services.Signal.SignalEventService.PollVotes">
+            <inheritdoc/>
+        </member>
+        <member name="P:SignalCli.Services.Signal.SignalEventService.PollTerminates">
+            <inheritdoc/>
+        </member>
+        <member name="P:SignalCli.Services.Signal.SignalEventService.Payments">
+            <inheritdoc/>
+        </member>
+        <member name="P:SignalCli.Services.Signal.SignalEventService.PinMessages">
+            <inheritdoc/>
+        </member>
+        <member name="P:SignalCli.Services.Signal.SignalEventService.UnpinMessages">
+            <inheritdoc/>
+        </member>
+        <member name="P:SignalCli.Services.Signal.SignalEventService.AdminDeletes">
+            <inheritdoc/>
+        </member>
         <member name="M:SignalCli.Services.Signal.SignalEventService.TextMessagesAsync(System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
@@ -10355,6 +10772,27 @@
         </member>
         <member name="M:SignalCli.Services.Signal.SignalEventService.RemoteDeletesAsync(System.Threading.CancellationToken)">
             <inheritdoc />
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalEventService.PollCreatesAsync(System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalEventService.PollVotesAsync(System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalEventService.PollTerminatesAsync(System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalEventService.PaymentsAsync(System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalEventService.PinMessagesAsync(System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalEventService.UnpinMessagesAsync(System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalEventService.AdminDeletesAsync(System.Threading.CancellationToken)">
+            <inheritdoc/>
         </member>
         <member name="M:SignalCli.Services.Signal.SignalEventService.TryWriteOrDrop``1(System.Threading.Channels.Channel{``0},``0,System.String)">
             <summary>

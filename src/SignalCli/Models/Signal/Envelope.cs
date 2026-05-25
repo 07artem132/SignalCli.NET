@@ -63,6 +63,12 @@ public record JsonMessageEnvelope(
 /// <param name="TextStyles">Стилі форматування тексту.</param>
 /// <param name="GroupInfo">Інформація про групу, до якої належить повідомлення.</param>
 /// <param name="StoryContext">Контекст історії для повідомлення.</param>
+/// <param name="PollCreate">Wave 7b: poll-create payload (receive-side).</param>
+/// <param name="PollVote">Wave 7b: poll-vote payload.</param>
+/// <param name="PollTerminate">Wave 7b: poll-terminate payload.</param>
+/// <param name="PinMessage">Wave 7b: pin-message payload.</param>
+/// <param name="UnpinMessage">Wave 7b: unpin-message payload.</param>
+/// <param name="AdminDelete">Wave 7b: admin-delete payload.</param>
 [PublicAPI]
 public record JsonDataMessage(
     [property: JsonPropertyName("timestamp")] ulong Timestamp,
@@ -80,7 +86,16 @@ public record JsonDataMessage(
     [property: JsonPropertyName("contacts")] List<JsonSharedContact>? Contacts,
     [property: JsonPropertyName("textStyles")] List<JsonTextStyle>? TextStyles,
     [property: JsonPropertyName("groupInfo")] JsonGroupInfo? GroupInfo,
-    [property: JsonPropertyName("storyContext")] JsonStoryContext? StoryContext
+    [property: JsonPropertyName("storyContext")] JsonStoryContext? StoryContext,
+    // signal-cli-api-coverage Wave 7b: 6 нових nullable полів для receive-side decoders.
+    // Кожне null коли data-message НЕ carry'ить цей payload-type. PRESENCE-BASED UNION
+    // (критичне rule #4): NO early-return у dispatch — кілька полів можуть бути non-null.
+    [property: JsonPropertyName("pollCreate")] JsonPollCreate? PollCreate = null,
+    [property: JsonPropertyName("pollVote")] JsonPollVote? PollVote = null,
+    [property: JsonPropertyName("pollTerminate")] JsonPollTerminate? PollTerminate = null,
+    [property: JsonPropertyName("pinMessage")] JsonPinMessage? PinMessage = null,
+    [property: JsonPropertyName("unpinMessage")] JsonUnpinMessage? UnpinMessage = null,
+    [property: JsonPropertyName("adminDelete")] JsonAdminDelete? AdminDelete = null
 );
 
 /// <summary>
@@ -122,14 +137,138 @@ public record JsonQuote(
 );
 
 /// <summary>
-/// Інформація про платіж.
+/// Дані payment-notification повідомлення.
 /// </summary>
-/// <param name="Amount">Сума платежу.</param>
-/// <param name="Currency">Валюта платежу.</param>
+/// <remarks>
+/// signal-cli-api-coverage Wave 7b: <b>BREAKING shape fix</b>. Previous record had
+/// speculative fields <c>(Amount: decimal, Currency: string?)</c> які НІКОЛИ не отримували
+/// real wire data — upstream Java <c>src/main/java/org/asamk/signal/json/JsonPayment.java
+/// @ bda4e7fc</c> declares <c>record JsonPayment(String note, byte[] receipt)</c>.
+/// Existing code що читало <c>Amount</c>/<c>Currency</c> на real envelope ніколи не fire'ило;
+/// shape-fix покриває real wire shape.
+/// </remarks>
+/// <param name="Note">Optional plain-text note що супроводжує payment.</param>
+/// <param name="Receipt">MobileCoin receipt blob. Jackson serializes <c>byte[]</c> як base64 string; STJ робить так само.</param>
 [PublicAPI]
 public record JsonPayment(
-    [property: JsonPropertyName("amount")] decimal Amount,
-    [property: JsonPropertyName("currency")] string? Currency
+    [property: JsonPropertyName("note")] string? Note,
+    [property: JsonPropertyName("receipt")] byte[] Receipt
+);
+
+/// <summary>
+/// Дані poll-create повідомлення (receive-side).
+/// </summary>
+/// <remarks>
+/// signal-cli-api-coverage Wave 7b. Pinned до
+/// <c>src/main/java/org/asamk/signal/json/JsonPollCreate.java @ bda4e7fc</c>.
+/// </remarks>
+/// <param name="Question">Текст question'у (non-null).</param>
+/// <param name="AllowMultiple">Чи voter може select кілька опцій.</param>
+/// <param name="Options">Список option-strings у original order.</param>
+[PublicAPI]
+public record JsonPollCreate(
+    [property: JsonPropertyName("question")] string Question,
+    [property: JsonPropertyName("allowMultiple")] bool AllowMultiple,
+    [property: JsonPropertyName("options")] List<string> Options
+);
+
+/// <summary>
+/// Дані poll-vote повідомлення (receive-side).
+/// </summary>
+/// <remarks>
+/// signal-cli-api-coverage Wave 7b. Pinned до
+/// <c>src/main/java/org/asamk/signal/json/JsonPollVote.java @ bda4e7fc</c>.
+/// <para><b>§F17:</b> <see cref="Author"/> upstream @Deprecated — legacy identifier. Mirror з [Obsolete].</para>
+/// </remarks>
+/// <param name="Author">Legacy address (@Deprecated upstream). Use AuthorNumber/AuthorUuid instead.</param>
+/// <param name="AuthorNumber">E.164 phone of voter, nullable.</param>
+/// <param name="AuthorUuid">UUID of voter, nullable.</param>
+/// <param name="TargetSentTimestamp">Timestamp оригіналу poll-create.</param>
+/// <param name="OptionIndexes">Zero-based indexes selected (empty = clear vote).</param>
+/// <param name="VoteCount">Per-voter monotonic counter.</param>
+[PublicAPI]
+public record JsonPollVote(
+    [property: JsonPropertyName("author")] string? Author,
+    [property: JsonPropertyName("authorNumber")] string? AuthorNumber,
+    [property: JsonPropertyName("authorUuid")] string? AuthorUuid,
+    [property: JsonPropertyName("targetSentTimestamp")] long TargetSentTimestamp,
+    [property: JsonPropertyName("optionIndexes")] List<int> OptionIndexes,
+    [property: JsonPropertyName("voteCount")] int VoteCount
+);
+
+/// <summary>
+/// Дані poll-terminate повідомлення (receive-side). NO author field — terminator implicit (original poll creator).
+/// </summary>
+/// <remarks>
+/// signal-cli-api-coverage Wave 7b. Pinned до
+/// <c>src/main/java/org/asamk/signal/json/JsonPollTerminate.java @ bda4e7fc</c>.
+/// </remarks>
+/// <param name="TargetSentTimestamp">Timestamp оригіналу poll-create.</param>
+[PublicAPI]
+public record JsonPollTerminate(
+    [property: JsonPropertyName("targetSentTimestamp")] long TargetSentTimestamp
+);
+
+/// <summary>
+/// Дані pin-message повідомлення (receive-side).
+/// </summary>
+/// <remarks>
+/// signal-cli-api-coverage Wave 7b. Pinned до
+/// <c>src/main/java/org/asamk/signal/json/JsonPinMessage.java @ bda4e7fc</c>.
+/// <para><b>§F16:</b> wire <see cref="PinDurationSeconds"/> — <c>long</c> (різниться з send-side <c>int</c>).</para>
+/// <para><b>§F17:</b> <see cref="TargetAuthor"/> @Deprecated upstream.</para>
+/// </remarks>
+/// <param name="TargetAuthor">Legacy identifier (@Deprecated). Use TargetAuthorNumber/Uuid.</param>
+/// <param name="TargetAuthorNumber">E.164 author of pinned message, nullable.</param>
+/// <param name="TargetAuthorUuid">UUID author, nullable.</param>
+/// <param name="TargetSentTimestamp">Timestamp pinned message.</param>
+/// <param name="PinDurationSeconds">§F16 long: pin duration. <c>-1</c> = forever sentinel.</param>
+[PublicAPI]
+public record JsonPinMessage(
+    [property: JsonPropertyName("targetAuthor")] string? TargetAuthor,
+    [property: JsonPropertyName("targetAuthorNumber")] string? TargetAuthorNumber,
+    [property: JsonPropertyName("targetAuthorUuid")] string? TargetAuthorUuid,
+    [property: JsonPropertyName("targetSentTimestamp")] long TargetSentTimestamp,
+    [property: JsonPropertyName("pinDurationSeconds")] long PinDurationSeconds
+);
+
+/// <summary>
+/// Дані unpin-message повідомлення (receive-side). Symmetric до JsonPinMessage минус PinDurationSeconds.
+/// </summary>
+/// <remarks>
+/// signal-cli-api-coverage Wave 7b. Pinned до
+/// <c>src/main/java/org/asamk/signal/json/JsonUnpinMessage.java @ bda4e7fc</c>.
+/// </remarks>
+/// <param name="TargetAuthor">Legacy identifier (@Deprecated).</param>
+/// <param name="TargetAuthorNumber">E.164 author, nullable.</param>
+/// <param name="TargetAuthorUuid">UUID author, nullable.</param>
+/// <param name="TargetSentTimestamp">Timestamp message being unpinned.</param>
+[PublicAPI]
+public record JsonUnpinMessage(
+    [property: JsonPropertyName("targetAuthor")] string? TargetAuthor,
+    [property: JsonPropertyName("targetAuthorNumber")] string? TargetAuthorNumber,
+    [property: JsonPropertyName("targetAuthorUuid")] string? TargetAuthorUuid,
+    [property: JsonPropertyName("targetSentTimestamp")] long TargetSentTimestamp
+);
+
+/// <summary>
+/// Дані admin-delete повідомлення (receive-side). Structurally identical to JsonUnpinMessage.
+/// </summary>
+/// <remarks>
+/// signal-cli-api-coverage Wave 7b. Pinned до
+/// <c>src/main/java/org/asamk/signal/json/JsonAdminDelete.java @ bda4e7fc</c>.
+/// Розрізняється з JsonUnpinMessage лише routing у JsonDataMessage (adminDelete field).
+/// </remarks>
+/// <param name="TargetAuthor">Legacy identifier (@Deprecated).</param>
+/// <param name="TargetAuthorNumber">E.164 author of admin-deleted message.</param>
+/// <param name="TargetAuthorUuid">UUID author.</param>
+/// <param name="TargetSentTimestamp">Timestamp admin-deleted message.</param>
+[PublicAPI]
+public record JsonAdminDelete(
+    [property: JsonPropertyName("targetAuthor")] string? TargetAuthor,
+    [property: JsonPropertyName("targetAuthorNumber")] string? TargetAuthorNumber,
+    [property: JsonPropertyName("targetAuthorUuid")] string? TargetAuthorUuid,
+    [property: JsonPropertyName("targetSentTimestamp")] long TargetSentTimestamp
 );
 
 /// <summary>

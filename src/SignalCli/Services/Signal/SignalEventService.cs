@@ -80,6 +80,14 @@ internal sealed class SignalEventService(
     private readonly Subject<QuoteEventArgs> _quotes = new();
     private readonly Subject<EditEventArgs> _edits = new();
     private readonly Subject<RemoteDeleteEventArgs> _remoteDeletes = new();
+    // signal-cli-api-coverage Wave 7b: 7 нових event streams.
+    private readonly Subject<PollCreateEventArgs> _pollCreates = new();
+    private readonly Subject<PollVoteEventArgs> _pollVotes = new();
+    private readonly Subject<PollTerminateEventArgs> _pollTerminates = new();
+    private readonly Subject<PaymentEventArgs> _payments = new();
+    private readonly Subject<PinMessageEventArgs> _pinMessages = new();
+    private readonly Subject<UnpinMessageEventArgs> _unpinMessages = new();
+    private readonly Subject<AdminDeleteEventArgs> _adminDeletes = new();
 
     // E (async-stream events): bounded channels, парні до Subject-ів.
     // DropOldest на переповненні + лічильник дропів (Debug-лог).
@@ -100,6 +108,14 @@ internal sealed class SignalEventService(
     private readonly Channel<QuoteEventArgs> _quoteChannel = Channel.CreateBounded<QuoteEventArgs>(ChannelOptionsTemplate());
     private readonly Channel<EditEventArgs> _editChannel = Channel.CreateBounded<EditEventArgs>(ChannelOptionsTemplate());
     private readonly Channel<RemoteDeleteEventArgs> _remoteDeleteChannel = Channel.CreateBounded<RemoteDeleteEventArgs>(ChannelOptionsTemplate());
+    // Wave 7b channels.
+    private readonly Channel<PollCreateEventArgs> _pollCreateChannel = Channel.CreateBounded<PollCreateEventArgs>(ChannelOptionsTemplate());
+    private readonly Channel<PollVoteEventArgs> _pollVoteChannel = Channel.CreateBounded<PollVoteEventArgs>(ChannelOptionsTemplate());
+    private readonly Channel<PollTerminateEventArgs> _pollTerminateChannel = Channel.CreateBounded<PollTerminateEventArgs>(ChannelOptionsTemplate());
+    private readonly Channel<PaymentEventArgs> _paymentChannel = Channel.CreateBounded<PaymentEventArgs>(ChannelOptionsTemplate());
+    private readonly Channel<PinMessageEventArgs> _pinMessageChannel = Channel.CreateBounded<PinMessageEventArgs>(ChannelOptionsTemplate());
+    private readonly Channel<UnpinMessageEventArgs> _unpinMessageChannel = Channel.CreateBounded<UnpinMessageEventArgs>(ChannelOptionsTemplate());
+    private readonly Channel<AdminDeleteEventArgs> _adminDeleteChannel = Channel.CreateBounded<AdminDeleteEventArgs>(ChannelOptionsTemplate());
 
     // post-modernize-tuning §8c.21 + §11.B.4: drop accounting перенесено повністю
     // на Meter (`signalcli.events.dropped` counter з `event_type` тегом).
@@ -130,6 +146,21 @@ internal sealed class SignalEventService(
     public IObservable<EditEventArgs> Edits => _edits.AsObservable();
 
     public IObservable<RemoteDeleteEventArgs> RemoteDeletes => _remoteDeletes.AsObservable();
+    // Wave 7b IObservable properties.
+    /// <inheritdoc/>
+    public IObservable<PollCreateEventArgs> PollCreates => _pollCreates.AsObservable();
+    /// <inheritdoc/>
+    public IObservable<PollVoteEventArgs> PollVotes => _pollVotes.AsObservable();
+    /// <inheritdoc/>
+    public IObservable<PollTerminateEventArgs> PollTerminates => _pollTerminates.AsObservable();
+    /// <inheritdoc/>
+    public IObservable<PaymentEventArgs> Payments => _payments.AsObservable();
+    /// <inheritdoc/>
+    public IObservable<PinMessageEventArgs> PinMessages => _pinMessages.AsObservable();
+    /// <inheritdoc/>
+    public IObservable<UnpinMessageEventArgs> UnpinMessages => _unpinMessages.AsObservable();
+    /// <inheritdoc/>
+    public IObservable<AdminDeleteEventArgs> AdminDeletes => _adminDeletes.AsObservable();
 
     // ===== E (async-stream API) =====
 
@@ -172,6 +203,29 @@ internal sealed class SignalEventService(
     /// <inheritdoc />
     public IAsyncEnumerable<RemoteDeleteEventArgs> RemoteDeletesAsync(CancellationToken cancellationToken = default)
         => _remoteDeleteChannel.Reader.ReadAllAsync(cancellationToken);
+
+    // Wave 7b IAsyncEnumerable methods.
+    /// <inheritdoc/>
+    public IAsyncEnumerable<PollCreateEventArgs> PollCreatesAsync(CancellationToken cancellationToken = default)
+        => _pollCreateChannel.Reader.ReadAllAsync(cancellationToken);
+    /// <inheritdoc/>
+    public IAsyncEnumerable<PollVoteEventArgs> PollVotesAsync(CancellationToken cancellationToken = default)
+        => _pollVoteChannel.Reader.ReadAllAsync(cancellationToken);
+    /// <inheritdoc/>
+    public IAsyncEnumerable<PollTerminateEventArgs> PollTerminatesAsync(CancellationToken cancellationToken = default)
+        => _pollTerminateChannel.Reader.ReadAllAsync(cancellationToken);
+    /// <inheritdoc/>
+    public IAsyncEnumerable<PaymentEventArgs> PaymentsAsync(CancellationToken cancellationToken = default)
+        => _paymentChannel.Reader.ReadAllAsync(cancellationToken);
+    /// <inheritdoc/>
+    public IAsyncEnumerable<PinMessageEventArgs> PinMessagesAsync(CancellationToken cancellationToken = default)
+        => _pinMessageChannel.Reader.ReadAllAsync(cancellationToken);
+    /// <inheritdoc/>
+    public IAsyncEnumerable<UnpinMessageEventArgs> UnpinMessagesAsync(CancellationToken cancellationToken = default)
+        => _unpinMessageChannel.Reader.ReadAllAsync(cancellationToken);
+    /// <inheritdoc/>
+    public IAsyncEnumerable<AdminDeleteEventArgs> AdminDeletesAsync(CancellationToken cancellationToken = default)
+        => _adminDeleteChannel.Reader.ReadAllAsync(cancellationToken);
 
     /// <summary>
     /// E (async-stream): записує елемент у канал; у DropOldest-режимі TryWrite завжди
@@ -560,6 +614,87 @@ internal sealed class SignalEventService(
                     emitted = true;
                 }
 
+                // ===== Wave 7b: 7 нових presence-based union branches =====
+                // PRESENCE-BASED UNION (critical rule #4): кожне поле перевіряється
+                // НЕЗАЛЕЖНО без early-return — кілька payload'ів можуть бути одночасно.
+
+                if (data.PollCreate is not null)
+                {
+                    var pc = new PollCreateEventArgs(subscriptionId, account, data.PollCreate,
+                        jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
+                        jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
+                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp);
+                    _pollCreates.OnNext(pc);
+                    TryWriteOrDrop(_pollCreateChannel, pc, "poll_create");
+                    emitted = true;
+                }
+
+                if (data.PollVote is not null)
+                {
+                    var pv = new PollVoteEventArgs(subscriptionId, account, data.PollVote,
+                        jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
+                        jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
+                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp);
+                    _pollVotes.OnNext(pv);
+                    TryWriteOrDrop(_pollVoteChannel, pv, "poll_vote");
+                    emitted = true;
+                }
+
+                if (data.PollTerminate is not null)
+                {
+                    var pt = new PollTerminateEventArgs(subscriptionId, account, data.PollTerminate,
+                        jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
+                        jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
+                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp);
+                    _pollTerminates.OnNext(pt);
+                    TryWriteOrDrop(_pollTerminateChannel, pt, "poll_terminate");
+                    emitted = true;
+                }
+
+                if (data.Payment is not null)
+                {
+                    var pe = new PaymentEventArgs(subscriptionId, account, data.Payment,
+                        jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
+                        jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
+                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp);
+                    _payments.OnNext(pe);
+                    TryWriteOrDrop(_paymentChannel, pe, "payment");
+                    emitted = true;
+                }
+
+                if (data.PinMessage is not null)
+                {
+                    var pm = new PinMessageEventArgs(subscriptionId, account, data.PinMessage,
+                        jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
+                        jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
+                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp);
+                    _pinMessages.OnNext(pm);
+                    TryWriteOrDrop(_pinMessageChannel, pm, "pin_message");
+                    emitted = true;
+                }
+
+                if (data.UnpinMessage is not null)
+                {
+                    var upm = new UnpinMessageEventArgs(subscriptionId, account, data.UnpinMessage,
+                        jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
+                        jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
+                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp);
+                    _unpinMessages.OnNext(upm);
+                    TryWriteOrDrop(_unpinMessageChannel, upm, "unpin_message");
+                    emitted = true;
+                }
+
+                if (data.AdminDelete is not null)
+                {
+                    var ad = new AdminDeleteEventArgs(subscriptionId, account, data.AdminDelete,
+                        jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
+                        jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
+                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp);
+                    _adminDeletes.OnNext(ad);
+                    TryWriteOrDrop(_adminDeleteChannel, ad, "admin_delete");
+                    emitted = true;
+                }
+
                 if (!emitted)
                     SignalEventServiceLog.DataMessageEmpty(_logger);
                 return;
@@ -626,6 +761,14 @@ internal sealed class SignalEventService(
         _quoteChannel.Writer.TryComplete();
         _editChannel.Writer.TryComplete();
         _remoteDeleteChannel.Writer.TryComplete();
+        // Wave 7b channels.
+        _pollCreateChannel.Writer.TryComplete();
+        _pollVoteChannel.Writer.TryComplete();
+        _pollTerminateChannel.Writer.TryComplete();
+        _paymentChannel.Writer.TryComplete();
+        _pinMessageChannel.Writer.TryComplete();
+        _unpinMessageChannel.Writer.TryComplete();
+        _adminDeleteChannel.Writer.TryComplete();
 
         // F17 (H.17): OnCompleted ПЛЮС Dispose — раніше Subject не диспоузувся
         // (раніше теж так було, але якщо StartAsync викликався двічі — _notificationSubscription
@@ -640,6 +783,14 @@ internal sealed class SignalEventService(
         _quotes.OnCompleted(); _quotes.Dispose();
         _edits.OnCompleted(); _edits.Dispose();
         _remoteDeletes.OnCompleted(); _remoteDeletes.Dispose();
+        // Wave 7b Subject disposal.
+        _pollCreates.OnCompleted(); _pollCreates.Dispose();
+        _pollVotes.OnCompleted(); _pollVotes.Dispose();
+        _pollTerminates.OnCompleted(); _pollTerminates.Dispose();
+        _payments.OnCompleted(); _payments.Dispose();
+        _pinMessages.OnCompleted(); _pinMessages.Dispose();
+        _unpinMessages.OnCompleted(); _unpinMessages.Dispose();
+        _adminDeletes.OnCompleted(); _adminDeletes.Dispose();
     }
 
     public Task StartAsync(CancellationToken cancellationToken)

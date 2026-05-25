@@ -96,8 +96,14 @@ M:SignalCli.Interfaces.Signal.ISignalDevices.ListDevicesAsync(System.String,Syst
 M:SignalCli.Interfaces.Signal.ISignalDevices.RemoveDeviceAsync(System.String,System.Int32,System.Threading.CancellationToken)
 M:SignalCli.Interfaces.Signal.ISignalDevices.StartLinkAsync(System.Threading.CancellationToken)
 M:SignalCli.Interfaces.Signal.ISignalDevices.UpdateDeviceAsync(System.String,System.Int32,System.String,System.Threading.CancellationToken)
+M:SignalCli.Interfaces.Signal.ISignalEventService.AdminDeletesAsync(System.Threading.CancellationToken)
 M:SignalCli.Interfaces.Signal.ISignalEventService.AttachmentsAsync(System.Threading.CancellationToken)
 M:SignalCli.Interfaces.Signal.ISignalEventService.EditsAsync(System.Threading.CancellationToken)
+M:SignalCli.Interfaces.Signal.ISignalEventService.PaymentsAsync(System.Threading.CancellationToken)
+M:SignalCli.Interfaces.Signal.ISignalEventService.PinMessagesAsync(System.Threading.CancellationToken)
+M:SignalCli.Interfaces.Signal.ISignalEventService.PollCreatesAsync(System.Threading.CancellationToken)
+M:SignalCli.Interfaces.Signal.ISignalEventService.PollTerminatesAsync(System.Threading.CancellationToken)
+M:SignalCli.Interfaces.Signal.ISignalEventService.PollVotesAsync(System.Threading.CancellationToken)
 M:SignalCli.Interfaces.Signal.ISignalEventService.QuotesAsync(System.Threading.CancellationToken)
 M:SignalCli.Interfaces.Signal.ISignalEventService.ReactionAsync(System.Threading.CancellationToken)
 M:SignalCli.Interfaces.Signal.ISignalEventService.ReceiptsAsync(System.Threading.CancellationToken)
@@ -107,6 +113,7 @@ M:SignalCli.Interfaces.Signal.ISignalEventService.SubscribeAsync(System.String,S
 M:SignalCli.Interfaces.Signal.ISignalEventService.SyncsAsync(System.Threading.CancellationToken)
 M:SignalCli.Interfaces.Signal.ISignalEventService.TextMessagesAsync(System.Threading.CancellationToken)
 M:SignalCli.Interfaces.Signal.ISignalEventService.TypingAsync(System.Threading.CancellationToken)
+M:SignalCli.Interfaces.Signal.ISignalEventService.UnpinMessagesAsync(System.Threading.CancellationToken)
 M:SignalCli.Interfaces.Signal.ISignalEventService.UnsubscribeAsync(System.Int32,System.Threading.CancellationToken)
 M:SignalCli.Interfaces.Signal.ISignalGroups.JoinGroupAsync(System.String,System.String,System.Threading.CancellationToken)
 M:SignalCli.Interfaces.Signal.ISignalGroups.ListGroupsAsync(System.String,System.Threading.CancellationToken)
@@ -556,6 +563,14 @@ M:SignalCli.Models.Signal.Devices.UpdateDeviceParameters.Equals(SignalCli.Models
 M:SignalCli.Models.Signal.Devices.UpdateDeviceParameters.Equals(System.Object)
 M:SignalCli.Models.Signal.Devices.UpdateDeviceParameters.GetHashCode()
 M:SignalCli.Models.Signal.Devices.UpdateDeviceParameters.ToString()
+M:SignalCli.Models.Signal.Events.AdminDeleteEventArgs..ctor(System.Int32,System.String,SignalCli.Models.Signal.JsonAdminDelete,System.String,System.String,System.String,System.String,System.Nullable<System.Int32>,System.Int64,System.Int64,System.Int64)
+M:SignalCli.Models.Signal.Events.AdminDeleteEventArgs.<Clone>$()
+M:SignalCli.Models.Signal.Events.AdminDeleteEventArgs.Deconstruct(System.Int32&,System.String&,SignalCli.Models.Signal.JsonAdminDelete&,System.String&,System.String&,System.String&,System.String&,System.Nullable`1[[System.Int32, System.Private.CoreLib]]&,System.Int64&,System.Int64&,System.Int64&)
+M:SignalCli.Models.Signal.Events.AdminDeleteEventArgs.Equals(SignalCli.Models.Signal.Events.AdminDeleteEventArgs)
+M:SignalCli.Models.Signal.Events.AdminDeleteEventArgs.Equals(SignalCli.Models.Signal.Events.BaseSignalEventArgs)
+M:SignalCli.Models.Signal.Events.AdminDeleteEventArgs.Equals(System.Object)
+M:SignalCli.Models.Signal.Events.AdminDeleteEventArgs.GetHashCode()
+M:SignalCli.Models.Signal.Events.AdminDeleteEventArgs.ToString()
 M:SignalCli.Models.Signal.Events.AttachmentEventArgs..ctor(System.Int32,System.String,System.Collections.Generic.List<SignalCli.Models.Signal.JsonAttachment>,System.String,System.String,System.String,System.String,System.Nullable<System.Int32>,System.Int64,System.Int64,System.Int64)
 M:SignalCli.Models.Signal.Events.AttachmentEventArgs.<Clone>$()
 M:SignalCli.Models.Signal.Events.AttachmentEventArgs.Deconstruct(System.Int32&,System.String&,System.Collections.Generic.List`1[[SignalCli.Models.Signal.JsonAttachment, SignalCli]]&,System.String&,System.String&,System.String&,System.String&,System.Nullable`1[[System.Int32, System.Private.CoreLib]]&,System.Int64&,System.Int64&,System.Int64&)
@@ -579,6 +594,46 @@ M:SignalCli.Models.Signal.Events.EditEventArgs.Equals(SignalCli.Models.Signal.Ev
 M:SignalCli.Models.Signal.Events.EditEventArgs.Equals(System.Object)
 M:SignalCli.Models.Signal.Events.EditEventArgs.GetHashCode()
 M:SignalCli.Models.Signal.Events.EditEventArgs.ToString()
+M:SignalCli.Models.Signal.Events.PaymentEventArgs..ctor(System.Int32,System.String,SignalCli.Models.Signal.JsonPayment,System.String,System.String,System.String,System.String,System.Nullable<System.Int32>,System.Int64,System.Int64,System.Int64)
+M:SignalCli.Models.Signal.Events.PaymentEventArgs.<Clone>$()
+M:SignalCli.Models.Signal.Events.PaymentEventArgs.Deconstruct(System.Int32&,System.String&,SignalCli.Models.Signal.JsonPayment&,System.String&,System.String&,System.String&,System.String&,System.Nullable`1[[System.Int32, System.Private.CoreLib]]&,System.Int64&,System.Int64&,System.Int64&)
+M:SignalCli.Models.Signal.Events.PaymentEventArgs.Equals(SignalCli.Models.Signal.Events.BaseSignalEventArgs)
+M:SignalCli.Models.Signal.Events.PaymentEventArgs.Equals(SignalCli.Models.Signal.Events.PaymentEventArgs)
+M:SignalCli.Models.Signal.Events.PaymentEventArgs.Equals(System.Object)
+M:SignalCli.Models.Signal.Events.PaymentEventArgs.GetHashCode()
+M:SignalCli.Models.Signal.Events.PaymentEventArgs.ToString()
+M:SignalCli.Models.Signal.Events.PinMessageEventArgs..ctor(System.Int32,System.String,SignalCli.Models.Signal.JsonPinMessage,System.String,System.String,System.String,System.String,System.Nullable<System.Int32>,System.Int64,System.Int64,System.Int64)
+M:SignalCli.Models.Signal.Events.PinMessageEventArgs.<Clone>$()
+M:SignalCli.Models.Signal.Events.PinMessageEventArgs.Deconstruct(System.Int32&,System.String&,SignalCli.Models.Signal.JsonPinMessage&,System.String&,System.String&,System.String&,System.String&,System.Nullable`1[[System.Int32, System.Private.CoreLib]]&,System.Int64&,System.Int64&,System.Int64&)
+M:SignalCli.Models.Signal.Events.PinMessageEventArgs.Equals(SignalCli.Models.Signal.Events.BaseSignalEventArgs)
+M:SignalCli.Models.Signal.Events.PinMessageEventArgs.Equals(SignalCli.Models.Signal.Events.PinMessageEventArgs)
+M:SignalCli.Models.Signal.Events.PinMessageEventArgs.Equals(System.Object)
+M:SignalCli.Models.Signal.Events.PinMessageEventArgs.GetHashCode()
+M:SignalCli.Models.Signal.Events.PinMessageEventArgs.ToString()
+M:SignalCli.Models.Signal.Events.PollCreateEventArgs..ctor(System.Int32,System.String,SignalCli.Models.Signal.JsonPollCreate,System.String,System.String,System.String,System.String,System.Nullable<System.Int32>,System.Int64,System.Int64,System.Int64)
+M:SignalCli.Models.Signal.Events.PollCreateEventArgs.<Clone>$()
+M:SignalCli.Models.Signal.Events.PollCreateEventArgs.Deconstruct(System.Int32&,System.String&,SignalCli.Models.Signal.JsonPollCreate&,System.String&,System.String&,System.String&,System.String&,System.Nullable`1[[System.Int32, System.Private.CoreLib]]&,System.Int64&,System.Int64&,System.Int64&)
+M:SignalCli.Models.Signal.Events.PollCreateEventArgs.Equals(SignalCli.Models.Signal.Events.BaseSignalEventArgs)
+M:SignalCli.Models.Signal.Events.PollCreateEventArgs.Equals(SignalCli.Models.Signal.Events.PollCreateEventArgs)
+M:SignalCli.Models.Signal.Events.PollCreateEventArgs.Equals(System.Object)
+M:SignalCli.Models.Signal.Events.PollCreateEventArgs.GetHashCode()
+M:SignalCli.Models.Signal.Events.PollCreateEventArgs.ToString()
+M:SignalCli.Models.Signal.Events.PollTerminateEventArgs..ctor(System.Int32,System.String,SignalCli.Models.Signal.JsonPollTerminate,System.String,System.String,System.String,System.String,System.Nullable<System.Int32>,System.Int64,System.Int64,System.Int64)
+M:SignalCli.Models.Signal.Events.PollTerminateEventArgs.<Clone>$()
+M:SignalCli.Models.Signal.Events.PollTerminateEventArgs.Deconstruct(System.Int32&,System.String&,SignalCli.Models.Signal.JsonPollTerminate&,System.String&,System.String&,System.String&,System.String&,System.Nullable`1[[System.Int32, System.Private.CoreLib]]&,System.Int64&,System.Int64&,System.Int64&)
+M:SignalCli.Models.Signal.Events.PollTerminateEventArgs.Equals(SignalCli.Models.Signal.Events.BaseSignalEventArgs)
+M:SignalCli.Models.Signal.Events.PollTerminateEventArgs.Equals(SignalCli.Models.Signal.Events.PollTerminateEventArgs)
+M:SignalCli.Models.Signal.Events.PollTerminateEventArgs.Equals(System.Object)
+M:SignalCli.Models.Signal.Events.PollTerminateEventArgs.GetHashCode()
+M:SignalCli.Models.Signal.Events.PollTerminateEventArgs.ToString()
+M:SignalCli.Models.Signal.Events.PollVoteEventArgs..ctor(System.Int32,System.String,SignalCli.Models.Signal.JsonPollVote,System.String,System.String,System.String,System.String,System.Nullable<System.Int32>,System.Int64,System.Int64,System.Int64)
+M:SignalCli.Models.Signal.Events.PollVoteEventArgs.<Clone>$()
+M:SignalCli.Models.Signal.Events.PollVoteEventArgs.Deconstruct(System.Int32&,System.String&,SignalCli.Models.Signal.JsonPollVote&,System.String&,System.String&,System.String&,System.String&,System.Nullable`1[[System.Int32, System.Private.CoreLib]]&,System.Int64&,System.Int64&,System.Int64&)
+M:SignalCli.Models.Signal.Events.PollVoteEventArgs.Equals(SignalCli.Models.Signal.Events.BaseSignalEventArgs)
+M:SignalCli.Models.Signal.Events.PollVoteEventArgs.Equals(SignalCli.Models.Signal.Events.PollVoteEventArgs)
+M:SignalCli.Models.Signal.Events.PollVoteEventArgs.Equals(System.Object)
+M:SignalCli.Models.Signal.Events.PollVoteEventArgs.GetHashCode()
+M:SignalCli.Models.Signal.Events.PollVoteEventArgs.ToString()
 M:SignalCli.Models.Signal.Events.QuoteEventArgs..ctor(System.Int32,System.String,SignalCli.Models.Signal.JsonDataMessage,System.String,System.String,System.String,System.String,System.Nullable<System.Int32>,System.Int64,System.Int64,System.Int64)
 M:SignalCli.Models.Signal.Events.QuoteEventArgs.<Clone>$()
 M:SignalCli.Models.Signal.Events.QuoteEventArgs.Deconstruct(System.Int32&,System.String&,SignalCli.Models.Signal.JsonDataMessage&,System.String&,System.String&,System.String&,System.String&,System.Nullable`1[[System.Int32, System.Private.CoreLib]]&,System.Int64&,System.Int64&,System.Int64&)
@@ -671,6 +726,14 @@ M:SignalCli.Models.Signal.Events.TypingEventArgs.Equals(SignalCli.Models.Signal.
 M:SignalCli.Models.Signal.Events.TypingEventArgs.Equals(System.Object)
 M:SignalCli.Models.Signal.Events.TypingEventArgs.GetHashCode()
 M:SignalCli.Models.Signal.Events.TypingEventArgs.ToString()
+M:SignalCli.Models.Signal.Events.UnpinMessageEventArgs..ctor(System.Int32,System.String,SignalCli.Models.Signal.JsonUnpinMessage,System.String,System.String,System.String,System.String,System.Nullable<System.Int32>,System.Int64,System.Int64,System.Int64)
+M:SignalCli.Models.Signal.Events.UnpinMessageEventArgs.<Clone>$()
+M:SignalCli.Models.Signal.Events.UnpinMessageEventArgs.Deconstruct(System.Int32&,System.String&,SignalCli.Models.Signal.JsonUnpinMessage&,System.String&,System.String&,System.String&,System.String&,System.Nullable`1[[System.Int32, System.Private.CoreLib]]&,System.Int64&,System.Int64&,System.Int64&)
+M:SignalCli.Models.Signal.Events.UnpinMessageEventArgs.Equals(SignalCli.Models.Signal.Events.BaseSignalEventArgs)
+M:SignalCli.Models.Signal.Events.UnpinMessageEventArgs.Equals(SignalCli.Models.Signal.Events.UnpinMessageEventArgs)
+M:SignalCli.Models.Signal.Events.UnpinMessageEventArgs.Equals(System.Object)
+M:SignalCli.Models.Signal.Events.UnpinMessageEventArgs.GetHashCode()
+M:SignalCli.Models.Signal.Events.UnpinMessageEventArgs.ToString()
 M:SignalCli.Models.Signal.Events.UnsubscribeReceiveParameters..ctor(System.Int32)
 M:SignalCli.Models.Signal.Events.UnsubscribeReceiveParameters.<Clone>$()
 M:SignalCli.Models.Signal.Events.UnsubscribeReceiveParameters.Deconstruct(System.Int32&)
@@ -800,6 +863,13 @@ M:SignalCli.Models.Signal.IceUpdate.Equals(SignalCli.Models.Signal.IceUpdate)
 M:SignalCli.Models.Signal.IceUpdate.Equals(System.Object)
 M:SignalCli.Models.Signal.IceUpdate.GetHashCode()
 M:SignalCli.Models.Signal.IceUpdate.ToString()
+M:SignalCli.Models.Signal.JsonAdminDelete..ctor(System.String,System.String,System.String,System.Int64)
+M:SignalCli.Models.Signal.JsonAdminDelete.<Clone>$()
+M:SignalCli.Models.Signal.JsonAdminDelete.Deconstruct(System.String&,System.String&,System.String&,System.Int64&)
+M:SignalCli.Models.Signal.JsonAdminDelete.Equals(SignalCli.Models.Signal.JsonAdminDelete)
+M:SignalCli.Models.Signal.JsonAdminDelete.Equals(System.Object)
+M:SignalCli.Models.Signal.JsonAdminDelete.GetHashCode()
+M:SignalCli.Models.Signal.JsonAdminDelete.ToString()
 M:SignalCli.Models.Signal.JsonAttachment..ctor(System.String,System.String,System.String,System.Int64,System.Nullable<System.Int32>,System.Nullable<System.Int32>,System.String,System.Nullable<System.Int64>)
 M:SignalCli.Models.Signal.JsonAttachment.<Clone>$()
 M:SignalCli.Models.Signal.JsonAttachment.Deconstruct(System.String&,System.String&,System.String&,System.Int64&,System.Nullable`1[[System.Int32, System.Private.CoreLib]]&,System.Nullable`1[[System.Int32, System.Private.CoreLib]]&,System.String&,System.Nullable`1[[System.Int64, System.Private.CoreLib]]&)
@@ -814,9 +884,9 @@ M:SignalCli.Models.Signal.JsonCallMessage.Equals(SignalCli.Models.Signal.JsonCal
 M:SignalCli.Models.Signal.JsonCallMessage.Equals(System.Object)
 M:SignalCli.Models.Signal.JsonCallMessage.GetHashCode()
 M:SignalCli.Models.Signal.JsonCallMessage.ToString()
-M:SignalCli.Models.Signal.JsonDataMessage..ctor(System.UInt64,System.String,System.Nullable<System.Int32>,System.Nullable<System.Boolean>,SignalCli.Models.Signal.JsonReaction,SignalCli.Models.Signal.JsonQuote,SignalCli.Models.Signal.JsonPayment,System.Collections.Generic.List<SignalCli.Models.Signal.JsonMention>,System.Collections.Generic.List<SignalCli.Models.Signal.JsonPreview>,System.Collections.Generic.List<SignalCli.Models.Signal.JsonAttachment>,SignalCli.Models.Signal.JsonSticker,SignalCli.Models.Signal.JsonRemoteDelete,System.Collections.Generic.List<SignalCli.Models.Signal.JsonSharedContact>,System.Collections.Generic.List<SignalCli.Models.Signal.JsonTextStyle>,SignalCli.Models.Signal.JsonGroupInfo,SignalCli.Models.Signal.JsonStoryContext)
+M:SignalCli.Models.Signal.JsonDataMessage..ctor(System.UInt64,System.String,System.Nullable<System.Int32>,System.Nullable<System.Boolean>,SignalCli.Models.Signal.JsonReaction,SignalCli.Models.Signal.JsonQuote,SignalCli.Models.Signal.JsonPayment,System.Collections.Generic.List<SignalCli.Models.Signal.JsonMention>,System.Collections.Generic.List<SignalCli.Models.Signal.JsonPreview>,System.Collections.Generic.List<SignalCli.Models.Signal.JsonAttachment>,SignalCli.Models.Signal.JsonSticker,SignalCli.Models.Signal.JsonRemoteDelete,System.Collections.Generic.List<SignalCli.Models.Signal.JsonSharedContact>,System.Collections.Generic.List<SignalCli.Models.Signal.JsonTextStyle>,SignalCli.Models.Signal.JsonGroupInfo,SignalCli.Models.Signal.JsonStoryContext,SignalCli.Models.Signal.JsonPollCreate,SignalCli.Models.Signal.JsonPollVote,SignalCli.Models.Signal.JsonPollTerminate,SignalCli.Models.Signal.JsonPinMessage,SignalCli.Models.Signal.JsonUnpinMessage,SignalCli.Models.Signal.JsonAdminDelete)
 M:SignalCli.Models.Signal.JsonDataMessage.<Clone>$()
-M:SignalCli.Models.Signal.JsonDataMessage.Deconstruct(System.UInt64&,System.String&,System.Nullable`1[[System.Int32, System.Private.CoreLib]]&,System.Nullable`1[[System.Boolean, System.Private.CoreLib]]&,SignalCli.Models.Signal.JsonReaction&,SignalCli.Models.Signal.JsonQuote&,SignalCli.Models.Signal.JsonPayment&,System.Collections.Generic.List`1[[SignalCli.Models.Signal.JsonMention, SignalCli]]&,System.Collections.Generic.List`1[[SignalCli.Models.Signal.JsonPreview, SignalCli]]&,System.Collections.Generic.List`1[[SignalCli.Models.Signal.JsonAttachment, SignalCli]]&,SignalCli.Models.Signal.JsonSticker&,SignalCli.Models.Signal.JsonRemoteDelete&,System.Collections.Generic.List`1[[SignalCli.Models.Signal.JsonSharedContact, SignalCli]]&,System.Collections.Generic.List`1[[SignalCli.Models.Signal.JsonTextStyle, SignalCli]]&,SignalCli.Models.Signal.JsonGroupInfo&,SignalCli.Models.Signal.JsonStoryContext&)
+M:SignalCli.Models.Signal.JsonDataMessage.Deconstruct(System.UInt64&,System.String&,System.Nullable`1[[System.Int32, System.Private.CoreLib]]&,System.Nullable`1[[System.Boolean, System.Private.CoreLib]]&,SignalCli.Models.Signal.JsonReaction&,SignalCli.Models.Signal.JsonQuote&,SignalCli.Models.Signal.JsonPayment&,System.Collections.Generic.List`1[[SignalCli.Models.Signal.JsonMention, SignalCli]]&,System.Collections.Generic.List`1[[SignalCli.Models.Signal.JsonPreview, SignalCli]]&,System.Collections.Generic.List`1[[SignalCli.Models.Signal.JsonAttachment, SignalCli]]&,SignalCli.Models.Signal.JsonSticker&,SignalCli.Models.Signal.JsonRemoteDelete&,System.Collections.Generic.List`1[[SignalCli.Models.Signal.JsonSharedContact, SignalCli]]&,System.Collections.Generic.List`1[[SignalCli.Models.Signal.JsonTextStyle, SignalCli]]&,SignalCli.Models.Signal.JsonGroupInfo&,SignalCli.Models.Signal.JsonStoryContext&,SignalCli.Models.Signal.JsonPollCreate&,SignalCli.Models.Signal.JsonPollVote&,SignalCli.Models.Signal.JsonPollTerminate&,SignalCli.Models.Signal.JsonPinMessage&,SignalCli.Models.Signal.JsonUnpinMessage&,SignalCli.Models.Signal.JsonAdminDelete&)
 M:SignalCli.Models.Signal.JsonDataMessage.Equals(SignalCli.Models.Signal.JsonDataMessage)
 M:SignalCli.Models.Signal.JsonDataMessage.Equals(System.Object)
 M:SignalCli.Models.Signal.JsonDataMessage.GetHashCode()
@@ -849,13 +919,41 @@ M:SignalCli.Models.Signal.JsonMessageEnvelope.Equals(SignalCli.Models.Signal.Jso
 M:SignalCli.Models.Signal.JsonMessageEnvelope.Equals(System.Object)
 M:SignalCli.Models.Signal.JsonMessageEnvelope.GetHashCode()
 M:SignalCli.Models.Signal.JsonMessageEnvelope.ToString()
-M:SignalCli.Models.Signal.JsonPayment..ctor(System.Decimal,System.String)
+M:SignalCli.Models.Signal.JsonPayment..ctor(System.String,System.Byte[])
 M:SignalCli.Models.Signal.JsonPayment.<Clone>$()
-M:SignalCli.Models.Signal.JsonPayment.Deconstruct(System.Decimal&,System.String&)
+M:SignalCli.Models.Signal.JsonPayment.Deconstruct(System.String&,System.Byte[]&)
 M:SignalCli.Models.Signal.JsonPayment.Equals(SignalCli.Models.Signal.JsonPayment)
 M:SignalCli.Models.Signal.JsonPayment.Equals(System.Object)
 M:SignalCli.Models.Signal.JsonPayment.GetHashCode()
 M:SignalCli.Models.Signal.JsonPayment.ToString()
+M:SignalCli.Models.Signal.JsonPinMessage..ctor(System.String,System.String,System.String,System.Int64,System.Int64)
+M:SignalCli.Models.Signal.JsonPinMessage.<Clone>$()
+M:SignalCli.Models.Signal.JsonPinMessage.Deconstruct(System.String&,System.String&,System.String&,System.Int64&,System.Int64&)
+M:SignalCli.Models.Signal.JsonPinMessage.Equals(SignalCli.Models.Signal.JsonPinMessage)
+M:SignalCli.Models.Signal.JsonPinMessage.Equals(System.Object)
+M:SignalCli.Models.Signal.JsonPinMessage.GetHashCode()
+M:SignalCli.Models.Signal.JsonPinMessage.ToString()
+M:SignalCli.Models.Signal.JsonPollCreate..ctor(System.String,System.Boolean,System.Collections.Generic.List<System.String>)
+M:SignalCli.Models.Signal.JsonPollCreate.<Clone>$()
+M:SignalCli.Models.Signal.JsonPollCreate.Deconstruct(System.String&,System.Boolean&,System.Collections.Generic.List`1[[System.String, System.Private.CoreLib]]&)
+M:SignalCli.Models.Signal.JsonPollCreate.Equals(SignalCli.Models.Signal.JsonPollCreate)
+M:SignalCli.Models.Signal.JsonPollCreate.Equals(System.Object)
+M:SignalCli.Models.Signal.JsonPollCreate.GetHashCode()
+M:SignalCli.Models.Signal.JsonPollCreate.ToString()
+M:SignalCli.Models.Signal.JsonPollTerminate..ctor(System.Int64)
+M:SignalCli.Models.Signal.JsonPollTerminate.<Clone>$()
+M:SignalCli.Models.Signal.JsonPollTerminate.Deconstruct(System.Int64&)
+M:SignalCli.Models.Signal.JsonPollTerminate.Equals(SignalCli.Models.Signal.JsonPollTerminate)
+M:SignalCli.Models.Signal.JsonPollTerminate.Equals(System.Object)
+M:SignalCli.Models.Signal.JsonPollTerminate.GetHashCode()
+M:SignalCli.Models.Signal.JsonPollTerminate.ToString()
+M:SignalCli.Models.Signal.JsonPollVote..ctor(System.String,System.String,System.String,System.Int64,System.Collections.Generic.List<System.Int32>,System.Int32)
+M:SignalCli.Models.Signal.JsonPollVote.<Clone>$()
+M:SignalCli.Models.Signal.JsonPollVote.Deconstruct(System.String&,System.String&,System.String&,System.Int64&,System.Collections.Generic.List`1[[System.Int32, System.Private.CoreLib]]&,System.Int32&)
+M:SignalCli.Models.Signal.JsonPollVote.Equals(SignalCli.Models.Signal.JsonPollVote)
+M:SignalCli.Models.Signal.JsonPollVote.Equals(System.Object)
+M:SignalCli.Models.Signal.JsonPollVote.GetHashCode()
+M:SignalCli.Models.Signal.JsonPollVote.ToString()
 M:SignalCli.Models.Signal.JsonPreview..ctor(System.String,System.String,System.String)
 M:SignalCli.Models.Signal.JsonPreview.<Clone>$()
 M:SignalCli.Models.Signal.JsonPreview.Deconstruct(System.String&,System.String&,System.String&)
@@ -961,6 +1059,13 @@ M:SignalCli.Models.Signal.JsonTypingMessage.Equals(SignalCli.Models.Signal.JsonT
 M:SignalCli.Models.Signal.JsonTypingMessage.Equals(System.Object)
 M:SignalCli.Models.Signal.JsonTypingMessage.GetHashCode()
 M:SignalCli.Models.Signal.JsonTypingMessage.ToString()
+M:SignalCli.Models.Signal.JsonUnpinMessage..ctor(System.String,System.String,System.String,System.Int64)
+M:SignalCli.Models.Signal.JsonUnpinMessage.<Clone>$()
+M:SignalCli.Models.Signal.JsonUnpinMessage.Deconstruct(System.String&,System.String&,System.String&,System.Int64&)
+M:SignalCli.Models.Signal.JsonUnpinMessage.Equals(SignalCli.Models.Signal.JsonUnpinMessage)
+M:SignalCli.Models.Signal.JsonUnpinMessage.Equals(System.Object)
+M:SignalCli.Models.Signal.JsonUnpinMessage.GetHashCode()
+M:SignalCli.Models.Signal.JsonUnpinMessage.ToString()
 M:SignalCli.Models.Signal.Message.AttachmentMessageOptions+Builder..ctor(System.String,System.Collections.Generic.List<SignalCli.Interfaces.Signal.IRecipient>,System.Collections.Generic.List<SignalCli.Interfaces.FileSystem.IAttachmentEntry>)
 M:SignalCli.Models.Signal.Message.AttachmentMessageOptions+Builder.Build()
 M:SignalCli.Models.Signal.Message.AttachmentMessageOptions+Builder.UseStyle()
@@ -1387,8 +1492,14 @@ P:SignalCli.Interfaces.Rpc.IJsonRpcClientProvider.Client:SignalCli.Interfaces.Rp
 P:SignalCli.Interfaces.Rpc.IJsonRpcNotificationReceiver.Notifications:System.IObservable<SignalCli.Models.Rpc.JsonRpcNotification<SignalCli.Models.Signal.Events.SubscriptionEventArgs>>
 P:SignalCli.Interfaces.Signal.IRecipient.Identifier:System.String
 P:SignalCli.Interfaces.Signal.IRecipient.IsGroup:System.Boolean
+P:SignalCli.Interfaces.Signal.ISignalEventService.AdminDeletes:System.IObservable<SignalCli.Models.Signal.Events.AdminDeleteEventArgs>
 P:SignalCli.Interfaces.Signal.ISignalEventService.Attachments:System.IObservable<SignalCli.Models.Signal.Events.AttachmentEventArgs>
 P:SignalCli.Interfaces.Signal.ISignalEventService.Edits:System.IObservable<SignalCli.Models.Signal.Events.EditEventArgs>
+P:SignalCli.Interfaces.Signal.ISignalEventService.Payments:System.IObservable<SignalCli.Models.Signal.Events.PaymentEventArgs>
+P:SignalCli.Interfaces.Signal.ISignalEventService.PinMessages:System.IObservable<SignalCli.Models.Signal.Events.PinMessageEventArgs>
+P:SignalCli.Interfaces.Signal.ISignalEventService.PollCreates:System.IObservable<SignalCli.Models.Signal.Events.PollCreateEventArgs>
+P:SignalCli.Interfaces.Signal.ISignalEventService.PollTerminates:System.IObservable<SignalCli.Models.Signal.Events.PollTerminateEventArgs>
+P:SignalCli.Interfaces.Signal.ISignalEventService.PollVotes:System.IObservable<SignalCli.Models.Signal.Events.PollVoteEventArgs>
 P:SignalCli.Interfaces.Signal.ISignalEventService.Quotes:System.IObservable<SignalCli.Models.Signal.Events.QuoteEventArgs>
 P:SignalCli.Interfaces.Signal.ISignalEventService.Reaction:System.IObservable<SignalCli.Models.Signal.Events.ReactionEventArgs>
 P:SignalCli.Interfaces.Signal.ISignalEventService.Receipts:System.IObservable<SignalCli.Models.Signal.Events.ReceiptEventArgs>
@@ -1397,6 +1508,7 @@ P:SignalCli.Interfaces.Signal.ISignalEventService.Sticker:System.IObservable<Sig
 P:SignalCli.Interfaces.Signal.ISignalEventService.Syncs:System.IObservable<SignalCli.Models.Signal.Events.SyncEventArgs>
 P:SignalCli.Interfaces.Signal.ISignalEventService.TextMessages:System.IObservable<SignalCli.Models.Signal.Events.TextMessageEventArgs>
 P:SignalCli.Interfaces.Signal.ISignalEventService.TypingNotifications:System.IObservable<SignalCli.Models.Signal.Events.TypingEventArgs>
+P:SignalCli.Interfaces.Signal.ISignalEventService.UnpinMessages:System.IObservable<SignalCli.Models.Signal.Events.UnpinMessageEventArgs>
 P:SignalCli.Interfaces.SignalCli.IProcess.HasExited:System.Boolean
 P:SignalCli.Interfaces.SignalCli.IProcess.Id:System.Int32
 P:SignalCli.Interfaces.SignalCli.IProcess.StandardError:System.IO.StreamReader
@@ -1615,6 +1727,7 @@ P:SignalCli.Models.Signal.Devices.StartLinkResponse.DeviceLinkUri:System.String
 P:SignalCli.Models.Signal.Devices.UpdateDeviceParameters.Account:System.String
 P:SignalCli.Models.Signal.Devices.UpdateDeviceParameters.DeviceId:System.Int32
 P:SignalCli.Models.Signal.Devices.UpdateDeviceParameters.DeviceName:System.String
+P:SignalCli.Models.Signal.Events.AdminDeleteEventArgs.AdminDelete:SignalCli.Models.Signal.JsonAdminDelete
 P:SignalCli.Models.Signal.Events.AttachmentEventArgs.Attachments:System.Collections.Generic.List<SignalCli.Models.Signal.JsonAttachment>
 P:SignalCli.Models.Signal.Events.BaseSignalEventArgs.Account:System.String
 P:SignalCli.Models.Signal.Events.BaseSignalEventArgs.ServerDeliveredTimestamp:System.Int64
@@ -1627,6 +1740,11 @@ P:SignalCli.Models.Signal.Events.BaseSignalEventArgs.SourceUuid:System.String
 P:SignalCli.Models.Signal.Events.BaseSignalEventArgs.SubscriptionId:System.Int32
 P:SignalCli.Models.Signal.Events.BaseSignalEventArgs.Timestamp:System.Int64
 P:SignalCli.Models.Signal.Events.EditEventArgs.EditMessage:SignalCli.Models.Signal.JsonEditMessage
+P:SignalCli.Models.Signal.Events.PaymentEventArgs.Payment:SignalCli.Models.Signal.JsonPayment
+P:SignalCli.Models.Signal.Events.PinMessageEventArgs.PinMessage:SignalCli.Models.Signal.JsonPinMessage
+P:SignalCli.Models.Signal.Events.PollCreateEventArgs.PollCreate:SignalCli.Models.Signal.JsonPollCreate
+P:SignalCli.Models.Signal.Events.PollTerminateEventArgs.PollTerminate:SignalCli.Models.Signal.JsonPollTerminate
+P:SignalCli.Models.Signal.Events.PollVoteEventArgs.PollVote:SignalCli.Models.Signal.JsonPollVote
 P:SignalCli.Models.Signal.Events.QuoteEventArgs.DataMessage:SignalCli.Models.Signal.JsonDataMessage
 P:SignalCli.Models.Signal.Events.ReactionEventArgs.Reaction:SignalCli.Models.Signal.JsonReaction
 P:SignalCli.Models.Signal.Events.ReceiptEventArgs.Receipt:SignalCli.Models.Signal.JsonReceiptMessage
@@ -1641,6 +1759,7 @@ P:SignalCli.Models.Signal.Events.SubscriptionEventArgs.Subscription:System.Int32
 P:SignalCli.Models.Signal.Events.SyncEventArgs.SyncMessage:SignalCli.Models.Signal.JsonSyncMessage
 P:SignalCli.Models.Signal.Events.TextMessageEventArgs.DataMessage:SignalCli.Models.Signal.JsonDataMessage
 P:SignalCli.Models.Signal.Events.TypingEventArgs.TypingMessage:SignalCli.Models.Signal.JsonTypingMessage
+P:SignalCli.Models.Signal.Events.UnpinMessageEventArgs.UnpinMessage:SignalCli.Models.Signal.JsonUnpinMessage
 P:SignalCli.Models.Signal.Events.UnsubscribeReceiveParameters.Id:System.Int32
 P:SignalCli.Models.Signal.Gradient.Angle:System.Nullable<System.Int32>
 P:SignalCli.Models.Signal.Gradient.Colors:System.Collections.Generic.List<System.String>
@@ -1723,6 +1842,10 @@ P:SignalCli.Models.Signal.Hangup.Id:System.Int64
 P:SignalCli.Models.Signal.Hangup.Type:System.String
 P:SignalCli.Models.Signal.IceUpdate.Id:System.Int64
 P:SignalCli.Models.Signal.IceUpdate.Opaque:System.String
+P:SignalCli.Models.Signal.JsonAdminDelete.TargetAuthor:System.String
+P:SignalCli.Models.Signal.JsonAdminDelete.TargetAuthorNumber:System.String
+P:SignalCli.Models.Signal.JsonAdminDelete.TargetAuthorUuid:System.String
+P:SignalCli.Models.Signal.JsonAdminDelete.TargetSentTimestamp:System.Int64
 P:SignalCli.Models.Signal.JsonAttachment.Caption:System.String
 P:SignalCli.Models.Signal.JsonAttachment.ContentType:System.String
 P:SignalCli.Models.Signal.JsonAttachment.Filename:System.String
@@ -1736,6 +1859,7 @@ P:SignalCli.Models.Signal.JsonCallMessage.BusyMessage:SignalCli.Models.Signal.Bu
 P:SignalCli.Models.Signal.JsonCallMessage.HangupMessage:SignalCli.Models.Signal.Hangup
 P:SignalCli.Models.Signal.JsonCallMessage.IceUpdateMessages:System.Collections.Generic.List<SignalCli.Models.Signal.IceUpdate>
 P:SignalCli.Models.Signal.JsonCallMessage.OfferMessage:SignalCli.Models.Signal.Offer
+P:SignalCli.Models.Signal.JsonDataMessage.AdminDelete:SignalCli.Models.Signal.JsonAdminDelete
 P:SignalCli.Models.Signal.JsonDataMessage.Attachments:System.Collections.Generic.List<SignalCli.Models.Signal.JsonAttachment>
 P:SignalCli.Models.Signal.JsonDataMessage.Contacts:System.Collections.Generic.List<SignalCli.Models.Signal.JsonSharedContact>
 P:SignalCli.Models.Signal.JsonDataMessage.ExpiresInSeconds:System.Nullable<System.Int32>
@@ -1743,6 +1867,10 @@ P:SignalCli.Models.Signal.JsonDataMessage.GroupInfo:SignalCli.Models.Signal.Json
 P:SignalCli.Models.Signal.JsonDataMessage.Mentions:System.Collections.Generic.List<SignalCli.Models.Signal.JsonMention>
 P:SignalCli.Models.Signal.JsonDataMessage.Message:System.String
 P:SignalCli.Models.Signal.JsonDataMessage.Payment:SignalCli.Models.Signal.JsonPayment
+P:SignalCli.Models.Signal.JsonDataMessage.PinMessage:SignalCli.Models.Signal.JsonPinMessage
+P:SignalCli.Models.Signal.JsonDataMessage.PollCreate:SignalCli.Models.Signal.JsonPollCreate
+P:SignalCli.Models.Signal.JsonDataMessage.PollTerminate:SignalCli.Models.Signal.JsonPollTerminate
+P:SignalCli.Models.Signal.JsonDataMessage.PollVote:SignalCli.Models.Signal.JsonPollVote
 P:SignalCli.Models.Signal.JsonDataMessage.Previews:System.Collections.Generic.List<SignalCli.Models.Signal.JsonPreview>
 P:SignalCli.Models.Signal.JsonDataMessage.Quote:SignalCli.Models.Signal.JsonQuote
 P:SignalCli.Models.Signal.JsonDataMessage.Reaction:SignalCli.Models.Signal.JsonReaction
@@ -1751,6 +1879,7 @@ P:SignalCli.Models.Signal.JsonDataMessage.Sticker:SignalCli.Models.Signal.JsonSt
 P:SignalCli.Models.Signal.JsonDataMessage.StoryContext:SignalCli.Models.Signal.JsonStoryContext
 P:SignalCli.Models.Signal.JsonDataMessage.TextStyles:System.Collections.Generic.List<SignalCli.Models.Signal.JsonTextStyle>
 P:SignalCli.Models.Signal.JsonDataMessage.Timestamp:System.UInt64
+P:SignalCli.Models.Signal.JsonDataMessage.UnpinMessage:SignalCli.Models.Signal.JsonUnpinMessage
 P:SignalCli.Models.Signal.JsonDataMessage.ViewOnce:System.Nullable<System.Boolean>
 P:SignalCli.Models.Signal.JsonEditMessage.DataMessage:SignalCli.Models.Signal.JsonDataMessage
 P:SignalCli.Models.Signal.JsonEditMessage.TargetSentTimestamp:System.Int64
@@ -1774,8 +1903,23 @@ P:SignalCli.Models.Signal.JsonMessageEnvelope.StoryMessage:SignalCli.Models.Sign
 P:SignalCli.Models.Signal.JsonMessageEnvelope.SyncMessage:SignalCli.Models.Signal.JsonSyncMessage
 P:SignalCli.Models.Signal.JsonMessageEnvelope.Timestamp:System.Int64
 P:SignalCli.Models.Signal.JsonMessageEnvelope.TypingMessage:SignalCli.Models.Signal.JsonTypingMessage
-P:SignalCli.Models.Signal.JsonPayment.Amount:System.Decimal
-P:SignalCli.Models.Signal.JsonPayment.Currency:System.String
+P:SignalCli.Models.Signal.JsonPayment.Note:System.String
+P:SignalCli.Models.Signal.JsonPayment.Receipt:System.Byte[]
+P:SignalCli.Models.Signal.JsonPinMessage.PinDurationSeconds:System.Int64
+P:SignalCli.Models.Signal.JsonPinMessage.TargetAuthor:System.String
+P:SignalCli.Models.Signal.JsonPinMessage.TargetAuthorNumber:System.String
+P:SignalCli.Models.Signal.JsonPinMessage.TargetAuthorUuid:System.String
+P:SignalCli.Models.Signal.JsonPinMessage.TargetSentTimestamp:System.Int64
+P:SignalCli.Models.Signal.JsonPollCreate.AllowMultiple:System.Boolean
+P:SignalCli.Models.Signal.JsonPollCreate.Options:System.Collections.Generic.List<System.String>
+P:SignalCli.Models.Signal.JsonPollCreate.Question:System.String
+P:SignalCli.Models.Signal.JsonPollTerminate.TargetSentTimestamp:System.Int64
+P:SignalCli.Models.Signal.JsonPollVote.Author:System.String
+P:SignalCli.Models.Signal.JsonPollVote.AuthorNumber:System.String
+P:SignalCli.Models.Signal.JsonPollVote.AuthorUuid:System.String
+P:SignalCli.Models.Signal.JsonPollVote.OptionIndexes:System.Collections.Generic.List<System.Int32>
+P:SignalCli.Models.Signal.JsonPollVote.TargetSentTimestamp:System.Int64
+P:SignalCli.Models.Signal.JsonPollVote.VoteCount:System.Int32
 P:SignalCli.Models.Signal.JsonPreview.Description:System.String
 P:SignalCli.Models.Signal.JsonPreview.Title:System.String
 P:SignalCli.Models.Signal.JsonPreview.Url:System.String
@@ -1833,6 +1977,10 @@ P:SignalCli.Models.Signal.JsonTextStyle.Style:System.String
 P:SignalCli.Models.Signal.JsonTypingMessage.Action:System.String
 P:SignalCli.Models.Signal.JsonTypingMessage.GroupId:System.String
 P:SignalCli.Models.Signal.JsonTypingMessage.Timestamp:System.Int64
+P:SignalCli.Models.Signal.JsonUnpinMessage.TargetAuthor:System.String
+P:SignalCli.Models.Signal.JsonUnpinMessage.TargetAuthorNumber:System.String
+P:SignalCli.Models.Signal.JsonUnpinMessage.TargetAuthorUuid:System.String
+P:SignalCli.Models.Signal.JsonUnpinMessage.TargetSentTimestamp:System.Int64
 P:SignalCli.Models.Signal.Message.AttachmentMessageOptions.Account:System.String
 P:SignalCli.Models.Signal.Message.AttachmentMessageOptions.Attachments:System.Collections.Generic.IEnumerable<SignalCli.Interfaces.FileSystem.IAttachmentEntry>
 P:SignalCli.Models.Signal.Message.AttachmentMessageOptions.Mentions:System.Collections.Generic.IEnumerable<System.String>
@@ -2226,9 +2374,15 @@ T:SignalCli.Models.Signal.Devices.RemoveDeviceParameters
 T:SignalCli.Models.Signal.Devices.StartLinkParameters
 T:SignalCli.Models.Signal.Devices.StartLinkResponse
 T:SignalCli.Models.Signal.Devices.UpdateDeviceParameters
+T:SignalCli.Models.Signal.Events.AdminDeleteEventArgs
 T:SignalCli.Models.Signal.Events.AttachmentEventArgs
 T:SignalCli.Models.Signal.Events.BaseSignalEventArgs
 T:SignalCli.Models.Signal.Events.EditEventArgs
+T:SignalCli.Models.Signal.Events.PaymentEventArgs
+T:SignalCli.Models.Signal.Events.PinMessageEventArgs
+T:SignalCli.Models.Signal.Events.PollCreateEventArgs
+T:SignalCli.Models.Signal.Events.PollTerminateEventArgs
+T:SignalCli.Models.Signal.Events.PollVoteEventArgs
 T:SignalCli.Models.Signal.Events.QuoteEventArgs
 T:SignalCli.Models.Signal.Events.ReactionEventArgs
 T:SignalCli.Models.Signal.Events.ReceiptEventArgs
@@ -2241,6 +2395,7 @@ T:SignalCli.Models.Signal.Events.SubscriptionEventArgs
 T:SignalCli.Models.Signal.Events.SyncEventArgs
 T:SignalCli.Models.Signal.Events.TextMessageEventArgs
 T:SignalCli.Models.Signal.Events.TypingEventArgs
+T:SignalCli.Models.Signal.Events.UnpinMessageEventArgs
 T:SignalCli.Models.Signal.Events.UnsubscribeReceiveParameters
 T:SignalCli.Models.Signal.Events.UnsubscribeReceiveResponse
 T:SignalCli.Models.Signal.Gradient
@@ -2260,6 +2415,7 @@ T:SignalCli.Models.Signal.Groups.UpdateGroupParameters
 T:SignalCli.Models.Signal.Groups.UpdateGroupResponse
 T:SignalCli.Models.Signal.Hangup
 T:SignalCli.Models.Signal.IceUpdate
+T:SignalCli.Models.Signal.JsonAdminDelete
 T:SignalCli.Models.Signal.JsonAttachment
 T:SignalCli.Models.Signal.JsonCallMessage
 T:SignalCli.Models.Signal.JsonDataMessage
@@ -2268,6 +2424,10 @@ T:SignalCli.Models.Signal.JsonGroupInfo
 T:SignalCli.Models.Signal.JsonMention
 T:SignalCli.Models.Signal.JsonMessageEnvelope
 T:SignalCli.Models.Signal.JsonPayment
+T:SignalCli.Models.Signal.JsonPinMessage
+T:SignalCli.Models.Signal.JsonPollCreate
+T:SignalCli.Models.Signal.JsonPollTerminate
+T:SignalCli.Models.Signal.JsonPollVote
 T:SignalCli.Models.Signal.JsonPreview
 T:SignalCli.Models.Signal.JsonQuote
 T:SignalCli.Models.Signal.JsonReaction
@@ -2284,6 +2444,7 @@ T:SignalCli.Models.Signal.JsonSyncReadMessage
 T:SignalCli.Models.Signal.JsonSyncStoryMessage
 T:SignalCli.Models.Signal.JsonTextStyle
 T:SignalCli.Models.Signal.JsonTypingMessage
+T:SignalCli.Models.Signal.JsonUnpinMessage
 T:SignalCli.Models.Signal.Message.AttachmentMessageOptions
 T:SignalCli.Models.Signal.Message.AttachmentMessageOptions+Builder
 T:SignalCli.Models.Signal.Message.GroupRecipient

@@ -3,6 +3,76 @@
 Формат заснований на [Keep a Changelog](https://keepachangelog.com/),
 проєкт дотримується [семантичного версіонування](https://semver.org/lang/uk/).
 
+## [4.9.0] — 2026-05-25
+
+Minor-реліз. 🏁 **Wave 7b** — receive-side decoders для всіх 7 нових event-types з Wave 7a + JsonPayment shape-fix. `ISignalEventService` розширено 7 IObservable + 7 IAsyncEnumerable парами (10 → 17 event-pair surfaces). **Closes signal-cli-api-coverage epic** — 100% send-side + 100% receive-side decoder parity.
+
+### ⚠ Breaking — JsonPayment shape fix
+
+- **`JsonPayment(Amount: decimal, Currency: string?)` → `JsonPayment(Note: string?, Receipt: byte[])`.** Previous shape був speculative — він НІКОЛИ не отримував real wire data, бо upstream Java `JsonPayment.java @ bda4e7fc` declares `record JsonPayment(String note, byte[] receipt)`. Consumers що читали `Amount`/`Currency` на real envelopes — той код ніколи не fire'ив у production. Migration: переходь на `Note`/`Receipt`; `Receipt` — MobileCoin receipt blob, base64-encoded на wire, deserialize'ується як `byte[]`.
+
+### ✨ Нове — 7 receive-side event streams
+
+```csharp
+signalEvents.PollCreates.Subscribe(e => Console.WriteLine($"Poll: {e.PollCreate.Question}"));
+signalEvents.PollVotes.Subscribe(e => Console.WriteLine($"Vote for {e.PollVote.OptionIndexes.Count} options"));
+signalEvents.PollTerminates.Subscribe(e => Console.WriteLine("Poll ended"));
+signalEvents.Payments.Subscribe(e => Console.WriteLine($"Payment receipt: {e.Payment.Receipt.Length} bytes"));
+signalEvents.PinMessages.Subscribe(e => Console.WriteLine($"Pinned forever={e.PinMessage.PinDurationSeconds == -1}"));
+signalEvents.UnpinMessages.Subscribe(e => Console.WriteLine("Unpinned"));
+signalEvents.AdminDeletes.Subscribe(e => Console.WriteLine("Admin-deleted (group moderation)"));
+
+// IAsyncEnumerable варіанти для single-consumer back-pressure
+await foreach (var poll in signalEvents.PollCreatesAsync(ct)) { /* ... */ }
+```
+
+### 🛠 Інше
+
+- **6 нових wire records:** `JsonPollCreate`, `JsonPollVote`, `JsonPollTerminate`, `JsonPinMessage`, `JsonUnpinMessage`, `JsonAdminDelete`. Pinned до upstream Java records @ `bda4e7fc`.
+- **§F17 @Deprecated legacy identifiers preserved.** Author/TargetAuthor legacy fields у JsonPollVote/PinMessage/UnpinMessage/AdminDelete — upstream досі emit'ить для backward-compat; mirror'имо щоб strict deserialization не fail'ило.
+- **§F16 wire-type asymmetry:** receive `pinDurationSeconds: long` ≠ send `pinDuration: int`. Mirror без normalization.
+- **`JsonDataMessage` extension** — 6 нових nullable fields + Payment shape-fixed. Backward-compat: envelopes без нових полів deserialize'ються correctly (default to null).
+- **Presence-based union dispatch** (CLAUDE.md critical rule #4): 7 нових branches без early-return. Multi-payload envelope emits всі applicable events.
+- **7 нових `*EventArgs` records** derive'ять `BaseSignalEventArgs`.
+- **Channel back-pressure preserved.** 7 нових bounded `Channel<T>` (capacity 1024, DropOldest); drops лічаться через existing Meter `signalcli.events.dropped{event_type=...}`.
+
+### 🛡️ Захист від регресій
+
+- **`ReceiveDecodersSerializationTests` — 9 тестів** пінять new JsonPayment shape, всі 6 нових wire records, JsonDataMessage backward-compat, presence-based union (multi-payload envelope).
+- **`EventApiSymmetryWave7bTests` — 8 reflection тестів** для 7 нових event-pairs (Observable + AsyncEnumerable matching element types).
+- **Existing RG06 EventApiSymmetryTests** auto-detects 7 нових pairs на ISignalEventService.
+
+### 📊 Тестова статистика
+
+- Unit: 486 → **503** (+17 unit тестів).
+- Integration: 12 (без змін — receive-side events потребують 2-account setup, не CI-friendly).
+- Public API baseline: 2359 → **2520** lines (+161 entries).
+- Build на src/ + Tests/: 0 warnings, 0 errors з `TreatWarningsAsErrors=true`.
+
+### 🏁 signal-cli-api-coverage epic — closure
+
+Final stats across 9 minor releases (4.1.0 → 4.9.0):
+
+| Wave | Capability | Methods | Tests |
+|---|---|---|---|
+| 1 | messaging-interactive | 4 send | +43 |
+| 2 | groups-crud | 3 | +25 |
+| 3 | contacts-identity | 9 | +29 |
+| 4 | sticker-packs + binary-resource-fetch | 6 | +29 |
+| 5 | device-management | 4 | +18 |
+| 6 | account-lifecycle (gated) | 8 destructive | +25 |
+| 7a | polls + messaging-power-user | 8 send | +15 |
+| **7b** | **receive-side decoders** | **7 events** | **+17** |
+| 8 | utility-rpc | 3 | +12 |
+
+- **JSON-RPC send-side coverage:** 9 baseline + 45 new = **54/54 = 100%**.
+- **Receive-side events:** 10 → **17** event-pair streams (RG06 паритет enforced).
+- **Tests:** 290 → **503** (+213 unit). E2E: 8 → **12** (+4 env-gated).
+- **Public API baseline:** 1087 → **2520** lines (+1433).
+- 3 typed exceptions (IdentityChanged/GroupAdminRequired/CaptchaRequired), 6 enums (GroupLinkState/GroupPermission/RemoveContactMode/TrustLevel/ReceiptType/MessageRequestResponseType), 12+ Builder patterns, env-gated TestAccountFixture, §F1-F25 anti-hallucination findings всі враховано.
+
+---
+
 ## [4.8.0] — 2026-05-25
 
 Minor-реліз. 🎯 **Final wave** signal-cli-api-coverage — `ISignalAccounts` отримує 3 utility methods (registration-status lookup, rate-limit challenge submit, push contacts до linked devices). **54/54 = 100% JSON-RPC method coverage** (send-side). Backward-compatible.
