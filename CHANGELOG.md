@@ -3,6 +3,35 @@
 Формат заснований на [Keep a Changelog](https://keepachangelog.com/),
 проєкт дотримується [семантичного версіонування](https://semver.org/lang/uk/).
 
+## [4.0.3] — 2026-05-25
+
+Patch-реліз. **Нульовий impact на consumer'ів — це чисто developer/agent ergonomics**:
+агент-instruction memory (`CLAUDE.md`) переструктурована за Anthropic Memory guidance в
+slim root + 9 path-scoped topic files під `.claude/rules/`. NuGet-пакети ідентичні за
+runtime-поведінкою.
+
+### 🛠 Інше
+
+- **Якщо ти підтримуєш fork — `CLAUDE.md` тепер 150 рядків замість 592.** Решта 9 topic-файлів живуть у `.claude/rules/*.md` з `paths:` frontmatter — кожен файл вантажиться у Claude Code context лише коли редагуєш файли під його глобом. Сесія що чіпає лише `Tests/**` отримує `testing.md` (а не всі 19+ KB протокольних фактів про signal-cli). Net effect: швидші відповіді агентів на дрібних PR, менше шуму. Spec за Anthropic [Memory docs](https://code.claude.com/docs/en/memory.md). *([claude-md-rules-restructure](openspec/changes/claude-md-rules-restructure/proposal.md), `agent-memory-pathscoping` capability)*
+
+- **CLAUDE.md тепер документує 4 раніше-неявних патерни кодової бази.** Додано (через `claude-md-pattern-additions` change): DI-registration idioms (TryAddSingleton vs AddSingleton, one-instance-two-roles), namespace hierarchy + DTO/EventArgs/test-class naming, exception-derivation heuristic (коли деривувати `XxxException : JsonRpcException` vs залишати base), README voice + drift rules. *([claude-md-pattern-additions](openspec/changes/claude-md-pattern-additions/proposal.md))*
+
+### 🛡️ Захист від регресій
+
+- **RG08 `ClaudeMdSplitConsistencyTests` пінує shape сплиту.** 3 facts: root CLAUDE.md ≤ 200 lines, кожен topic-файл має валідний `paths:` frontmatter АБО `<!-- always-load: no paths -->` marker, substring `Critical rule #N` зустрічається тільки в root (numeric anchors резолвляться лише там). Re-merging topic-content у монолітний CLAUDE.md = build failure. *(RG08)*
+
+### 📊 Тестова статистика
+
+- Unit: 287 → **290** (+3 RG08 facts).
+- Integration: 8 (без змін).
+- Build на src/ + Tests/: 0 warnings, 0 errors.
+
+### Pending follow-up
+
+- **`/memory` validation у Claude Code session.** Phase 2 design передбачає одноразову перевірку: відкрити сесію що редагує єдиний test-файл і пересвідчитися що `testing.md` завантажено а `signal-cli-protocol.md` — ні. Якщо path-scoping не працює у поточному CLI — додати fallback note в `cloud-dev.md`. Виконується вручну після релізу.
+
+---
+
 ## [4.0.2] — 2026-05-24
 
 Patch-реліз без breaking changes. **Якщо ти використовуєш `SignalCli.NET.HealthChecks` — онови його разом з main package**: до 4.0.2 версії розійшлися й змішування пакетів давало runtime crash. Решта — 8 нових захисних тестів і одна реальна знахідка про JSON-валідацію, яка мовчки не fire'ила у продакшені.
