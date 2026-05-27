@@ -15,12 +15,10 @@
 - [Швидкий старт за 30 рядків](#-швидкий-старт-за-30-рядків)
 - [Конфігурація — три шляхи](#%EF%B8%8F-конфігурація--три-шляхи)
 - [API-можливості](#%EF%B8%8F-api-можливості)
-- [Інтерфейси бібліотеки](#-інтерфейси-бібліотеки)
+- [Документація API](#-документація-api)
 - [Події — `IObservable<T>` vs `IAsyncEnumerable<T>`](#-події--iobservablet-vs-iasyncenumerablet)
 - [Health-checks (опціональний пакет)](#-health-checks-опціональний-пакет)
 - [OpenTelemetry observability](#-opentelemetry-observability)
-- [Розширений приклад — worker з авто-відповіддю](#-розширений-приклад--worker-з-авто-відповіддю)
-- [Міграція з 3.x → 4.0](#-міграція-з-3x--40)
 - [FAQ](#-faq)
 - [Залежності](#-залежності)
 - [Участь у розробці · Ліцензія · Подяки](#-участь-у-розробці)
@@ -162,115 +160,44 @@ services.AddSignalCli(builder.Configuration.GetSection("SignalCli"));
 
 ## ⚙️ API-можливості
 
+З **4.9.0** покриття JSON-RPC методів signal-cli — **100%** (54 з 54). Детально по кожному методу — у [`docs/api/`](docs/).
+
 | Категорія | Підтримано | На черзі |
 |-----------|------------|----------|
-| **Акаунт** | `ListAccountsAsync`, `SyncAccountAsync` | `register`, `verify`, `unregister`, `updateAccount`, `setPin`, ... |
-| **Пристрої** | `StartLinkAsync`, `FinishLinkAsync` | `listDevices`, `addDevice`, `removeDevice` |
-| **Повідомлення** | `SendTextMessageAsync`, `SendAttachmentAsync`, `SendStickerAsync` | `sendReaction`, `sendReceipt`, `sendTyping`, `remoteDelete` |
-| **Групи** | `ListGroupsAsync` | `joinGroup`, `updateGroup`, `quitGroup` |
-| **Події** | `SubscribeAsync`, `UnsubscribeAsync` + 10 потоків подій *(див. наступну секцію)* | — |
-| **Системні** | `VersionAsync` | `submitRateLimitChallenge` |
-| **Профіль · Контакти · Безпека · Стікери · Вкладення** | — | `updateProfile`, `listContacts`, `listIdentities`, `uploadStickerPack`, `getAttachment`, ... |
+| **Акаунт** | `ListAccountsAsync`, `SyncAccountAsync`, `GetUserStatusAsync`, `SubmitRateLimitChallengeAsync`, `SendContactsAsync` + 8 destructive (`UpdateAccount`, `UpdateConfiguration`, `SetPin`, `RemovePin`, `Unregister`, `DeleteLocalAccountData`, `StartChangeNumber`, `FinishChangeNumber` — gated через `EnableDestructiveOperations`) | `register`, `verify` (live SMS handshake — поза scope бібліотеки для уже-зареєстрованих акаунтів) |
+| **Пристрої** | `StartLinkAsync`, `FinishLinkAsync`, `AddDeviceAsync`, `ListDevicesAsync`, `RemoveDeviceAsync`, `UpdateDeviceAsync` | — |
+| **Повідомлення (send-side)** | `SendTextMessageAsync`, `SendAttachmentAsync`, `SendStickerAsync`, `SendReactionAsync`, `SendReceiptAsync`, `SendTypingAsync`, `SendRemoteDeleteAsync`, `SendPollCreate/Vote/TerminateAsync`, `SendAdminDeleteAsync`, `SendPin/UnpinMessageAsync`, `SendMessageRequestResponseAsync`, `SendPaymentNotificationAsync` | — |
+| **Групи** | `ListGroupsAsync`, `JoinGroupAsync`, `UpdateGroupAsync` *(dual-mode create/update)*, `QuitGroupAsync` *(idempotent)* | — |
+| **Контакти · Identity** | `ListContactsAsync`, `ListIdentitiesAsync`, `TrustAllKnownKeysAsync`, `TrustVerifiedAsync`, `UpdateContactAsync`, `UpdateProfileAsync`, `RemoveContactAsync`, `BlockAsync`, `UnblockAsync` | — |
+| **Стікери · Вкладення** | `UploadStickerPackAsync`, `ListStickerPacksAsync`, `AddStickerPackAsync`, `GetAttachmentAsync`, `GetAvatarAsync`, `GetStickerAsync` | — |
+| **Події (receive-side)** | `SubscribeAsync`, `UnsubscribeAsync` + 17 потоків × 2 поверхні (`IObservable<T>` + `IAsyncEnumerable<T>`) | — |
+| **Системні** | `VersionAsync`, raw `InvokeMethodAsync<TRequest, TResponse>` для розширень | — |
 
-**Підтримувані типи подій (10):** Текстові повідомлення, Реакції, Вкладення, Стікери, Набір тексту, Квитанції, Синхронізація, Цитати, Редагування, Віддалене видалення.
+**Підтримувані типи подій (17):** Text, Reaction, Attachment, Sticker, Typing, Receipt, Sync, Quote, Edit, RemoteDelete, PollCreate, PollVote, PollTerminate, Payment, PinMessage, UnpinMessage, AdminDelete.
 
-> Бракує методу? Внесок вітається — `services.AddSignalCli(...)` + `ISignalCliClient.InvokeMethodAsync` дає прямий шлях додати будь-який signal-cli RPC.
+> ⚠ **Destructive operations** (8 у акаунтах) — за замовчуванням заблоковані. Розблокування через `SignalCliOptions.EnableDestructiveOperations = true` тільки після code-review (`Unregister(deleteAccount: true)` / `DeleteLocalAccountDataAsync` / `FinishChangeNumberAsync` — НЕ МОЖНА скасувати). Деталі — [`docs/api/accounts.md`](docs/api/accounts.md).
+>
+> Бракує методу або хочеш кастомний RPC? `ISignalCliClient.InvokeMethodAsync<TRequest, TResponse>(method, params, requestInfo, responseInfo)` приймає будь-яку signal-cli команду — AOT-safe, з твоїм власним `[JsonSerializerContext]`. Приклад — [`docs/api/resources-stickers.md § InvokeMethodAsync`](docs/api/resources-stickers.md).
 
 ---
 
-## 🧩 Інтерфейси бібліотеки
+## 📚 Документація API
 
-### IRecipient
+Повна типізована довідка живе у [`docs/`](docs/) — по файлу на категорію, з прикладами і signal-cli source citations:
 
-```csharp
-public interface IRecipient
-{
-    bool IsGroup { get; }
-    string Identifier { get; }
-}
-```
+| Файл | Покриває |
+|---|---|
+| [`docs/api/messaging.md`](docs/api/messaging.md) | `ISignalMessage` (14 send-методів) |
+| [`docs/api/accounts.md`](docs/api/accounts.md) | `ISignalAccounts` (13, з них 8 destructive — opt-in) |
+| [`docs/api/devices.md`](docs/api/devices.md) | `ISignalDevices` (linking + secondary management) |
+| [`docs/api/groups.md`](docs/api/groups.md) | `ISignalGroups` (CRUD + idempotent quit) |
+| [`docs/api/contacts.md`](docs/api/contacts.md) | `ISignalContacts` (trust, profiles, block/unblock) |
+| [`docs/api/events.md`](docs/api/events.md) | `ISignalEventService` (17 event-kind'ів × 2 поверхні) |
+| [`docs/api/resources-stickers.md`](docs/api/resources-stickers.md) | `ISignalResources` + `ISignalStickers` + raw `InvokeMethodAsync` |
+| [`docs/api/di-options.md`](docs/api/di-options.md) | DI extensions + повний reference `SignalCliOptions` |
+| [`docs/examples/worker-auto-reply.md`](docs/examples/worker-auto-reply.md) | Console-worker з auto-reply + device-link flow |
 
-**Реалізації:** `UserRecipient(phoneOrUuid)`, `GroupRecipient(groupId)`.
-
-### ISignalAccounts
-
-```csharp
-public interface ISignalAccounts
-{
-    Task<ListAccountsResponse> ListAccountsAsync(CancellationToken cancellationToken = default);
-    Task<SyncAccountsResponse> SyncAccountAsync(CancellationToken cancellationToken = default);
-}
-```
-
-### ISignalDevices
-
-```csharp
-public interface ISignalDevices
-{
-    Task<StartLinkResponse> StartLinkAsync(CancellationToken cancellationToken = default);
-    Task<FinishLinkResponse> FinishLinkAsync(string deviceLinkUri, string deviceName, CancellationToken cancellationToken = default);
-}
-```
-
-`FinishLinkResponse.Number` — PascalCase property (wire-name `"number"` через `[JsonPropertyName]`).
-
-### ISignalEventService
-
-10 паттернів подій × 2 поверхні (Rx + Channels). Симетрія enforced `EventApiSymmetryTests`.
-
-```csharp
-public interface ISignalEventService
-{
-    Task<SubscribeReceiveResponse> SubscribeAsync(string account, CancellationToken cancellationToken = default);
-    Task<UnsubscribeReceiveResponse> UnsubscribeAsync(int subscriptionId, CancellationToken cancellationToken = default);
-
-    // Rx — fan-out / broadcast
-    IObservable<TextMessageEventArgs> TextMessages { get; }
-    IObservable<ReactionEventArgs> Reaction { get; }
-    IObservable<AttachmentEventArgs> Attachments { get; }
-    IObservable<StickerEventArgs> Sticker { get; }
-    IObservable<TypingEventArgs> TypingNotifications { get; }
-    IObservable<ReceiptEventArgs> Receipts { get; }
-    IObservable<SyncEventArgs> Syncs { get; }
-    IObservable<QuoteEventArgs> Quotes { get; }
-    IObservable<EditEventArgs> Edits { get; }
-    IObservable<RemoteDeleteEventArgs> RemoteDeletes { get; }
-
-    // Async-stream — exclusive consumption + back-pressure
-    IAsyncEnumerable<TextMessageEventArgs> TextMessagesAsync(CancellationToken cancellationToken = default);
-    IAsyncEnumerable<ReactionEventArgs> ReactionAsync(CancellationToken cancellationToken = default);
-    IAsyncEnumerable<AttachmentEventArgs> AttachmentsAsync(CancellationToken cancellationToken = default);
-    IAsyncEnumerable<StickerEventArgs> StickerAsync(CancellationToken cancellationToken = default);
-    IAsyncEnumerable<TypingEventArgs> TypingAsync(CancellationToken cancellationToken = default);   // не TypingNotificationsAsync
-    IAsyncEnumerable<ReceiptEventArgs> ReceiptsAsync(CancellationToken cancellationToken = default);
-    IAsyncEnumerable<SyncEventArgs> SyncsAsync(CancellationToken cancellationToken = default);
-    IAsyncEnumerable<QuoteEventArgs> QuotesAsync(CancellationToken cancellationToken = default);
-    IAsyncEnumerable<EditEventArgs> EditsAsync(CancellationToken cancellationToken = default);
-    IAsyncEnumerable<RemoteDeleteEventArgs> RemoteDeletesAsync(CancellationToken cancellationToken = default);
-}
-```
-
-### ISignalGroups
-
-```csharp
-public interface ISignalGroups
-{
-    Task<ListGroupsResponse> ListGroupsAsync(string account, CancellationToken cancellationToken = default);
-}
-```
-
-### ISignalMessage
-
-```csharp
-public interface ISignalMessage
-{
-    Task<SendMessageResponse> SendTextMessageAsync(TextMessageOptions options, CancellationToken cancellationToken = default);
-    Task<SendMessageResponse> SendAttachmentAsync(AttachmentMessageOptions options, CancellationToken cancellationToken = default);
-    Task<SendMessageResponse> SendStickerAsync(StickerMessageOptions options, CancellationToken cancellationToken = default);
-}
-```
-
-Повертає **одну** `SendMessageResponse` (3.0+ — раніше було `Task<List<...>>` що завжди мав один елемент).
+**`IRecipient`** реалізації — `UserRecipient(phoneOrUuid)` та `GroupRecipient(groupId)`. Усі `Send*Async` методи повертають **одну** `SendMessageResponse` (з 3.0+ — раніше було `Task<List<...>>` що завжди мав один елемент).
 
 ---
 
@@ -363,120 +290,6 @@ services.AddOpenTelemetry()
 **Privacy invariant:** значення тегів — лише method-names, status-enums, integer-id, durations, exception-type-names. **Тіло повідомлення, номер телефону, шлях до файлу — НЕ потрапляють у теги.** Enforced unit-тестами `ObservabilityPrivacyTests` через `ActivityListener` + `MeterListener` з seed-PII substring-assertions.
 
 Детальні приклади: [`docs/cloud-development.md`](docs/cloud-development.md#observability).
-
----
-
-## 📝 Розширений приклад — worker з авто-відповіддю
-
-Console-worker що:
-1. Стартує signal-cli (bundled JRE).
-2. Підписується на первинний акаунт.
-3. Слухає текстові повідомлення через `IAsyncEnumerable<T>` з back-pressure.
-4. На кожне повідомлення — auto-reply з форматованим текстом.
-
-```csharp
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using SignalCli.Extensions;
-using SignalCli.Interfaces.Signal;
-using SignalCli.Models.Signal.Message;
-
-using var host = Host.CreateDefaultBuilder(args)
-    .ConfigureServices(services =>
-    {
-        services.AddSignalCliWithBundledRuntimeDefaults(o =>
-        {
-            o.StoragePathCli = Path.Combine(AppContext.BaseDirectory, "SignalCliStorageData");
-            o.MaxRestartAttempts = 3;
-        });
-        services.AddSignalEvents();
-    })
-    .Build();
-
-await host.StartAsync();
-
-var eventService = host.Services.GetRequiredService<ISignalEventService>();
-var signalMessage = host.Services.GetRequiredService<ISignalMessage>();
-var signalAccounts = host.Services.GetRequiredService<ISignalAccounts>();
-
-// Знайти первинний акаунт (якщо порожньо — спершу запусти device-link flow, див. нижче).
-var accounts = await signalAccounts.ListAccountsAsync();
-if (accounts.Count == 0)
-{
-    Console.WriteLine("Немає зареєстрованих акаунтів. Запусти QR-link через ISignalDevices.StartLinkAsync.");
-    return;
-}
-var account = accounts[0].Number;
-
-// Підписка ідемпотентна: повторні виклики для того ж акаунту повертають той самий subscription id.
-await eventService.SubscribeAsync(account);
-
-// Auto-reply loop. SIGINT / SIGTERM ловиться у Host.StoppingToken — IAsyncEnumerable
-// завершиться gracefully коли host shutdown.
-var cts = new CancellationTokenSource();
-Console.CancelKeyPress += (_, e) => { cts.Cancel(); e.Cancel = true; };
-
-await foreach (var msg in eventService.TextMessagesAsync(cts.Token))
-{
-    Console.WriteLine($"[{msg.SourceNumber ?? msg.SourceUuid}] {msg.DataMessage.Message}");
-
-    // Відповідаємо тому ж відправнику (UUID — стабільніший за phone-number).
-    var reply = new TextMessageOptions.Builder(
-            account: msg.Account,
-            recipients: [new UserRecipient(msg.SourceUuid)],
-            message: "**Отримав!** Дякую за повідомлення.")
-        .UseStyle()  // bold/italic/strikethrough/spoiler/monospace через markdown-like syntax
-        .Build();
-
-    try
-    {
-        await signalMessage.SendTextMessageAsync(reply, cts.Token);
-    }
-    catch (RateLimitException ex)
-    {
-        Console.Error.WriteLine($"Rate-limit: {ex.Error.Message}; retry-in вказаний в Error.Data");
-    }
-    catch (UntrustedIdentityException)
-    {
-        Console.Error.WriteLine($"Безпековий номер змінився; verify-safety-number перш ніж надсилати");
-    }
-}
-
-await host.StopAsync();
-```
-
-### Device-link flow (один раз перед першим запуском)
-
-```csharp
-var signalDevices = host.Services.GetRequiredService<ISignalDevices>();
-var linkResponse = await signalDevices.StartLinkAsync();
-Console.WriteLine($"Скануйте QR з URI: {linkResponse.DeviceLinkUri}");
-// Згенеруй QR (QRCoder/ZXing.Net) → сканування у Signal mobile app.
-var finishResult = await signalDevices.FinishLinkAsync(linkResponse.DeviceLinkUri, "Мій worker");
-Console.WriteLine($"Зв'язано як: {finishResult.Number}");
-```
-
----
-
-## 🔄 Міграція з 3.x → 4.0
-
-<details>
-<summary>4.0.0 — breaking changes (натисни щоб розгорнути)</summary>
-
-| Видалено | Заміна / migration |
-|---|---|
-| `SignalCli.Models.Config` (клас) | `SignalCliOptions` (існує з 2.1.0) |
-| `AddSignalCli(Action<Config>?)` | `AddSignalCliWithBundledRuntimeDefaults(Action<SignalCliOptions>?)` *(для bundled-runtime консумерів)* або `AddSignalCli(Action<SignalCliOptions>?)` |
-| `ISignalCliClient.Version()` | `s/\.Version(/\.VersionAsync(/g` |
-| `ISignalAccounts.ListAccounts()` / `.SyncAccount()` | `s/\.ListAccounts(/\.ListAccountsAsync(/g`, `s/\.SyncAccount(/\.SyncAccountAsync(/g` |
-| `ISignalDevices.StartLink()` / `.FinishLink()` | `s/\.StartLink(/\.StartLinkAsync(/g`, `s/\.FinishLink(/\.FinishLinkAsync(/g` |
-| `ISignalGroups.ListGroups()` | `s/\.ListGroups(/\.ListGroupsAsync(/g` |
-| `FinishLinkResponse.number` (lowercase) | `FinishLinkResponse.Number` *(PascalCase з 3.0)* |
-| `Task<List<SendMessageResponse>>` поверталось зі `Send*Async` | `Task<SendMessageResponse>` *(одна відповідь; 3.0+)* |
-
-Детальніше: див. `CHANGELOG.md` секція `[4.0.0]`. Усі замінники існували принаймні з 3.0, тож грейс-вікно — один мажор.
-
-</details>
 
 ---
 
