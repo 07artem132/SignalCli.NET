@@ -19,7 +19,6 @@
 - [Події — `IObservable<T>` vs `IAsyncEnumerable<T>`](#-події--iobservablet-vs-iasyncenumerablet)
 - [Health-checks (опціональний пакет)](#-health-checks-опціональний-пакет)
 - [OpenTelemetry observability](#-opentelemetry-observability)
-- [Міграція з 3.x → 4.0](#-міграція-з-3x--40)
 - [FAQ](#-faq)
 - [Залежності](#-залежності)
 - [Участь у розробці · Ліцензія · Подяки](#-участь-у-розробці)
@@ -291,28 +290,6 @@ services.AddOpenTelemetry()
 **Privacy invariant:** значення тегів — лише method-names, status-enums, integer-id, durations, exception-type-names. **Тіло повідомлення, номер телефону, шлях до файлу — НЕ потрапляють у теги.** Enforced unit-тестами `ObservabilityPrivacyTests` через `ActivityListener` + `MeterListener` з seed-PII substring-assertions.
 
 Детальні приклади: [`docs/cloud-development.md`](docs/cloud-development.md#observability).
-
----
-
-## 🔄 Міграція з 3.x → 4.0
-
-<details>
-<summary>4.0.0 — breaking changes (натисни щоб розгорнути)</summary>
-
-| Видалено | Заміна / migration |
-|---|---|
-| `SignalCli.Models.Config` (клас) | `SignalCliOptions` (існує з 2.1.0) |
-| `AddSignalCli(Action<Config>?)` | `AddSignalCliWithBundledRuntimeDefaults(Action<SignalCliOptions>?)` *(для bundled-runtime консумерів)* або `AddSignalCli(Action<SignalCliOptions>?)` |
-| `ISignalCliClient.Version()` | `s/\.Version(/\.VersionAsync(/g` |
-| `ISignalAccounts.ListAccounts()` / `.SyncAccount()` | `s/\.ListAccounts(/\.ListAccountsAsync(/g`, `s/\.SyncAccount(/\.SyncAccountAsync(/g` |
-| `ISignalDevices.StartLink()` / `.FinishLink()` | `s/\.StartLink(/\.StartLinkAsync(/g`, `s/\.FinishLink(/\.FinishLinkAsync(/g` |
-| `ISignalGroups.ListGroups()` | `s/\.ListGroups(/\.ListGroupsAsync(/g` |
-| `FinishLinkResponse.number` (lowercase) | `FinishLinkResponse.Number` *(PascalCase з 3.0)* |
-| `Task<List<SendMessageResponse>>` поверталось зі `Send*Async` | `Task<SendMessageResponse>` *(одна відповідь; 3.0+)* |
-
-Детальніше: див. `CHANGELOG.md` секція `[4.0.0]`. Усі замінники існували принаймні з 3.0, тож грейс-вікно — один мажор.
-
-</details>
 
 ---
 
