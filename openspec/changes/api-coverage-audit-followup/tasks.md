@@ -41,15 +41,15 @@ warns against (per Cap 1's audit-debt.md addition). No code change; no commit.
 
 ## Capability 5 — `identity-changed-deprecation` (Obsolete shim + XMLDoc + cref removal)
 
-- [ ] 5.1 Edit `src/SignalCli/Exceptions/IdentityChangedException.cs`:
+- [x] 5.1 Edit `src/SignalCli/Exceptions/IdentityChangedException.cs`:
   - Add `[Obsolete("Speculative type that is never dispatched — upstream signal-cli has no protocol-level distinction between first-contact-unknown and re-installed identity (both → UntrustedKeyErrorException \"Failed to send message due to untrusted identities\"). Catch UntrustedIdentityException instead and disambiguate via ISignalContacts.ListIdentitiesAsync if needed. Will be removed in 5.0.", DiagnosticId = "SIGNALCLI001")]`
   - Replace misleading XMLDoc `<remarks>` block with honest "never dispatched; deprecated shim; removed 5.0" wording, citing the new pinned fact #8 in `signal-cli-protocol.md`
-- [ ] 5.2 Edit `src/SignalCli/Interfaces/Signal/ISignalMessage.cs:162` — remove `<exception cref="IdentityChangedException">` from `SendReactionAsync` (and any other ISignalMessage methods if present); leave `<exception cref="UntrustedIdentityException">` in place
-- [ ] 5.3 Edit `src/SignalCli/Exceptions/UntrustedIdentityException.cs:16` — remove the misleading reference to "опт-ін різнення re-install"; replace with simple "sealed-removed для прийнятної consumer subtyping" note
-- [ ] 5.4 Suppress `CS0618` (Obsolete usage) at the existing `IdentityChangedException` construction sites in `Tests/SignalCli.Tests/Exceptions/NewTypedRpcErrorsTests.cs:18,48` with `#pragma warning disable CS0618` + justification comment ("retained for hierarchy regression-guard during 4.x deprecation period")
-- [ ] 5.5 `dotnet build -p:TreatWarningsAsErrors=true` — green; `ObsoleteMessageConsistencyTests` (R04) confirms "5.0" > current major 4
-- [ ] 5.6 Regenerate `SignalCli.public-api.txt` baseline (Obsolete attribute may surface in baseline format)
-- [ ] 5.7 Commit: `deprecate: IdentityChangedException — Obsolete shim, never dispatched, removed 5.0`
+- [x] 5.2 Edit `src/SignalCli/Interfaces/Signal/ISignalMessage.cs:162` — remove `<exception cref="IdentityChangedException">` from `SendReactionAsync` (and any other ISignalMessage methods if present); leave `<exception cref="UntrustedIdentityException">` in place
+- [x] 5.3 Edit `src/SignalCli/Exceptions/UntrustedIdentityException.cs:16` — remove the misleading reference to "опт-ін різнення re-install"; replace with simple "sealed-removed для прийнятної consumer subtyping" note
+- [x] 5.4 Suppress `CS0618` (Obsolete usage) at the existing `IdentityChangedException` construction sites in `Tests/SignalCli.Tests/Exceptions/NewTypedRpcErrorsTests.cs:18,48` with `#pragma warning disable CS0618` + justification comment ("retained for hierarchy regression-guard during 4.x deprecation period")
+- [x] 5.5 `dotnet build -p:TreatWarningsAsErrors=true` — green; `ObsoleteMessageConsistencyTests` (R04) confirms "5.0" > current major 4
+- [x] 5.6 Regenerate `SignalCli.public-api.txt` baseline (Obsolete attribute may surface in baseline format)
+- [x] 5.7 Commit: `deprecate: IdentityChangedException — Obsolete shim, never dispatched, removed 5.0`
 
 ## Release commit (final)
 

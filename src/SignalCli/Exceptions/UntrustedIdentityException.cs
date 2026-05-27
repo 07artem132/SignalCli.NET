@@ -12,10 +12,10 @@ namespace SignalCli.Exceptions;
 /// flow замість inspect-message-text. <see cref="JsonRpcException.Error"/>.Code завжди <c>-4</c>
 /// (= <see cref="JsonRpcErrorCode.UntrustedIdentity"/>) by construction.
 /// <para>
-/// signal-cli-api-coverage Wave 1 (messaging-interactive): тип un-sealed щоб дозволити
-/// derivation <see cref="IdentityChangedException"/> для опт-ін різнення "re-install уже
-/// відомого контакту" vs "first-contact untrusted" (upstream signal-cli обидва випадки емітить
-/// тим самим кодом <c>-4</c>, тож розрізнення — client-side concern).
+/// Тип un-sealed щоб дозволити derivation (zero внутрішніх sealed-guards). api-coverage-audit-followup §1:
+/// прямого useful subtype'у не залишилося — <see cref="IdentityChangedException"/> deprecated
+/// як speculative-split (never dispatched). Якщо потрібен new derived type — додавай лише після
+/// підтвердження upstream distinguisher (§0.5 cite-and-read).
 /// </para>
 /// </remarks>
 public class UntrustedIdentityException : JsonRpcException

@@ -15,7 +15,11 @@ public class NewTypedRpcErrorsTests
     public void IdentityChangedException_IsSubtypeOfUntrustedIdentity()
     {
         // Key контракт: `catch (UntrustedIdentityException)` ловить також IdentityChangedException.
+        // api-coverage-audit-followup §1: тип deprecated (never dispatched, removed 5.0); retained
+        // для hierarchy regression-guard during 4.x deprecation period.
+#pragma warning disable SIGNALCLI001 // Obsolete IdentityChangedException usage — retained для hierarchy guard
         var ex = new IdentityChangedException(new JsonRpcError { Code = -4, Message = "Untrusted (re-install)" });
+#pragma warning restore SIGNALCLI001
         Assert.IsAssignableFrom<UntrustedIdentityException>(ex);
         Assert.IsAssignableFrom<JsonRpcException>(ex);
         Assert.Equal(-4, ex.Error.Code);
@@ -45,7 +49,9 @@ public class NewTypedRpcErrorsTests
     public void NewExceptions_AreSealed()
     {
         // Sealed-контракт: ці типи — листя hierarchy; consumer не повинен далі subclass'ити.
+#pragma warning disable SIGNALCLI001 // Obsolete IdentityChangedException — retained для hierarchy guard
         Assert.True(typeof(IdentityChangedException).IsSealed);
+#pragma warning restore SIGNALCLI001
         Assert.True(typeof(GroupAdminRequiredException).IsSealed);
         Assert.True(typeof(CaptchaRequiredException).IsSealed);
     }
