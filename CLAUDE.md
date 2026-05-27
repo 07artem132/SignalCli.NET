@@ -105,6 +105,7 @@ Path-scoped agent instructions live in `.claude/rules/` (load conditionally when
 | RG06 | `RegressionGuards/EventApiSymmetryTests.cs` | Кожен `IObservable<T>` на `ISignalEventService` має парний `IAsyncEnumerable<T>` метод |
 | RG07 | `RegressionGuards/VersionLockstepTests.cs` | `SignalCli.NET.HealthChecks` assembly version == `SignalCli.NET` |
 | RG08 | `RegressionGuards/ClaudeMdSplitConsistencyTests.cs` | Root CLAUDE.md ≤ 200 lines + every `.claude/rules/<topic>.md` has valid frontmatter or always-load marker + numeric "Critical rule #N" anchors live only in root |
+| RG09 | `RegressionGuards/DocsApiCoverageTests.cs` | Кожен публічний метод на 8 `ISignal*` facade-інтерфейсах + `ISignalCliClient` + 4 `ServiceCollectionExtensions` extension'и згадується хоча б у одному файлі під `docs/api/*.md`. Запобігає drift'у docs vs public API surface |
 
 ### Архітектурні інваріанти
 
