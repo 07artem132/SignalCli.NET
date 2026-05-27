@@ -159,9 +159,6 @@ namespace SignalCli.Interfaces.Signal
         /// <exception cref="ArgumentNullException">Якщо <paramref name="options"/> = null.</exception>
         /// <exception cref="JsonRpcException">При помилці JSON-RPC.</exception>
         /// <exception cref="UntrustedIdentityException">Код <c>-4</c> — identity всіх recipient'ів неверифікована.</exception>
-        /// <exception cref="IdentityChangedException">
-        /// Підтип <see cref="UntrustedIdentityException"/>: identity ВЖЕ ВІДОМОГО контакту змінилася (re-install).
-        /// </exception>
         /// <exception cref="RateLimitException">Код <c>-5</c> — server-rate-limit для усіх recipient'ів.</exception>
         /// <exception cref="CaptchaRequiredException">Код <c>-6</c> — CAPTCHA challenge requested.</exception>
         /// <exception cref="OperationCanceledException">При скасуванні операції.</exception>

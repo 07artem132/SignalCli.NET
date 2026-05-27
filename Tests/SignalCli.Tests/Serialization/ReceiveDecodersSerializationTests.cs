@@ -12,11 +12,35 @@ public class ReceiveDecodersSerializationTests
     [Fact]
     public void JsonPayment_NewShape_HasNoteAndReceipt()
     {
-        // BREAKING fix: old (Amount, Currency) → new (Note, Receipt: byte[]).
+        // BREAKING fix: old (Amount, Currency) → new (Note, Receipt: byte[]?).
         const string json = """{"note":"Thanks!","receipt":"dGVzdC1ieXRlcw=="}""";
         var p = JsonSerializer.Deserialize(json, SignalJsonContext.Default.JsonPayment)!;
         Assert.Equal("Thanks!", p.Note);
-        Assert.Equal("test-bytes", System.Text.Encoding.UTF8.GetString(p.Receipt));
+        Assert.NotNull(p.Receipt);
+        Assert.Equal("test-bytes", System.Text.Encoding.UTF8.GetString(p.Receipt!));
+    }
+
+    [Fact]
+    public void JsonPayment_NullReceipt_DeserializesToNull()
+    {
+        // api-coverage-audit-followup §2: upstream Java has no NRT enforcement; wire-level
+        // `"receipt": null` MUST deserialize to null (consumer pattern `p.Receipt?.Length`
+        // обовʼязковий). Без цього guard'у попередній `byte[]` declaration давав silent NRE.
+        const string json = """{"note":"No receipt","receipt":null}""";
+        var p = JsonSerializer.Deserialize(json, SignalJsonContext.Default.JsonPayment)!;
+        Assert.Equal("No receipt", p.Note);
+        Assert.Null(p.Receipt);
+    }
+
+    [Fact]
+    public void JsonPayment_MissingReceipt_DeserializesToNull()
+    {
+        // api-coverage-audit-followup §2: missing-field case — Jackson permissiveness
+        // дозволяє пропустити поле, STJ source-gen теж робить так само (default-value).
+        const string json = """{"note":"Just a note"}""";
+        var p = JsonSerializer.Deserialize(json, SignalJsonContext.Default.JsonPayment)!;
+        Assert.Equal("Just a note", p.Note);
+        Assert.Null(p.Receipt);
     }
 
     [Fact]

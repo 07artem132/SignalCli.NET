@@ -244,6 +244,32 @@ internal sealed class SignalEventService(
         channel.Writer.TryWrite(item);
     }
 
+    /// <summary>
+    /// api-coverage-audit-followup §3: Generic helper що стискує 13 near-identical
+    /// presence-based union dispatch branches у <c>OnNotificationReceived</c> до one-liners.
+    /// </summary>
+    /// <remarks>
+    /// PRESENCE-BASED UNION (CLAUDE.md rule #4): null-присутність payload'у означає "не emit'имо".
+    /// Помилкова реструктуризація — early-return на per-branch level — заборонена; усі 9 inner-DataMessage
+    /// branches MUST allow concurrent emission. Цей хелпер повертає bool (чи emit'нули), call-site
+    /// аґреґує через <c>emitted |= ...</c>. Top-level envelope-branches (Typing/Receipt/Sync/Edit) —
+    /// 4 mutually-exclusive чейн з <c>if (Dispatch(...)) return;</c>.
+    /// </remarks>
+    private static bool DispatchUnionMember<TPayload, TArgs>(
+        TPayload? payload,
+        Func<TPayload, TArgs> makeArgs,
+        Subject<TArgs> subject,
+        Channel<TArgs> channel,
+        string kindLabel)
+        where TPayload : class
+    {
+        if (payload is null) return false;
+        var args = makeArgs(payload);
+        subject.OnNext(args);
+        TryWriteOrDrop(channel, args, kindLabel);
+        return true;
+    }
+
     public async Task<SubscribeReceiveResponse> SubscribeAsync(string account,
         CancellationToken cancellationToken = default)
     {
@@ -403,85 +429,35 @@ internal sealed class SignalEventService(
                 ["Account"] = account,
             });
 
-            // Якщо отримано подію набору тексту
-            if (jsonEnvelope.TypingMessage is not null)
-            {
-                var typingEvent = new TypingEventArgs(
-                    subscriptionId,
-                    account,
-                    jsonEnvelope.TypingMessage,
-                    jsonEnvelope.Source,
-                    jsonEnvelope.SourceNumber,
-                    jsonEnvelope.SourceUuid,
-                    jsonEnvelope.SourceName,
-                    jsonEnvelope.SourceDevice,
-                    jsonEnvelope.Timestamp,
-                    jsonEnvelope.ServerReceivedTimestamp,
-                    jsonEnvelope.ServerDeliveredTimestamp);
-                _typing.OnNext(typingEvent);
-                TryWriteOrDrop(_typingChannel, typingEvent, "typing");
-                return;
-            }
+            // 4 top-level mutually-exclusive envelope branches — early-return after dispatch.
+            if (DispatchUnionMember(jsonEnvelope.TypingMessage,
+                    t => new TypingEventArgs(subscriptionId, account, t,
+                        jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
+                        jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
+                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp),
+                    _typing, _typingChannel, "typing")) return;
 
-            // Якщо отримано квитанцію
-            if (jsonEnvelope.ReceiptMessage is not null)
-            {
-                var receiptEvent = new ReceiptEventArgs(
-                    subscriptionId,
-                    account,
-                    jsonEnvelope.ReceiptMessage,
-                    jsonEnvelope.Source,
-                    jsonEnvelope.SourceNumber,
-                    jsonEnvelope.SourceUuid,
-                    jsonEnvelope.SourceName,
-                    jsonEnvelope.SourceDevice,
-                    jsonEnvelope.Timestamp,
-                    jsonEnvelope.ServerReceivedTimestamp,
-                    jsonEnvelope.ServerDeliveredTimestamp);
-                _receipts.OnNext(receiptEvent);
-                TryWriteOrDrop(_receiptChannel, receiptEvent, "receipt");
-                return;
-            }
+            if (DispatchUnionMember(jsonEnvelope.ReceiptMessage,
+                    r => new ReceiptEventArgs(subscriptionId, account, r,
+                        jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
+                        jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
+                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp),
+                    _receipts, _receiptChannel, "receipt")) return;
 
-            // Якщо отримано подію синхронізації
-            if (jsonEnvelope.SyncMessage is not null)
-            {
-                var syncEvent = new SyncEventArgs(
-                    subscriptionId,
-                    account,
-                    jsonEnvelope.SyncMessage,
-                    jsonEnvelope.Source,
-                    jsonEnvelope.SourceNumber,
-                    jsonEnvelope.SourceUuid,
-                    jsonEnvelope.SourceName,
-                    jsonEnvelope.SourceDevice,
-                    jsonEnvelope.Timestamp,
-                    jsonEnvelope.ServerReceivedTimestamp,
-                    jsonEnvelope.ServerDeliveredTimestamp);
-                _syncs.OnNext(syncEvent);
-                TryWriteOrDrop(_syncChannel, syncEvent, "sync");
-                return;
-            }
+            if (DispatchUnionMember(jsonEnvelope.SyncMessage,
+                    s => new SyncEventArgs(subscriptionId, account, s,
+                        jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
+                        jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
+                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp),
+                    _syncs, _syncChannel, "sync")) return;
 
             // F13: подія редагування — на рівні конверта окремо від DataMessage.
-            if (jsonEnvelope.EditMessage is not null)
-            {
-                var editEvent = new EditEventArgs(
-                    subscriptionId,
-                    account,
-                    jsonEnvelope.EditMessage,
-                    jsonEnvelope.Source,
-                    jsonEnvelope.SourceNumber,
-                    jsonEnvelope.SourceUuid,
-                    jsonEnvelope.SourceName,
-                    jsonEnvelope.SourceDevice,
-                    jsonEnvelope.Timestamp,
-                    jsonEnvelope.ServerReceivedTimestamp,
-                    jsonEnvelope.ServerDeliveredTimestamp);
-                _edits.OnNext(editEvent);
-                TryWriteOrDrop(_editChannel, editEvent, "edit");
-                return;
-            }
+            if (DispatchUnionMember(jsonEnvelope.EditMessage,
+                    e => new EditEventArgs(subscriptionId, account, e,
+                        jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
+                        jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
+                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp),
+                    _edits, _editChannel, "edit")) return;
 
             // Якщо отримано подію, що містить дані повідомлення.
             // Одне повідомлення може одночасно містити кілька payload'ів
@@ -491,209 +467,111 @@ internal sealed class SignalEventService(
             {
                 var data = jsonEnvelope.DataMessage;
                 var emitted = false;
-                // Якщо задано текст повідомлення, формуємо подію текстового повідомлення
-                if (!string.IsNullOrEmpty(data.Message))
-                {
-                    var textEvent = new TextMessageEventArgs(
-                        subscriptionId,
-                        account,
-                        data,
-                        jsonEnvelope.Source,
-                        jsonEnvelope.SourceNumber,
-                        jsonEnvelope.SourceUuid,
-                        jsonEnvelope.SourceName,
-                        jsonEnvelope.SourceDevice,
-                        jsonEnvelope.Timestamp,
-                        jsonEnvelope.ServerReceivedTimestamp,
-                        jsonEnvelope.ServerDeliveredTimestamp);
-                    _textMessages.OnNext(textEvent);
-                    TryWriteOrDrop(_textChannel, textEvent, "text");
-                    emitted = true;
-                }
 
-                // Якщо задано реакцію, передаємо повний об'єкт реакції
-                if (data.Reaction is not null)
-                {
-                    var reactionEvent = new ReactionEventArgs(
-                        subscriptionId,
-                        account,
-                        data.Reaction,
-                        jsonEnvelope.Source,
-                        jsonEnvelope.SourceNumber,
-                        jsonEnvelope.SourceUuid,
-                        jsonEnvelope.SourceName,
-                        jsonEnvelope.SourceDevice,
-                        jsonEnvelope.Timestamp,
-                        jsonEnvelope.ServerReceivedTimestamp,
-                        jsonEnvelope.ServerDeliveredTimestamp);
+                // PRESENCE-BASED UNION (CLAUDE.md rule #4) — usі 13 inner-branches checked
+                // independently через `emitted |= Dispatch(...)`; кілька payload'ів можуть
+                // бути одночасно (наприклад text + attachment + quote). Quote — special-cased:
+                // повертається у presence-list лише якщо НІЧОГО ще не emit'нули (quote-only fallback).
 
-                    _reaction.OnNext(reactionEvent);
-                    TryWriteOrDrop(_reactionChannel, reactionEvent, "reaction");
-                    emitted = true;
-                }
+                emitted |= DispatchUnionMember(
+                    string.IsNullOrEmpty(data.Message) ? null : data.Message,
+                    _ => new TextMessageEventArgs(subscriptionId, account, data,
+                        jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
+                        jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
+                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp),
+                    _textMessages, _textChannel, "text");
 
-                // Якщо задано стікер, передаємо його дані
-                if (data.Sticker is not null)
-                {
-                    var stickerEvent = new StickerEventArgs(
-                        subscriptionId,
-                        account,
-                        data.Sticker,
-                        jsonEnvelope.Source,
-                        jsonEnvelope.SourceNumber,
-                        jsonEnvelope.SourceUuid,
-                        jsonEnvelope.SourceName,
-                        jsonEnvelope.SourceDevice,
-                        jsonEnvelope.Timestamp,
-                        jsonEnvelope.ServerReceivedTimestamp,
-                        jsonEnvelope.ServerDeliveredTimestamp);
-                    _sticker.OnNext(stickerEvent);
-                    TryWriteOrDrop(_stickerChannel, stickerEvent, "sticker");
-                    emitted = true;
-                }
+                emitted |= DispatchUnionMember(data.Reaction,
+                    r => new ReactionEventArgs(subscriptionId, account, r,
+                        jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
+                        jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
+                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp),
+                    _reaction, _reactionChannel, "reaction");
 
-                // Якщо задано вкладення, передаємо повний список вкладень
-                if (data.Attachments is not null && data.Attachments.Count > 0)
-                {
-                    var attachmentEvent = new AttachmentEventArgs(
-                        subscriptionId,
-                        account,
-                        data.Attachments,
-                        jsonEnvelope.Source,
-                        jsonEnvelope.SourceNumber,
-                        jsonEnvelope.SourceUuid,
-                        jsonEnvelope.SourceName,
-                        jsonEnvelope.SourceDevice,
-                        jsonEnvelope.Timestamp,
-                        jsonEnvelope.ServerReceivedTimestamp,
-                        jsonEnvelope.ServerDeliveredTimestamp);
-                    _attachments.OnNext(attachmentEvent);
-                    TryWriteOrDrop(_attachmentChannel, attachmentEvent, "attachment");
-                    emitted = true;
-                }
+                emitted |= DispatchUnionMember(data.Sticker,
+                    s => new StickerEventArgs(subscriptionId, account, s,
+                        jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
+                        jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
+                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp),
+                    _sticker, _stickerChannel, "sticker");
+
+                emitted |= DispatchUnionMember(
+                    data.Attachments is { Count: > 0 } ? data.Attachments : null,
+                    a => new AttachmentEventArgs(subscriptionId, account, a,
+                        jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
+                        jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
+                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp),
+                    _attachments, _attachmentChannel, "attachment");
 
                 // F13: RemoteDelete — окрема подія (відправник прибрав повідомлення в одержувача).
-                if (data.RemoteDelete is not null)
-                {
-                    var rd = new RemoteDeleteEventArgs(
-                        subscriptionId,
-                        account,
-                        data.RemoteDelete,
-                        jsonEnvelope.Source,
-                        jsonEnvelope.SourceNumber,
-                        jsonEnvelope.SourceUuid,
-                        jsonEnvelope.SourceName,
-                        jsonEnvelope.SourceDevice,
-                        jsonEnvelope.Timestamp,
-                        jsonEnvelope.ServerReceivedTimestamp,
-                        jsonEnvelope.ServerDeliveredTimestamp);
-                    _remoteDeletes.OnNext(rd);
-                    TryWriteOrDrop(_remoteDeleteChannel, rd, "remote_delete");
-                    emitted = true;
-                }
+                emitted |= DispatchUnionMember(data.RemoteDelete,
+                    rd => new RemoteDeleteEventArgs(subscriptionId, account, rd,
+                        jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
+                        jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
+                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp),
+                    _remoteDeletes, _remoteDeleteChannel, "remote_delete");
 
-                // F13: Quote-only — DataMessage без тіла/реакції/стікера/вкладень, але з Quote.
-                // Без цієї гілки повідомлення «відповідь без власного тексту» (рідко, але буває)
-                // мовчки губилося як "unknown".
-                if (!emitted && data.Quote is not null)
-                {
-                    var qe = new QuoteEventArgs(
-                        subscriptionId,
-                        account,
-                        data,
-                        jsonEnvelope.Source,
-                        jsonEnvelope.SourceNumber,
-                        jsonEnvelope.SourceUuid,
-                        jsonEnvelope.SourceName,
-                        jsonEnvelope.SourceDevice,
-                        jsonEnvelope.Timestamp,
-                        jsonEnvelope.ServerReceivedTimestamp,
-                        jsonEnvelope.ServerDeliveredTimestamp);
-                    _quotes.OnNext(qe);
-                    TryWriteOrDrop(_quoteChannel, qe, "quote");
-                    emitted = true;
-                }
+                // F13: Quote-only fallback — emit ТІЛЬКИ якщо нічого вище не emit'нуло
+                // (інакше Quote приходить parasitically як supplemental на текст/реакцію).
+                // Без цієї гілки повідомлення «відповідь без власного тексту» (рідко) губиться як "unknown".
+                if (!emitted)
+                    emitted |= DispatchUnionMember(data.Quote,
+                        _ => new QuoteEventArgs(subscriptionId, account, data,
+                            jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
+                            jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
+                            jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp),
+                        _quotes, _quoteChannel, "quote");
 
                 // ===== Wave 7b: 7 нових presence-based union branches =====
-                // PRESENCE-BASED UNION (critical rule #4): кожне поле перевіряється
-                // НЕЗАЛЕЖНО без early-return — кілька payload'ів можуть бути одночасно.
 
-                if (data.PollCreate is not null)
-                {
-                    var pc = new PollCreateEventArgs(subscriptionId, account, data.PollCreate,
+                emitted |= DispatchUnionMember(data.PollCreate,
+                    pc => new PollCreateEventArgs(subscriptionId, account, pc,
                         jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
                         jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
-                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp);
-                    _pollCreates.OnNext(pc);
-                    TryWriteOrDrop(_pollCreateChannel, pc, "poll_create");
-                    emitted = true;
-                }
+                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp),
+                    _pollCreates, _pollCreateChannel, "poll_create");
 
-                if (data.PollVote is not null)
-                {
-                    var pv = new PollVoteEventArgs(subscriptionId, account, data.PollVote,
+                emitted |= DispatchUnionMember(data.PollVote,
+                    pv => new PollVoteEventArgs(subscriptionId, account, pv,
                         jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
                         jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
-                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp);
-                    _pollVotes.OnNext(pv);
-                    TryWriteOrDrop(_pollVoteChannel, pv, "poll_vote");
-                    emitted = true;
-                }
+                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp),
+                    _pollVotes, _pollVoteChannel, "poll_vote");
 
-                if (data.PollTerminate is not null)
-                {
-                    var pt = new PollTerminateEventArgs(subscriptionId, account, data.PollTerminate,
+                emitted |= DispatchUnionMember(data.PollTerminate,
+                    pt => new PollTerminateEventArgs(subscriptionId, account, pt,
                         jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
                         jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
-                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp);
-                    _pollTerminates.OnNext(pt);
-                    TryWriteOrDrop(_pollTerminateChannel, pt, "poll_terminate");
-                    emitted = true;
-                }
+                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp),
+                    _pollTerminates, _pollTerminateChannel, "poll_terminate");
 
-                if (data.Payment is not null)
-                {
-                    var pe = new PaymentEventArgs(subscriptionId, account, data.Payment,
+                emitted |= DispatchUnionMember(data.Payment,
+                    pe => new PaymentEventArgs(subscriptionId, account, pe,
                         jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
                         jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
-                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp);
-                    _payments.OnNext(pe);
-                    TryWriteOrDrop(_paymentChannel, pe, "payment");
-                    emitted = true;
-                }
+                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp),
+                    _payments, _paymentChannel, "payment");
 
-                if (data.PinMessage is not null)
-                {
-                    var pm = new PinMessageEventArgs(subscriptionId, account, data.PinMessage,
+                emitted |= DispatchUnionMember(data.PinMessage,
+                    pm => new PinMessageEventArgs(subscriptionId, account, pm,
                         jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
                         jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
-                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp);
-                    _pinMessages.OnNext(pm);
-                    TryWriteOrDrop(_pinMessageChannel, pm, "pin_message");
-                    emitted = true;
-                }
+                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp),
+                    _pinMessages, _pinMessageChannel, "pin_message");
 
-                if (data.UnpinMessage is not null)
-                {
-                    var upm = new UnpinMessageEventArgs(subscriptionId, account, data.UnpinMessage,
+                emitted |= DispatchUnionMember(data.UnpinMessage,
+                    upm => new UnpinMessageEventArgs(subscriptionId, account, upm,
                         jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
                         jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
-                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp);
-                    _unpinMessages.OnNext(upm);
-                    TryWriteOrDrop(_unpinMessageChannel, upm, "unpin_message");
-                    emitted = true;
-                }
+                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp),
+                    _unpinMessages, _unpinMessageChannel, "unpin_message");
 
-                if (data.AdminDelete is not null)
-                {
-                    var ad = new AdminDeleteEventArgs(subscriptionId, account, data.AdminDelete,
+                emitted |= DispatchUnionMember(data.AdminDelete,
+                    ad => new AdminDeleteEventArgs(subscriptionId, account, ad,
                         jsonEnvelope.Source, jsonEnvelope.SourceNumber, jsonEnvelope.SourceUuid,
                         jsonEnvelope.SourceName, jsonEnvelope.SourceDevice, jsonEnvelope.Timestamp,
-                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp);
-                    _adminDeletes.OnNext(ad);
-                    TryWriteOrDrop(_adminDeleteChannel, ad, "admin_delete");
-                    emitted = true;
-                }
+                        jsonEnvelope.ServerReceivedTimestamp, jsonEnvelope.ServerDeliveredTimestamp),
+                    _adminDeletes, _adminDeleteChannel, "admin_delete");
 
                 if (!emitted)
                     SignalEventServiceLog.DataMessageEmpty(_logger);

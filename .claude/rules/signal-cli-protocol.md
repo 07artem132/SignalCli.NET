@@ -71,7 +71,28 @@ signal-cli releases when bumping the pinned version in `SignalCli.runtime.csproj
   `UnsupportedClassVersionError`. The bundled-JRE packages
   (`SignalCli.Runtime.Jre.{win-x64,osx-arm64}`) pin Temurin 25 SHA-256 in their csproj.
 
+- **No JSON-RPC distinction between first-contact-unknown identity and re-installed identity (key
+  change).** `SendMessageResultUtils.java:60 @ bda4e7fc` throws
+  `UntrustedKeyErrorException("Failed to send message due to untrusted identities")` — single
+  fixed string, always plural, no variation. `JsonSendMessageResult.Type` has exactly one
+  identity-related enum value: `IDENTITY_FAILURE` (`JsonSendMessageResult.java:46`), not
+  `IDENTITY_NEW`/`IDENTITY_CHANGED`. Both first-contact and re-install map to identical wire shape
+  (code `-4`, identical message). Distinguishing the two cases is only possible **client-side** by
+  cross-referencing `listIdentities`. Wave-1's `IdentityChangedException` (deprecated 4.10.0,
+  removed 5.0) was a speculative split that never had an upstream distinguisher — see
+  `api-coverage-audit-followup` capability `identity-changed-deprecation` for history.
+
 **When bumping `<SignalCliVersion>` in `SignalCli.runtime.csproj`:** re-verify each of the
-seven facts above against the new signal-cli source. The PR description SHALL include a one-line
+eight facts above against the new signal-cli source. The PR description SHALL include a one-line
 confirmation that these facts were re-verified, even if zero edits resulted. Discrepancies SHALL
 be resolved either by adapting the wrapper or by updating this section + the commit citation.
+
+**Additionally re-grep upstream for load-bearing exception-message substrings** used in
+`JsonRpcClient.InvokeMethodAsync`'s typed-exception dispatch switch. Currently only one substring
+is load-bearing: `"admin"` (case-insensitive, in `JsonRpcClient.cs:511-513`) — used to distinguish
+`GroupAdminRequiredException` from base `JsonRpcException` for code `-1`. If upstream changes the
+wording of `GroupCommandHelper`/`Group*Command.java` (e.g. "moderator" / "admins") the substring
+match silently demotes the typed exception back to base `JsonRpcException` — failing consumer
+`catch (GroupAdminRequiredException)` blocks at runtime with no compile-time signal. Re-grep
+`org.asamk.signal.commands/Group*Command.java` confirms the load-bearing token still appears
+verbatim before merging the version bump.
