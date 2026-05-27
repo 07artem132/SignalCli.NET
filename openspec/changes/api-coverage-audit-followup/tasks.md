@@ -53,15 +53,15 @@ warns against (per Cap 1's audit-debt.md addition). No code change; no commit.
 
 ## Release commit (final)
 
-- [ ] 6.1 Bump `<SignalCliPackageVersion>` in `Directory.Build.props`: `4.9.0` → `4.10.0`
-- [ ] 6.2 Add `## [4.10.0] — YYYY-MM-DD` section to `CHANGELOG.md` per `.claude/rules/openspec-workflow.md` § CHANGELOG voice template:
+- [x] 6.1 Bump `<SignalCliPackageVersion>` in `Directory.Build.props`: `4.9.0` → `4.10.0`
+- [x] 6.2 Add `## [4.10.0] — YYYY-MM-DD` section to `CHANGELOG.md` per `.claude/rules/openspec-workflow.md` § CHANGELOG voice template:
   - Bold leading bullets, consumer-first voice
   - **Якщо ти catch'аєш `IdentityChangedException` — мігруй на `UntrustedIdentityException`.** Тип ніколи не диспатчився (upstream сам не розрізняє first-contact vs re-install); deprecated, видаляється у 5.0.
   - **Якщо ти читаєш `payment.Receipt.Length` — додай null-check.** Wire-контракт чесніший: `byte[]?`. Wave 7b shape (3 days old), realistic blast radius zero.
   - Refactor/test/doc-only items grouped under single "Internal hygiene" bullet
-- [ ] 6.3 `dotnet build -p:TreatWarningsAsErrors=true` final pass; `dotnet test` full suite (503+ tests including new captcha-dispatch + 2 nullable-payment serialization tests)
-- [ ] 6.4 `npx -y @fission-ai/openspec@latest validate api-coverage-audit-followup --strict`
-- [ ] 6.5 Commit: `chore(release): 4.10.0 — api-coverage-audit-followup (5 capabilities)`
+- [x] 6.3 `dotnet build -p:TreatWarningsAsErrors=true` final pass; `dotnet test` full suite (503+ tests including new captcha-dispatch + 2 nullable-payment serialization tests)
+- [x] 6.4 `npx -y @fission-ai/openspec@latest validate api-coverage-audit-followup --strict`
+- [x] 6.5 Commit: `chore(release): 4.10.0 — api-coverage-audit-followup (5 capabilities)`
 - [ ] 6.6 (Post-merge, separate workflow per `.claude/rules/openspec-workflow.md` § post-merge): archive change + update CLAUDE.md "Implemented, merged, archived" list
 
 ## Notes

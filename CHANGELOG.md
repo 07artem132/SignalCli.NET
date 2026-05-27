@@ -3,6 +3,32 @@
 Формат заснований на [Keep a Changelog](https://keepachangelog.com/),
 проєкт дотримується [семантичного версіонування](https://semver.org/lang/uk/).
 
+## [4.10.0] — 2026-05-27
+
+Minor — 5 capabilities з post-merge code-review після landing `signal-cli-api-coverage` 4.9.0. Non-breaking; одна типу deprecation (`IdentityChangedException` → `[Obsolete]`, видалення 5.0), одна wire-nullability honesty fix (`JsonPayment.Receipt: byte[]?`), один internal refactor (event-dispatch helper), doc-updates.
+
+### ⚠ Migration
+
+- **Якщо ти catch'аєш `IdentityChangedException` — мігруй на `UntrustedIdentityException`.** Тип ніколи не диспатчиться — upstream signal-cli має ЄДИНУ fixed-string помилку `"Failed to send message due to untrusted identities"` для обох випадків (first-contact untrusted AND re-installed identity); `JsonSendMessageResult.Type` має одну identity-related enum value `IDENTITY_FAILURE`, без `IDENTITY_NEW`/`IDENTITY_CHANGED`-split'у (`SendMessageResultUtils.java:60 @ bda4e7fc`). Wave-1 (4.1.0) додав цей derived тип на основі hypothetical upstream-distinguisher; post-merge review виявив що той distinguisher не існує. Тип `[Obsolete]` з 4.10.0, custom `DiagnosticId="SIGNALCLI001"`, видаляється у 5.0. Compile-time warning веде на migration. Якщо тобі ДІЙСНО треба розрізнити first-contact vs re-install — це client-side concern: cache `ISignalContacts.ListIdentitiesAsync` results, порівнюй safety-numbers перед/після failure.
+
+- **Якщо ти читаєш `payment.Receipt.Length` — додай `?.Length` або null-check.** `JsonPayment.Receipt` тепер `byte[]?` (було `byte[]`). Upstream Java has no NRT — обидва `note` і `receipt` можуть бути `null` at runtime; STJ source-gen для reference-type не enforce'ив NRT, тож `"receipt": null` присвоював `null` у non-nullable property → silent NRE у consumer-side `.Length`. Wire-контракт чесніший. Wave 7b shape (3 days old as of 4.10.0); realistic blast radius zero — нові 2 serialization tests pin'ять обидва wire cases.
+
+### 🛠 Internal hygiene
+
+- **Event-dispatch refactor:** 13 near-identical dispatch branches у `SignalEventService.OnNotificationReceived` стискнуто через generic `DispatchUnionMember<TPayload, TArgs>` private helper. 4 top-level envelope branches (Typing/Receipt/Sync/Edit) — mutually-exclusive `if (Dispatch(...)) return;`; 9 inner DataMessage branches — `emitted |= Dispatch(...)` (presence-based union per CLAUDE.md rule #4). Public behavior незмінне; `OnNotificationReceived` 213 → 138 рядків. `EventApiSymmetryWave7bTests` + presence-based dispatch suites — усі зелені.
+
+- **Protocol-checklist amendment:** `.claude/rules/signal-cli-protocol.md` — додано 8-й pinned fact про upstream no-distinction first-contact vs re-installed identity (closure для `IdentityChangedException` deprecation); footer checklist розширено re-grep `"admin"`-substring stability під час `<SignalCliVersion>`-bump'у (запобігає silent typed→base exception degradation при upstream wording change). `audit-debt.md` — новий §0.5 cite-and-read working-style bullet (lesson з Wave-1 IdentityChangedException findings'у).
+
+- **Tests:** test count 503 → 506. 2 нові `JsonPayment_{NullReceipt,MissingReceipt}_DeserializesToNull` у `ReceiveDecodersSerializationTests`. Existing `InvokeMethodAsync_Code_Minus6_ThrowsCaptchaRequired` (з 4.1.0) залишається — proposal's claim of "absence" виявився cite-and-trust error.
+
+### 🛡️ Захист від регресій
+
+- R04 (`ObsoleteMessageConsistencyTests`) — green ("5.0" > current major 4 для `IdentityChangedException` deprecation message).
+- Public-API baseline — no diff (`[Obsolete]` attribute не surface'ить у IL doc-comment XML; nullability NRT теж не surface'ить).
+- RG06 (`EventApiSymmetryWave7bTests`) + presence-based dispatch tests — guarantee event-refactor behavior-preserving.
+
+OpenSpec: [`openspec/changes/archive/<date>-api-coverage-audit-followup/`](openspec/changes/archive/) (5 capabilities; Cap 2 `captcha-dispatch-test` — no-op since test already existed).
+
 ## [4.9.0] — 2026-05-25
 
 Minor-реліз. 🏁 **Wave 7b** — receive-side decoders для всіх 7 нових event-types з Wave 7a + JsonPayment shape-fix. `ISignalEventService` розширено 7 IObservable + 7 IAsyncEnumerable парами (10 → 17 event-pair surfaces). **Closes signal-cli-api-coverage epic** — 100% send-side + 100% receive-side decoder parity.

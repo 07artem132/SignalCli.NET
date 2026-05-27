@@ -163,27 +163,34 @@
         </member>
         <member name="T:SignalCli.Exceptions.IdentityChangedException">
             <summary>
-            Виняток, що сигналізує про <b>зміну identity-key вже відомого контакту</b>
-            (re-install на пристрої співрозмовника), на відміну від першого contact'у з невідомим
-            identity (також JSON-RPC код <c>-4</c>, але семантично інший випадок).
+            ⚠ <b>Deprecated — never dispatched.</b> Type залишається у public-API як <c>[Obsolete]</c> shim
+            до 5.0 per one-major-grace convention; видаляється у 5.0.
             </summary>
             <remarks>
-            signal-cli-api-coverage Wave 1 (`messaging-interactive`): consumer-actionable derived
-            тип поверх <see cref="T:SignalCli.Exceptions.UntrustedIdentityException"/>. Caller може зробити
-            <c>catch (IdentityChangedException) { await _signalContacts.TrustAsync(...); /* retry */ }</c>
-            замість generic <c>catch (UntrustedIdentityException)</c> + inspect-message-text.
             <para>
-            <b>Опт-ін у hierarchy:</b> цей тип НЕ диспатчиться окремо з
-            <c>JsonRpcClient.InvokeMethodAsync</c> (signal-cli повертає той самий код <c>-4</c>
-            для обох випадків — first-contact і re-install). Замість цього сервіс-методи у
-            signal-cli-сайті (наприклад <c>SendReactionAsync</c>) ловлять
-            <see cref="T:SignalCli.Exceptions.UntrustedIdentityException"/> і за повідомленням ре-throw'ять його як
-            <see cref="T:SignalCli.Exceptions.IdentityChangedException"/>, якщо identity вже існувала у локальному trust-store.
+            <b>Lifetime context.</b> Wave 1 (`messaging-interactive`, 4.1.0) припустив що signal-cli
+            розрізняє "re-install identity-key вже відомого контакту" vs "first-contact untrusted"
+            у JSON-RPC шарі — і додав цей derived тип щоб consumer'и могли пащеризувати
+            <c>catch (IdentityChangedException)</c>. Post-merge code review (2026-05-25, після landing
+            `signal-cli-api-coverage`) виявив що це припущення невірне: upstream
+            <c>SendMessageResultUtils.java:60 @ bda4e7fc</c> throws
+            <c>UntrustedKeyErrorException("Failed to send message due to untrusted identities")</c> —
+            **один fixed string**, завжди plural, no variation. <c>JsonSendMessageResult.Type</c> має
+            рівно одну identity-related enum value: <c>IDENTITY_FAILURE</c> (не
+            <c>IDENTITY_NEW</c>/<c>IDENTITY_CHANGED</c>). Тип ніколи не диспатчиться з
+            <c>JsonRpcClient.InvokeMethodAsync</c>; жодного <c>throw new IdentityChangedException(...)</c>
+            у production-коді немає.
             </para>
             <para>
-            signal-cli RPC mapping: see <c>src/main/java/org/asamk/signal/jsonrpc/SignalJsonRpcCommandHandler.java</c>
-            @ <c>bda4e7fc</c> (lines 248-273 — promotion of <c>hasOnlyUntrustedIdentity()</c> into
-            JSON-RPC <c>-4 UNTRUSTED_KEY_ERROR</c>).
+            <b>Migration.</b> Catch <see cref="T:SignalCli.Exceptions.UntrustedIdentityException"/> замість цього типу. Якщо потрібно
+            розрізнити "first-contact vs re-install" — це client-side concern: cache
+            <see cref="M:SignalCli.Interfaces.Signal.ISignalContacts.ListIdentitiesAsync(System.String,System.String,System.Threading.CancellationToken)"/> результати
+            у consumer-side trust store, порівнюй safety-number перед/після failure.
+            </para>
+            <para>
+            Pinned fact #8 у <see href="../../.claude/rules/signal-cli-protocol.md">.claude/rules/signal-cli-protocol.md</see>
+            документує цю upstream-нон-distinction; api-coverage-audit-followup §1 (capability
+            `identity-changed-deprecation`) — context для deprecation.
             </para>
             </remarks>
         </member>
@@ -336,10 +343,10 @@
             flow замість inspect-message-text. <see cref="P:SignalCli.Exceptions.JsonRpcException.Error"/>.Code завжди <c>-4</c>
             (= <see cref="F:SignalCli.Exceptions.JsonRpcErrorCode.UntrustedIdentity"/>) by construction.
             <para>
-            signal-cli-api-coverage Wave 1 (messaging-interactive): тип un-sealed щоб дозволити
-            derivation <see cref="T:SignalCli.Exceptions.IdentityChangedException"/> для опт-ін різнення "re-install уже
-            відомого контакту" vs "first-contact untrusted" (upstream signal-cli обидва випадки емітить
-            тим самим кодом <c>-4</c>, тож розрізнення — client-side concern).
+            Тип un-sealed щоб дозволити derivation (zero внутрішніх sealed-guards). api-coverage-audit-followup §1:
+            прямого useful subtype'у не залишилося — <see cref="T:SignalCli.Exceptions.IdentityChangedException"/> deprecated
+            як speculative-split (never dispatched). Якщо потрібен new derived type — додавай лише після
+            підтвердження upstream distinguisher (§0.5 cite-and-read).
             </para>
             </remarks>
         </member>
@@ -1689,9 +1696,6 @@
             <exception cref="T:System.ArgumentNullException">Якщо <paramref name="options"/> = null.</exception>
             <exception cref="T:SignalCli.Exceptions.JsonRpcException">При помилці JSON-RPC.</exception>
             <exception cref="T:SignalCli.Exceptions.UntrustedIdentityException">Код <c>-4</c> — identity всіх recipient'ів неверифікована.</exception>
-            <exception cref="T:SignalCli.Exceptions.IdentityChangedException">
-            Підтип <see cref="T:SignalCli.Exceptions.UntrustedIdentityException"/>: identity ВЖЕ ВІДОМОГО контакту змінилася (re-install).
-            </exception>
             <exception cref="T:SignalCli.Exceptions.RateLimitException">Код <c>-5</c> — server-rate-limit для усіх recipient'ів.</exception>
             <exception cref="T:SignalCli.Exceptions.CaptchaRequiredException">Код <c>-6</c> — CAPTCHA challenge requested.</exception>
             <exception cref="T:System.OperationCanceledException">При скасуванні операції.</exception>
@@ -4876,9 +4880,19 @@
             @ bda4e7fc</c> declares <c>record JsonPayment(String note, byte[] receipt)</c>.
             Existing code що читало <c>Amount</c>/<c>Currency</c> на real envelope ніколи не fire'ило;
             shape-fix покриває real wire shape.
+            <para>
+            api-coverage-audit-followup §2: <c>Receipt</c> — <c>byte[]?</c> (nullable) reflecting
+            upstream Java's no-NRT permissiveness. Both <c>"receipt": null</c> AND missing-<c>receipt</c>
+            envelope cases deliver <c>null</c> на consumer-side. <c>payment.Receipt?.Length</c> required
+            у consumer code.
+            </para>
             </remarks>
             <param name="Note">Optional plain-text note що супроводжує payment.</param>
-            <param name="Receipt">MobileCoin receipt blob. Jackson serializes <c>byte[]</c> як base64 string; STJ робить так само.</param>
+            <param name="Receipt">
+            MobileCoin receipt blob. Jackson serializes <c>byte[]</c> як base64 string; STJ робить так само.
+            Nullable per upstream's permissive contract (Java has no NRT — both <c>null</c>-assignment
+            AND missing-field cases possible).
+            </param>
         </member>
         <member name="M:SignalCli.Models.Signal.JsonPayment.#ctor(System.String,System.Byte[])">
             <summary>
@@ -4891,15 +4905,29 @@
             @ bda4e7fc</c> declares <c>record JsonPayment(String note, byte[] receipt)</c>.
             Existing code що читало <c>Amount</c>/<c>Currency</c> на real envelope ніколи не fire'ило;
             shape-fix покриває real wire shape.
+            <para>
+            api-coverage-audit-followup §2: <c>Receipt</c> — <c>byte[]?</c> (nullable) reflecting
+            upstream Java's no-NRT permissiveness. Both <c>"receipt": null</c> AND missing-<c>receipt</c>
+            envelope cases deliver <c>null</c> на consumer-side. <c>payment.Receipt?.Length</c> required
+            у consumer code.
+            </para>
             </remarks>
             <param name="Note">Optional plain-text note що супроводжує payment.</param>
-            <param name="Receipt">MobileCoin receipt blob. Jackson serializes <c>byte[]</c> як base64 string; STJ робить так само.</param>
+            <param name="Receipt">
+            MobileCoin receipt blob. Jackson serializes <c>byte[]</c> як base64 string; STJ робить так само.
+            Nullable per upstream's permissive contract (Java has no NRT — both <c>null</c>-assignment
+            AND missing-field cases possible).
+            </param>
         </member>
         <member name="P:SignalCli.Models.Signal.JsonPayment.Note">
             <summary>Optional plain-text note що супроводжує payment.</summary>
         </member>
         <member name="P:SignalCli.Models.Signal.JsonPayment.Receipt">
-            <summary>MobileCoin receipt blob. Jackson serializes <c>byte[]</c> як base64 string; STJ робить так само.</summary>
+            <summary>
+            MobileCoin receipt blob. Jackson serializes <c>byte[]</c> як base64 string; STJ робить так само.
+            Nullable per upstream's permissive contract (Java has no NRT — both <c>null</c>-assignment
+            AND missing-field cases possible).
+            </summary>
         </member>
         <member name="T:SignalCli.Models.Signal.JsonPollCreate">
             <summary>
@@ -10800,6 +10828,19 @@
             успішне, але якщо канал перед записом був повним — найстаріший елемент вижений.
             Інкрементує лічильник і періодично логує на Debug для діагностики backpressure.
             </summary>
+        </member>
+        <member name="M:SignalCli.Services.Signal.SignalEventService.DispatchUnionMember``2(``0,System.Func{``0,``1},System.Reactive.Subjects.Subject{``1},System.Threading.Channels.Channel{``1},System.String)">
+            <summary>
+            api-coverage-audit-followup §3: Generic helper що стискує 13 near-identical
+            presence-based union dispatch branches у <c>OnNotificationReceived</c> до one-liners.
+            </summary>
+            <remarks>
+            PRESENCE-BASED UNION (CLAUDE.md rule #4): null-присутність payload'у означає "не emit'имо".
+            Помилкова реструктуризація — early-return на per-branch level — заборонена; усі 9 inner-DataMessage
+            branches MUST allow concurrent emission. Цей хелпер повертає bool (чи emit'нули), call-site
+            аґреґує через <c>emitted |= ...</c>. Top-level envelope-branches (Typing/Receipt/Sync/Edit) —
+            4 mutually-exclusive чейн з <c>if (Dispatch(...)) return;</c>.
+            </remarks>
         </member>
         <member name="M:SignalCli.Services.Signal.SignalEventService.OnNotificationReceived(SignalCli.Models.Rpc.JsonRpcNotification{SignalCli.Models.Signal.Events.SubscriptionEventArgs})">
             <summary>
