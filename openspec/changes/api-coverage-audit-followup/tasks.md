@@ -31,13 +31,13 @@ warns against (per Cap 1's audit-debt.md addition). No code change; no commit.
 
 ## Capability 4 — `json-payment-receipt-nullable` (1-line DTO change + tests)
 
-- [ ] 4.1 Edit `src/SignalCli/Models/Signal/Envelope.cs:155` — `byte[] Receipt` → `byte[]? Receipt`
-- [ ] 4.2 Update `JsonPayment` XMLDoc remarks — note nullable wire-contract reflecting upstream Java's no-NRT permissiveness
-- [ ] 4.3 Check propagation: `PaymentEventArgs.Receipt` and any consumer-facing projections — update to `byte[]?` if needed
-- [ ] 4.4 Extend `Tests/SignalCli.Tests/Serialization/ReceiveDecodersSerializationTests.cs` — add `JsonPayment_NullReceipt_DeserializesToNull` + `JsonPayment_MissingReceipt_DeserializesToNull` Facts
-- [ ] 4.5 `dotnet build -p:TreatWarningsAsErrors=true` — fix any new CS8602 warnings in production paths if surfaced
-- [ ] 4.6 Regenerate `Tests/SignalCli.Tests/RegressionGuards/SignalCli.public-api.txt` baseline
-- [ ] 4.7 Commit: `fix(envelope): JsonPayment.Receipt nullable — honor upstream wire-contract`
+- [x] 4.1 Edit `src/SignalCli/Models/Signal/Envelope.cs:155` — `byte[] Receipt` → `byte[]? Receipt`
+- [x] 4.2 Update `JsonPayment` XMLDoc remarks — note nullable wire-contract reflecting upstream Java's no-NRT permissiveness
+- [x] 4.3 Check propagation: `PaymentEventArgs.Receipt` and any consumer-facing projections — update to `byte[]?` if needed
+- [x] 4.4 Extend `Tests/SignalCli.Tests/Serialization/ReceiveDecodersSerializationTests.cs` — add `JsonPayment_NullReceipt_DeserializesToNull` + `JsonPayment_MissingReceipt_DeserializesToNull` Facts
+- [x] 4.5 `dotnet build -p:TreatWarningsAsErrors=true` — fix any new CS8602 warnings in production paths if surfaced
+- [x] 4.6 Regenerate `Tests/SignalCli.Tests/RegressionGuards/SignalCli.public-api.txt` baseline
+- [x] 4.7 Commit: `fix(envelope): JsonPayment.Receipt nullable — honor upstream wire-contract`
 
 ## Capability 5 — `identity-changed-deprecation` (Obsolete shim + XMLDoc + cref removal)
 

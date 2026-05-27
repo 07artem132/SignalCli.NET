@@ -146,13 +146,23 @@ public record JsonQuote(
 /// @ bda4e7fc</c> declares <c>record JsonPayment(String note, byte[] receipt)</c>.
 /// Existing code що читало <c>Amount</c>/<c>Currency</c> на real envelope ніколи не fire'ило;
 /// shape-fix покриває real wire shape.
+/// <para>
+/// api-coverage-audit-followup §2: <c>Receipt</c> — <c>byte[]?</c> (nullable) reflecting
+/// upstream Java's no-NRT permissiveness. Both <c>"receipt": null</c> AND missing-<c>receipt</c>
+/// envelope cases deliver <c>null</c> на consumer-side. <c>payment.Receipt?.Length</c> required
+/// у consumer code.
+/// </para>
 /// </remarks>
 /// <param name="Note">Optional plain-text note що супроводжує payment.</param>
-/// <param name="Receipt">MobileCoin receipt blob. Jackson serializes <c>byte[]</c> як base64 string; STJ робить так само.</param>
+/// <param name="Receipt">
+/// MobileCoin receipt blob. Jackson serializes <c>byte[]</c> як base64 string; STJ робить так само.
+/// Nullable per upstream's permissive contract (Java has no NRT — both <c>null</c>-assignment
+/// AND missing-field cases possible).
+/// </param>
 [PublicAPI]
 public record JsonPayment(
     [property: JsonPropertyName("note")] string? Note,
-    [property: JsonPropertyName("receipt")] byte[] Receipt
+    [property: JsonPropertyName("receipt")] byte[]? Receipt
 );
 
 /// <summary>
