@@ -161,19 +161,24 @@ services.AddSignalCli(builder.Configuration.GetSection("SignalCli"));
 
 ## ⚙️ API-можливості
 
+З **4.9.0** покриття JSON-RPC методів signal-cli — **100%** (54 з 54). Детально по кожному методу — у [`docs/api/`](docs/).
+
 | Категорія | Підтримано | На черзі |
 |-----------|------------|----------|
-| **Акаунт** | `ListAccountsAsync`, `SyncAccountAsync` | `register`, `verify`, `unregister`, `updateAccount`, `setPin`, ... |
-| **Пристрої** | `StartLinkAsync`, `FinishLinkAsync` | `listDevices`, `addDevice`, `removeDevice` |
-| **Повідомлення** | `SendTextMessageAsync`, `SendAttachmentAsync`, `SendStickerAsync` | `sendReaction`, `sendReceipt`, `sendTyping`, `remoteDelete` |
-| **Групи** | `ListGroupsAsync` | `joinGroup`, `updateGroup`, `quitGroup` |
-| **Події** | `SubscribeAsync`, `UnsubscribeAsync` + 10 потоків подій *(див. наступну секцію)* | — |
-| **Системні** | `VersionAsync` | `submitRateLimitChallenge` |
-| **Профіль · Контакти · Безпека · Стікери · Вкладення** | — | `updateProfile`, `listContacts`, `listIdentities`, `uploadStickerPack`, `getAttachment`, ... |
+| **Акаунт** | `ListAccountsAsync`, `SyncAccountAsync`, `GetUserStatusAsync`, `SubmitRateLimitChallengeAsync`, `SendContactsAsync` + 8 destructive (`UpdateAccount`, `UpdateConfiguration`, `SetPin`, `RemovePin`, `Unregister`, `DeleteLocalAccountData`, `StartChangeNumber`, `FinishChangeNumber` — gated через `EnableDestructiveOperations`) | `register`, `verify` (live SMS handshake — поза scope бібліотеки для уже-зареєстрованих акаунтів) |
+| **Пристрої** | `StartLinkAsync`, `FinishLinkAsync`, `AddDeviceAsync`, `ListDevicesAsync`, `RemoveDeviceAsync`, `UpdateDeviceAsync` | — |
+| **Повідомлення (send-side)** | `SendTextMessageAsync`, `SendAttachmentAsync`, `SendStickerAsync`, `SendReactionAsync`, `SendReceiptAsync`, `SendTypingAsync`, `SendRemoteDeleteAsync`, `SendPollCreate/Vote/TerminateAsync`, `SendAdminDeleteAsync`, `SendPin/UnpinMessageAsync`, `SendMessageRequestResponseAsync`, `SendPaymentNotificationAsync` | — |
+| **Групи** | `ListGroupsAsync`, `JoinGroupAsync`, `UpdateGroupAsync` *(dual-mode create/update)*, `QuitGroupAsync` *(idempotent)* | — |
+| **Контакти · Identity** | `ListContactsAsync`, `ListIdentitiesAsync`, `TrustAllKnownKeysAsync`, `TrustVerifiedAsync`, `UpdateContactAsync`, `UpdateProfileAsync`, `RemoveContactAsync`, `BlockAsync`, `UnblockAsync` | — |
+| **Стікери · Вкладення** | `UploadStickerPackAsync`, `ListStickerPacksAsync`, `AddStickerPackAsync`, `GetAttachmentAsync`, `GetAvatarAsync`, `GetStickerAsync` | — |
+| **Події (receive-side)** | `SubscribeAsync`, `UnsubscribeAsync` + 17 потоків × 2 поверхні (`IObservable<T>` + `IAsyncEnumerable<T>`) | — |
+| **Системні** | `VersionAsync`, raw `InvokeMethodAsync<TRequest, TResponse>` для розширень | — |
 
-**Підтримувані типи подій (10):** Текстові повідомлення, Реакції, Вкладення, Стікери, Набір тексту, Квитанції, Синхронізація, Цитати, Редагування, Віддалене видалення.
+**Підтримувані типи подій (17):** Text, Reaction, Attachment, Sticker, Typing, Receipt, Sync, Quote, Edit, RemoteDelete, PollCreate, PollVote, PollTerminate, Payment, PinMessage, UnpinMessage, AdminDelete.
 
-> Бракує методу? Внесок вітається — `services.AddSignalCli(...)` + `ISignalCliClient.InvokeMethodAsync` дає прямий шлях додати будь-який signal-cli RPC.
+> ⚠ **Destructive operations** (8 у акаунтах) — за замовчуванням заблоковані. Розблокування через `SignalCliOptions.EnableDestructiveOperations = true` тільки після code-review (`Unregister(deleteAccount: true)` / `DeleteLocalAccountDataAsync` / `FinishChangeNumberAsync` — НЕ МОЖНА скасувати). Деталі — [`docs/api/accounts.md`](docs/api/accounts.md).
+>
+> Бракує методу або хочеш кастомний RPC? `ISignalCliClient.InvokeMethodAsync<TRequest, TResponse>(method, params, requestInfo, responseInfo)` приймає будь-яку signal-cli команду — AOT-safe, з твоїм власним `[JsonSerializerContext]`. Приклад — [`docs/api/resources-stickers.md § InvokeMethodAsync`](docs/api/resources-stickers.md).
 
 ---
 
