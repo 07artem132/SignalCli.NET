@@ -4,10 +4,10 @@
 
 ## Capability 1 — `protocol-checklist-amend` (doc-only, lowest risk)
 
-- [ ] 1.1 Edit `.claude/rules/signal-cli-protocol.md` — insert 8th pinned fact after the Java-25 bullet, citing `SendMessageResultUtils.java:60` + `JsonSendMessageResult.Type.IDENTITY_FAILURE`
-- [ ] 1.2 Edit same file's footer paragraph — append "re-grep `\"admin\"` substring stability" instruction to the `<SignalCliVersion>`-bump checklist
-- [ ] 1.3 Edit `.claude/rules/audit-debt.md` — add "§0.5 cite-and-read, not cite-and-trust" working-style bullet (the lesson from #1)
-- [ ] 1.4 Commit: `docs(rules): pinned fact #8 + version-bump exception-substring stability`
+- [x] 1.1 Edit `.claude/rules/signal-cli-protocol.md` — insert 8th pinned fact after the Java-25 bullet, citing `SendMessageResultUtils.java:60` + `JsonSendMessageResult.Type.IDENTITY_FAILURE`
+- [x] 1.2 Edit same file's footer paragraph — append "re-grep `\"admin\"` substring stability" instruction to the `<SignalCliVersion>`-bump checklist
+- [x] 1.3 Edit `.claude/rules/audit-debt.md` — add "§0.5 cite-and-read, not cite-and-trust" working-style bullet (the lesson from #1)
+- [x] 1.4 Commit: `docs(rules): pinned fact #8 + version-bump exception-substring stability`
 
 ## Capability 2 — `captcha-dispatch-test` (test-only)
 
