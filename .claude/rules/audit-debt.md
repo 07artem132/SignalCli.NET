@@ -63,6 +63,19 @@ _(empty as of audit v2.1 — all previously-declared invariants now have tests; 
 
 **Правило:** кожен новий "Established patterns" bullet у CLAUDE.md МУСИТЬ мати відповідний regression guard у таблиці "Audit baseline" вище. Якщо додаєш новий патерн — одразу додай guard. Якщо такого guard'а ще не існує і його неможливо швидко скласти — поясни чому в `// CLAUDE.md guardrails: untested invariant` коменті біля сайту pattern'у.
 
+### `docs/api/` prose drift after API-changing capability (→ post-4.10.0 PR #21 doc-sync)
+
+**Що сталося:** 4.10.0 `api-coverage-audit-followup` ship'нув Cap 4 (`JsonPayment.Receipt: byte[]` → `byte[]?`) і Cap 5 (`[Obsolete]` на `IdentityChangedException`). Обидва — production-side type changes, але `docs/api/messaging.md` залишився з застарілою prose: common-exceptions table все ще описувала `IdentityChangedException` як "підтип для re-install'ів", а `SendPaymentNotificationAsync` footnote показувала `(Note, Receipt: byte[])` без `?`. RG09 (`DocsApiCoverageTests`) **не fail'ив** бо названі типи все ще згадуються — substring/word-boundary match passes; але семантика prose стала misleading. Drift спіймано лише user-ініційованою перевіркою docs ↔ code; виправлено окремим follow-up PR #21.
+
+**Чому RG09 не зловив:** RG09 enforce'ить **наявність згадки** (anti-omission guard), не правильність опису. Catching prose-staleness вимагає або (a) AST/MSDoc-based comparison (rejected у `audit-followup-2026` як "infrastructure cost > value"), або (b) PR-time review discipline. (b) — поточний enforcement.
+
+**Правило (нова checklist-розширення):** при API-changing capability, **`tasks.md` має містити explicit task** перед release commit'ом:
+- `grep -rn '<AffectedType>' docs/ README.md CHANGELOG.md` — знайди всі живі згадки.
+- Для кожної згадки: чи опис ще true після change'у? Якщо ні — оновити у тому ж PR.
+- Якщо забув і drift проліз у production — окремий `docs(*)`-only PR із посиланням на capability що його спричинив.
+
+Це extension до **`.claude/rules/openspec-workflow.md § README + docs/api/ PR-time triggers`** — там той самий fact'у з іншого ракурсу. Обидва файли тепер посилаються одне на одного.
+
 ## Working style (how Claude and the user collaborate on this repo)
 
 These are conventions we landed during the 2.1.0 work. They aren't strict — but they're what worked and what we expect from each other going forward.

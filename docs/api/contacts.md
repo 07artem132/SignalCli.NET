@@ -1,6 +1,6 @@
 # `ISignalContacts` — контакти та identity-keys
 
-8 RPC методів: read-only (`ListContacts`, `ListIdentities`) + mutating (`Trust*`, `UpdateContact`, `UpdateProfile`, `RemoveContact`, `Block`/`Unblock`).
+9 .NET-методів (8 upstream signal-cli RPC; `trust` розщеплено на 2 type-safe методи): read-only (`ListContacts`, `ListIdentities`) + mutating (`TrustAllKnownKeys`/`TrustVerified`, `UpdateContact`, `UpdateProfile`, `RemoveContact`, `Block`, `Unblock`).
 
 Mutating методи тригерять contacts-sync на linked devices. Резолвиться як `host.Services.GetRequiredService<ISignalContacts>()`.
 
