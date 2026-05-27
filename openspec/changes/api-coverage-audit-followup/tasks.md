@@ -9,19 +9,25 @@
 - [x] 1.3 Edit `.claude/rules/audit-debt.md` — add "§0.5 cite-and-read, not cite-and-trust" working-style bullet (the lesson from #1)
 - [x] 1.4 Commit: `docs(rules): pinned fact #8 + version-bump exception-substring stability`
 
-## Capability 2 — `captcha-dispatch-test` (test-only)
+## Capability 2 — `captcha-dispatch-test` (test-only) — ⚠️ NO-OP (already implemented)
 
-- [ ] 2.1 Add `[Fact] InvokeMethodAsync_Code_Minus6_ThrowsCaptchaRequired` to `Tests/SignalCli.Tests/Exceptions/NewTypedRpcErrorsTests.cs` mirroring the GroupAdminRequired-dispatch test shape (positive path + assert `KnownCode == CaptchaRejected`)
-- [ ] 2.2 `dotnet test --filter NewTypedRpcErrorsTests` — confirm new test green, no others broken
-- [ ] 2.3 Commit: `test(rpc): captcha dispatch test — symmetry with GroupAdminRequired`
+Implementation discovery (2026-05-27): test `InvokeMethodAsync_Code_Minus6_ThrowsCaptchaRequired`
+already exists у `NewTypedRpcErrorsTests.cs:64-67` since commit `8825b22 feat(4.1.0): interactive
+messaging — reactions, receipts, typing, remote-delete` (pre-dates the proposal). Proposal's
+claim of "absence" was cite-and-trust without read-and-verify — exact failure mode що §0.5
+warns against (per Cap 1's audit-debt.md addition). No code change; no commit.
+
+- [x] 2.1 ~~Add test~~ — verified already present at `NewTypedRpcErrorsTests.cs:64-67`
+- [x] 2.2 `dotnet test --filter NewTypedRpcErrorsTests` — green (existing)
+- [x] 2.3 ~~Commit~~ — no-op
 
 ## Capability 3 — `event-dispatch-refactor` (internal refactor)
 
-- [ ] 3.1 Add `DispatchUnionMember<TPayload, TArgs>(...)` private helper to `SignalEventService.cs` per design.md §Decision 3
-- [ ] 3.2 Replace 13 dispatch branches in `OnNotificationReceived` (6 pre-existing: text/reaction/sticker/attachment/remoteDelete/quote + 7 Wave-7b: pollCreate/pollVote/pollTerminate/payment/pinMessage/unpinMessage/adminDelete) with helper calls
-- [ ] 3.3 `dotnet build -p:TreatWarningsAsErrors=true` — green
-- [ ] 3.4 `dotnet test` — all 503 unit tests green; `EventApiSymmetryWave7bTests` + presence-based dispatch suites pass; **no public-api baseline diff** (refactor is internal)
-- [ ] 3.5 Commit: `refactor(events): collapse 13 dispatch branches via generic helper`
+- [x] 3.1 Add `DispatchUnionMember<TPayload, TArgs>(...)` private helper to `SignalEventService.cs` per design.md §Decision 3
+- [x] 3.2 Replace 13 dispatch branches in `OnNotificationReceived` (6 pre-existing: text/reaction/sticker/attachment/remoteDelete/quote + 7 Wave-7b: pollCreate/pollVote/pollTerminate/payment/pinMessage/unpinMessage/adminDelete) with helper calls
+- [x] 3.3 `dotnet build -p:TreatWarningsAsErrors=true` — green
+- [x] 3.4 `dotnet test` — all 503 unit tests green; `EventApiSymmetryWave7bTests` + presence-based dispatch suites pass; **no public-api baseline diff** (refactor is internal)
+- [x] 3.5 Commit: `refactor(events): collapse 13 dispatch branches via generic helper`
 
 ## Capability 4 — `json-payment-receipt-nullable` (1-line DTO change + tests)
 
