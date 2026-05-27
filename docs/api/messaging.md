@@ -10,7 +10,7 @@
 |---|---|---|
 | `JsonRpcException` | будь-який | Базовий тип — інші помилки |
 | `RateLimitException` | `-5` | Server-side rate-limit для усіх recipient'ів. `Error.Data` містить challenge token |
-| `UntrustedIdentityException` | `-4` | Identity recipient'а неверифікована. Підтип `IdentityChangedException` — для re-install'ів |
+| `UntrustedIdentityException` | `-4` | Identity recipient'а неверифікована. Розрізнити first-contact vs re-install — client-side через `ISignalContacts.ListIdentitiesAsync` (upstream signal-cli не розрізняє ці кейси на wire — pinned fact #8 у `.claude/rules/signal-cli-protocol.md`) |
 | `CaptchaRequiredException` | `-6` | CAPTCHA challenge — використай `ISignalAccounts.SubmitRateLimitChallengeAsync` |
 | `GroupAdminRequiredException` | `-1` + "admin" | Group-only операція, акаунт — не admin |
 | `OperationCanceledException` | — | `cancellationToken` cancelled |
@@ -392,4 +392,4 @@ await signalMessage.SendPaymentNotificationAsync(
     note: "За каву");
 ```
 
-> ⚠ **Breaking change у 4.9.0:** `JsonPayment` wire-shape виправлено з гіпотетичного `(Amount: decimal, Currency: string?)` на реальний upstream `(Note: string?, Receipt: byte[])`. Деталі — `CHANGELOG.md [4.9.0]`.
+> ⚠ **Wire shape evolution.** У 4.9.0 `JsonPayment` shape виправлено з гіпотетичного `(Amount: decimal, Currency: string?)` на реальний upstream `(Note: string?, Receipt: byte[])`. У 4.10.0 `Receipt` зроблено nullable (`byte[]?`) — upstream Java has no NRT, `"receipt": null` AND missing-field cases deliver `null` до consumer'а. Використовуй `payment.Receipt?.Length`. Деталі — `CHANGELOG.md [4.9.0]` + `[4.10.0]`.
