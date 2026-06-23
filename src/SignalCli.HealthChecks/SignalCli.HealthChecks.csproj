@@ -38,8 +38,8 @@
              ходить окремим пакетом, щоб не змушувати core lib тягнути HealthChecks-залежність. -->
         <!-- IHealthCheck/HealthCheckResult — в Abstractions; IHealthChecksBuilder
              + AddCheck<T>() extension — в HealthChecks (повний пакет). Беремо обидва. -->
-        <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.0"/>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.9"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.9"/>
         <ProjectReference Include="..\SignalCli\SignalCli.csproj"/>
     </ItemGroup>
 
