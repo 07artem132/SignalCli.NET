@@ -12,7 +12,7 @@ permissions:
   checks: write
   pull-requests: write
   
-# Глобальні змінні для .NET 9.0
+# Глобальні змінні для .NET 10.0
 env:
   DOTNET_NOLOGO: true                     # Вимкнути логотип .NET
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true # Пропустити досвід першого запуску
@@ -37,7 +37,7 @@ jobs:
       with:
         fetch-depth: 0
 
-    # Встановлення .NET 9.0
+    # Встановлення .NET 10.0
     - name: Install .NET
       uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
       with:
