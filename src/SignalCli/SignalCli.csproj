@@ -87,9 +87,9 @@
              використовується лише як build-time hint (PublicAPI, NotNull тощо). Без цього
              атрибута пакет потрапляє у dependency-list споживача, який ніколи його не
              використовує напряму. -->
-        <PackageReference Include="JetBrains.Annotations" Version="2024.3.0" PrivateAssets="all"/>
-        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0"/>
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0"/>
+        <PackageReference Include="JetBrains.Annotations" Version="2026.2.0" PrivateAssets="all"/>
+        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.9"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.9"/>
         <!-- D.1: DataAnnotations для типізованої валідації SignalCliOptions через
              OptionsBuilder.ValidateDataAnnotations().
              D.9: source-generator для [OptionsValidator] включений у пакет
@@ -97,11 +97,11 @@
         <!-- post-modernize-tuning §8b.8 (audit E1): DataAnnotations залишається,
              бо source-gen [OptionsValidator] читає [Required]/[Range] атрибути з нього.
              Але .ValidateDataAnnotations() (reflection) видалено з ServiceCollectionExtensions. -->
-        <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.9"/>
         <!-- post-modernize-tuning §8b.3 (audit B5): IConfiguration overload для AddSignalCli —
              тягне OptionsBuilder<T>.Bind(IConfigurationSection) extension. -->
-        <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.9"/>
         <!-- post-modernize-tuning §6.3 (audit B2): Nito.AsyncEx removed — SemaphoreSlim replaces AsyncLock. -->
-        <PackageReference Include="System.Reactive" Version="6.0.1"/>
+        <PackageReference Include="System.Reactive" Version="6.1.0"/>
     </ItemGroup>
 </Project>

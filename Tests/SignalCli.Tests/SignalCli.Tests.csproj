@@ -13,27 +13,27 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="coverlet.collector" Version="6.0.2"/>
+        <PackageReference Include="coverlet.collector" Version="10.0.1"/>
         <!-- D.6: для BuildServiceProvider() у OptionsValidationTests -->
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9"/>
         <!-- post-modernize-tuning §8b.3 (audit B5): in-memory IConfiguration для тесту нового overload'а.
              `AddInMemoryCollection` поставляється з основним Microsoft.Extensions.Configuration —
              окремого Configuration.Memory пакету на nuget.org немає. -->
-        <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.0"/>
-        <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.0"/>
-        <!-- nf005 (audit v2.1): bump 9.0.0 → 10.0.0 — закриває останній mismatched-major
-             у dependency graph тестового проєкту. MS Learn підтверджує існування 10.0.0
+        <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.9"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.9"/>
+        <!-- nf005 (audit v2.1): тримаємо у лінії 10.x (Microsoft.Extensions.* test-helpers
+             мають окрему cadence — остання стабільна 10.7.0). MS Learn підтверджує пакет
              (https://learn.microsoft.com/dotnet/core/extensions/timeprovider-testing);
-             public-surface (Advance, Start, GetUtcNow, SetLocalTimeZone) — без breaking-changes
-             між 9.x і 10.x. Реліз містить fixes для new .NET 10 BackgroundService.ExecuteAsync
-             threading semantics — релевантно для наших Restart*-тестів. -->
-        <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.0.0"/>
+             public-surface (Advance, Start, GetUtcNow, SetLocalTimeZone) — без breaking-changes.
+             Реліз містить fixes для .NET 10 BackgroundService.ExecuteAsync threading semantics —
+             релевантно для наших Restart*-тестів. -->
+        <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.7.0"/>
         <!-- post-modernize-tuning §5.12 (audit N13): FakeLogger<T> для capture scope-properties. -->
-        <PackageReference Include="Microsoft.Extensions.Diagnostics.Testing" Version="10.0.0"/>
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1"/>
+        <PackageReference Include="Microsoft.Extensions.Diagnostics.Testing" Version="10.7.0"/>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.7.0"/>
         <PackageReference Include="Moq" Version="4.20.72" />
-        <PackageReference Include="xunit" Version="2.9.2"/>
-        <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2"/>
+        <PackageReference Include="xunit" Version="2.9.3"/>
+        <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5"/>
     </ItemGroup>
 
     <ItemGroup>
