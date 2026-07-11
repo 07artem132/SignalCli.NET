@@ -1,4 +1,5 @@
-﻿using JetBrains.Annotations;
+﻿using System.Text.Json.Serialization;
+using JetBrains.Annotations;
 
 namespace SignalCli.Models.Signal.Devices;
 
@@ -11,4 +12,5 @@ namespace SignalCli.Models.Signal.Devices;
 /// </remarks>
 /// <param name="DeviceLinkUri">URI для зв'язування пристрою, використовується для генерації QR-коду.</param>
 [PublicAPI]
-public sealed record StartLinkResponse(string DeviceLinkUri);
+public sealed record StartLinkResponse(
+    [property: JsonPropertyName("deviceLinkUri")] string DeviceLinkUri);

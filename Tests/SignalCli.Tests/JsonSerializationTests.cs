@@ -245,4 +245,25 @@ public class JsonSerializationTests
         Assert.Throws<JsonException>(() =>
             JsonSerializer.Deserialize(duplicateKey, SignalJsonContext.Default.JsonRpcResponse));
     }
+
+    /// <summary>
+    /// Пінує wire-біндинг <c>deviceLinkUri</c> → <see cref="Models.Signal.Devices.StartLinkResponse"/>
+    /// САМЕ через source-gen fast-path (<c>SignalJsonContext.Default.StartLinkResponse</c>) —
+    /// той, яким реально йде <c>JsonRpcClient</c>. Fast-path case-sensitive і не бачить
+    /// <c>PropertyNameCaseInsensitive</c> з <see cref="SignalJson.Options"/>, тож без
+    /// <c>[JsonPropertyName("deviceLinkUri")]</c> поле тихо лишалось null і downstream-споживачі
+    /// (WsRpcServer з <c>WhenWritingNull</c>) віддавали клієнту порожній <c>result: {}</c> —
+    /// зловлено наживо при лінкуванні пристрою 2026-07-11. Тест через <see cref="SignalJson.OptionsForTests"/>
+    /// цього НЕ ловить (він case-insensitive) — тому typeinfo напряму.
+    /// </summary>
+    [Fact]
+    public void StartLinkResponse_WireCamelCase_BindsViaSourceGenFastPath()
+    {
+        const string wireJson = """{"deviceLinkUri":"sgnl://linkdevice?uuid=abc&pub_key=def"}""";
+
+        var response = JsonSerializer.Deserialize(
+            wireJson, SignalJsonContext.Default.StartLinkResponse)!;
+
+        Assert.Equal("sgnl://linkdevice?uuid=abc&pub_key=def", response.DeviceLinkUri);
+    }
 }
