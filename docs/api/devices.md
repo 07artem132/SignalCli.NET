@@ -15,9 +15,9 @@ Task<StartLinkResponse> StartLinkAsync(
     CancellationToken cancellationToken = default);
 ```
 
-Починає процес лінкування — повертає `DeviceLinkUri` (`tsdevice:/?uuid=...`). Згенеруй QR з цього URI (QRCoder, ZXing.Net) і скануй у Signal mobile app.
+Починає процес лінкування — повертає `DeviceLinkUri` (`sgnl://linkdevice?uuid=...&pub_key=...`). Згенеруй QR з цього URI (QRCoder, ZXing.Net) і скануй у Signal mobile app.
 
-**signal-cli RPC:** `StartLinkCommand.java` @ `bda4e7fc`.
+**signal-cli RPC:** `StartLinkCommand.java` @ `bda4e7fc` — wire-поле camelCase `deviceLinkUri` (inner `record JsonLink(String deviceLinkUri)`); `StartLinkResponse.DeviceLinkUri` мапиться через явний `[JsonPropertyName]`.
 
 ```csharp
 var link = await signalDevices.StartLinkAsync();

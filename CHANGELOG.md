@@ -3,6 +3,22 @@
 Формат заснований на [Keep a Changelog](https://keepachangelog.com/),
 проєкт дотримується [семантичного версіонування](https://semver.org/lang/uk/).
 
+## [4.10.1] — 2026-07-16
+
+Patch — виправлення silent-null wire-bug'у у device-linking флоу. Non-breaking; публічна поверхня незмінна (`StartLinkResponse.DeviceLinkUri` лишається тим самим PascalCase property).
+
+### 🐛 Виправлено
+
+- **Якщо ти лінкуєш пристрій через `StartLinkAsync` — `DeviceLinkUri` тепер справді заповнюється, а не тихо приходить `null`.** signal-cli 0.14.3 віддає результат `startLink` як `{"deviceLinkUri":"sgnl://..."}` (camelCase), але `StartLinkResponse` не мав `[JsonPropertyName]`, а source-gen контекст `SignalJsonContext` працює case-sensitive і без `PropertyNamingPolicy` — PascalCase-властивість мовчки десеріалізувалась у `null`, без винятку й без логу (RPC-відповідь виглядала як `"result": {}`). Тепер `StartLinkResponse` несе явний `[property: JsonPropertyName("deviceLinkUri")]` — так само, як давно робить `FinishLinkResponse` для поля `number`. QR-лінкування secondary-пристрою знову працює. *(виявлено 2026-07-16 e2e-пробою через WsRpcServer)*
+
+### 🛡️ Захист від регресій
+
+- **Новий RG10 (`WireShapeAnnotationTests`) — durable-артефакт цього фіксу.** Reflection-гвардія проходить кожну DTO-властивість, зареєстровану у `SignalJsonContext`, і вимагає явний `[JsonPropertyName]` (або `[JsonIgnore]`). Оскільки контекст case-sensitive і без naming-policy, будь-яка нова PascalCase-властивість без атрибута = ще один silent-null на camelCase wire; тепер це build-failure, а не runtime-загадка. Wrapper-record'и з власним `[JsonConverter]` (`ListAccountsResponse` тощо) звільнені.
+- **`DeviceLinkingSerializationTests`** пінить обидві wire-форми через продакшн-шлях `SignalJsonContext.Default` — `startLink` (`deviceLinkUri`) та `finishLink` (`number`).
+- **§0.5 cite-and-read:** wire-поле звірено з upstream `org.asamk.signal.commands/StartLinkCommand.java:42 @ v0.14.3` (`c554e5c`) — `private record JsonLink(String deviceLinkUri) {}`, записується через `jsonWriter.write(new JsonLink(deviceLinkUri.toString()))`.
+
+Тести: 506 → 509 (RG10 `WireShapeAnnotationTests` +1, `DeviceLinkingSerializationTests` +2). OpenSpec: [`openspec/changes/fix-startlink-wire-shape/`](openspec/changes/fix-startlink-wire-shape/).
+
 ## [4.10.0] — 2026-05-27
 
 Minor — 5 capabilities з post-merge code-review після landing `signal-cli-api-coverage` 4.9.0. Non-breaking; одна типу deprecation (`IdentityChangedException` → `[Obsolete]`, видалення 5.0), одна wire-nullability honesty fix (`JsonPayment.Receipt: byte[]?`), один internal refactor (event-dispatch helper), doc-updates.
