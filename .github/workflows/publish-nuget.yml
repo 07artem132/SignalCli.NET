@@ -34,6 +34,12 @@ jobs:
       - name: Build (Release)
         run: dotnet build SignalCli.sln -c Release
 
+      # Release-quality gate: жоден пакет не публікується, доки не пройде тестовий набір.
+      # E2E виключено (Category!=E2E) — вони потребують живого signal-cli/JDK-оточення,
+      # непридатного для release-раннера.
+      - name: Test
+        run: dotnet test Tests/SignalCli.Tests/SignalCli.Tests.csproj -c Release --no-build --filter "Category!=E2E"
+
       - name: Pack SignalCli.NET
         run: dotnet pack src/SignalCli/SignalCli.csproj -c Release --no-build -o "${{ github.workspace }}/nupkgs"
 
