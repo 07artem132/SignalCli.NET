@@ -47,4 +47,11 @@ internal static partial class SignalEventServiceLog
     [LoggerMessage(EventId = 510, Level = LogLevel.Debug,
         Message = "SubscribeAsync ідемпотентний: обліковий запис={Account} вже має підписку={SubId}, повертаємо існуючий ID без RPC")]
     public static partial void SubscribeIdempotent(ILogger logger, string account, int subId);
+
+    // Захист від receive-нотіфікації без корисного навантаження (params або params.result == null):
+    // трапляється, коли signal-cli віддає envelope, який не вдалося обробити (напр. sealed-sender без
+    // serverGuid до фіксу upstream #2059). Лог-і-скіп замість NRE — Debug, бо очікувано-benign.
+    [LoggerMessage(EventId = 511, Level = LogLevel.Debug,
+        Message = "Сповіщення без корисного навантаження (params/result порожні), пропускаємо...")]
+    public static partial void NotificationPayloadMissing(ILogger logger);
 }

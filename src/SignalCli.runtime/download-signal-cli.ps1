@@ -15,8 +15,8 @@ param (
     # ззовні (з csproj <SignalCliVersion>/<SignalCliSha256> через Exec Command), щоб
     # bump-version був single-csproj-edit. Дефолти лишаємо для прямого виклику скрипта
     # без csproj-binding'у (наприклад, локальне дослідження).
-    [string]$Version = "0.14.3",
-    [string]$Sha256 = "60a0a51312d07ed0cd6f4d5080b2ffe6ee838ea99f92297f2803e24af1826c6f"
+    [string]$Version = "0.14.6",
+    [string]$Sha256 = "e90f4faea709b3c0a55909646a2b94289b9779ba9c8fd5c6eaa847d3f67312eb"
 )
 
 $ErrorActionPreference = 'Stop'

@@ -10,11 +10,11 @@ if [ -f "$OUT_DIR/signal-cli" ]; then
   exit 0
 fi
 
-VERSION="0.14.3"
+VERSION="0.14.6"
 FILENAME="signal-cli-$VERSION-Linux-native.tar.gz"
 URL="https://github.com/AsamK/signal-cli/releases/download/v$VERSION/$FILENAME"
 # SHA-256 офіційного нативного релізного архіву (звірено із завантаженням з GitHub Releases).
-EXPECTED_SHA256="ad252d512181b6f967129889c54abae88ba2a798c8022a79d53e5e1f37f173f7"
+EXPECTED_SHA256="c78639c2d3c14cd004872a99ecf129bd7d7c26ee7d9844d50c2b0afdafefea68"
 
 TMP_DIR="$(mktemp -d)"
 ARCHIVE="$TMP_DIR/$FILENAME"

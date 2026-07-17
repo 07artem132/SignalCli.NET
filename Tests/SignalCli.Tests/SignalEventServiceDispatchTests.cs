@@ -1,5 +1,6 @@
 using System.Reactive.Subjects;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 using Moq;
 using System.Text.Json;
 using SignalCli.Interfaces.Rpc;
@@ -173,5 +174,42 @@ public class SignalEventServiceDispatchTests
         n.OnNext(Notify(Envelope(typing: new JsonTypingMessage("STARTED", 1, null))));
 
         Assert.Equal(0, count);
+    }
+
+    // #2059 / on-start регресія: receive-нотіфікація без корисного навантаження
+    // (params або params.result == null) раніше давала NullReferenceException у
+    // OnNotificationReceived, яка ловилась як Error(508) NotificationDispatchFailed на КОЖНЕ
+    // повідомлення (120 спамів при дренажі офлайн-беклогу sealed-sender без serverGuid до
+    // фіксу signal-cli 0.14.5). Тепер — тихий Debug(511) skip, і сервіс лишається живим.
+    [Fact]
+    public async Task NullPayload_SkipsAsDebug_NotErrorDispatchFail_AndStaysAlive()
+    {
+        var notifications = new Subject<JsonRpcNotification<SubscriptionEventArgs>>();
+        var rpcClient = new Mock<IJsonRpcClient>();
+        rpcClient.Setup(c => c.Notifications).Returns(notifications);
+        var provider = new Mock<IJsonRpcClientProvider>();
+        provider.Setup(p => p.Client).Returns(rpcClient.Object);
+        var signalCli = new Mock<ISignalCliClient>();
+        signalCli.Setup(c => c.InvokeMethodAsync<SubscribeReceiveParameters, JsonElement>(It.IsAny<string>(), It.IsAny<SubscribeReceiveParameters>(), It.IsAny<JsonTypeInfo<SubscribeReceiveParameters>>(), It.IsAny<JsonTypeInfo<JsonElement>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(JsonSerializer.SerializeToElement(SubId));
+        var fakeLogger = new FakeLogger<SignalEventService>();
+        var service = new SignalEventService(fakeLogger, provider.Object, signalCli.Object);
+
+        await service.StartAsync(CancellationToken.None);
+        await service.SubscribeAsync(Account);
+        var typingCount = 0;
+        service.TypingNotifications.Subscribe(_ => typingCount++);
+
+        // (а) params == null; (б) params.result == null — обидва раніше NRE-или.
+        notifications.OnNext(new JsonRpcNotification<SubscriptionEventArgs> { JsonRpc = "2.0", Method = "receive", Params = null! });
+        notifications.OnNext(new JsonRpcNotification<SubscriptionEventArgs> { JsonRpc = "2.0", Method = "receive", Params = new SubscriptionEventArgs(SubId, null!) });
+
+        var entries = fakeLogger.Collector.GetSnapshot();
+        Assert.Equal(2, entries.Count(e => e.Id.Id == 511));   // NotificationPayloadMissing
+        Assert.DoesNotContain(entries, e => e.Id.Id == 508);   // НЕ NotificationDispatchFailed
+
+        // Сервіс живий — валідна typing-нотіфікація після цього все ще фанититься.
+        notifications.OnNext(Notify(Envelope(typing: new JsonTypingMessage("STARTED", 1, null))));
+        Assert.Equal(1, typingCount);
     }
 }
