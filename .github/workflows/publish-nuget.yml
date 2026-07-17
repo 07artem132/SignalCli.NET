@@ -1,14 +1,20 @@
 name: Publish NuGet
 
-# Публікує пакети у GitHub Packages при створенні релізу (тег),
-# а також вручну через workflow_dispatch.
+# Публікує пакети у GitHub Packages:
+#  - push тегу `v*` → workflow САМ створює GitHub Release (--generate-notes) і публікує пакети
+#    (auto-release, як у застосунку). Все в одному прогоні: реліз, створений через GITHUB_TOKEN,
+#    НЕ тригерить `release:published` (GitHub блокує рекурсію), тож окремий publish не спрацював би.
+#  - release:published (ручне створення релізу) → лише публікація (крок Create Release пропускається).
+#  - workflow_dispatch → ручний прогін.
 on:
+  push:
+    tags: ["v*"]
   release:
     types: [published]
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 env:
@@ -39,6 +45,18 @@ jobs:
       # непридатного для release-раннера.
       - name: Test
         run: dotnet test Tests/SignalCli.Tests/SignalCli.Tests.csproj -c Release --no-build --filter "Category!=E2E"
+
+      # Тег → workflow сам створює GitHub Release (лише після зеленого тесту). На release:published
+      # цей крок пропускається (реліз уже існує). Пакети живуть у GitHub Packages — asset-ів не чіпляємо
+      # (зокрема великі JRE-payload-и не роздуваємо в реліз).
+      - name: Create GitHub Release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          gh release create "${{ github.ref_name }}"
+          --title "SignalCli.NET ${{ github.ref_name }}"
+          --generate-notes
 
       - name: Pack SignalCli.NET
         run: dotnet pack src/SignalCli/SignalCli.csproj -c Release --no-build -o "${{ github.workspace }}/nupkgs"
