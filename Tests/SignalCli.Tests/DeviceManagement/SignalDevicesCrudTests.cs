@@ -13,6 +13,36 @@ namespace SignalCli.Tests.DeviceManagement;
 /// </summary>
 public class SignalDevicesCrudTests
 {
+    // ---- FinishLinkAsync (add-per-call-rpc-timeout) ----
+
+    [Fact]
+    public async Task FinishLinkAsync_ForwardsPerCallTimeoutToClient()
+    {
+        // add-per-call-rpc-timeout: FinishLinkAsync має прокинути per-call timeout у транспорт
+        // (ручний QR-скан довший за глобальний RequestTimeoutSeconds).
+        TimeSpan? capturedTimeout = null;
+        var client = new Mock<ISignalCliClient>();
+        client
+            .Setup(c => c.InvokeMethodAsync(
+                It.IsAny<string>(),
+                It.IsAny<FinishLinkParameters>(),
+                It.IsAny<JsonTypeInfo<FinishLinkParameters>>(),
+                It.IsAny<JsonTypeInfo<FinishLinkResponse>>(),
+                It.IsAny<CancellationToken>(),
+                It.IsAny<TimeSpan?>()))
+            .Callback<string, FinishLinkParameters, JsonTypeInfo<FinishLinkParameters>, JsonTypeInfo<FinishLinkResponse>, CancellationToken, TimeSpan?>(
+                (_, _, _, _, _, t) => capturedTimeout = t)
+            .ReturnsAsync(new FinishLinkResponse("+15551234567"));
+
+        var sut = new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>());
+        var expected = TimeSpan.FromSeconds(150);
+
+        await sut.FinishLinkAsync("sgnl://linkdevice?uuid=abc", "Worker bot", CancellationToken.None, expected);
+
+        Assert.NotNull(capturedTimeout);
+        Assert.Equal(expected, capturedTimeout);
+    }
+
     // ---- AddDeviceAsync ----
 
     [Fact]
@@ -27,8 +57,8 @@ public class SignalDevicesCrudTests
                 It.IsAny<JsonTypeInfo<AddDeviceParameters>>(),
                 It.IsAny<JsonTypeInfo<JsonElement>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, AddDeviceParameters, JsonTypeInfo<AddDeviceParameters>, JsonTypeInfo<JsonElement>, CancellationToken>(
-                (_, p, _, _, _) => captured = p)
+            .Callback<string, AddDeviceParameters, JsonTypeInfo<AddDeviceParameters>, JsonTypeInfo<JsonElement>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(default(JsonElement));
 
         var sut = new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>());
@@ -102,8 +132,8 @@ public class SignalDevicesCrudTests
                 It.IsAny<JsonTypeInfo<RemoveDeviceParameters>>(),
                 It.IsAny<JsonTypeInfo<JsonElement>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, RemoveDeviceParameters, JsonTypeInfo<RemoveDeviceParameters>, JsonTypeInfo<JsonElement>, CancellationToken>(
-                (_, p, _, _, _) => captured = p)
+            .Callback<string, RemoveDeviceParameters, JsonTypeInfo<RemoveDeviceParameters>, JsonTypeInfo<JsonElement>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(default(JsonElement));
 
         var sut = new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>());
@@ -140,8 +170,8 @@ public class SignalDevicesCrudTests
                 It.IsAny<JsonTypeInfo<UpdateDeviceParameters>>(),
                 It.IsAny<JsonTypeInfo<JsonElement>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, UpdateDeviceParameters, JsonTypeInfo<UpdateDeviceParameters>, JsonTypeInfo<JsonElement>, CancellationToken>(
-                (_, p, _, _, _) => captured = p)
+            .Callback<string, UpdateDeviceParameters, JsonTypeInfo<UpdateDeviceParameters>, JsonTypeInfo<JsonElement>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(default(JsonElement));
 
         var sut = new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>());
@@ -171,8 +201,8 @@ public class SignalDevicesCrudTests
                 It.IsAny<JsonTypeInfo<UpdateDeviceParameters>>(),
                 It.IsAny<JsonTypeInfo<JsonElement>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, UpdateDeviceParameters, JsonTypeInfo<UpdateDeviceParameters>, JsonTypeInfo<JsonElement>, CancellationToken>(
-                (_, p, _, _, _) => captured = p)
+            .Callback<string, UpdateDeviceParameters, JsonTypeInfo<UpdateDeviceParameters>, JsonTypeInfo<JsonElement>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(default(JsonElement));
 
         var sut = new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>());

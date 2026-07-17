@@ -1,4 +1,5 @@
-﻿using SignalCli.Exceptions;
+﻿using System.Diagnostics.CodeAnalysis;
+using SignalCli.Exceptions;
 using SignalCli.Models.Signal.Devices;
 
 namespace SignalCli.Interfaces.Signal;
@@ -32,30 +33,46 @@ public interface ISignalDevices
     /// <param name="deviceLinkUri">URI для зв'язування, отриманий під час сканування QR-коду.</param>
     /// <param name="deviceName">Назва нового пристрою.</param>
     /// <param name="cancellationToken">Токен скасування операції.</param>
+    /// <param name="timeout">
+    /// add-per-call-rpc-timeout: опціональний per-call таймаут RPC-виклику <c>finishLink</c>, що
+    /// переважає клієнтський default (<c>RequestTimeoutSeconds</c>, зазвичай 30 с) лише для цієї
+    /// операції. Причина: <c>finishLink</c> має довгу interactive-фазу — primary device мусить
+    /// вручну відсканувати QR-код і підтвердити зв'язування, що легко перевищує глобальний
+    /// таймаут. Передайте, наприклад, <c>TimeSpan.FromSeconds(150)</c>, щоб дати користувачеві час.
+    /// <c>null</c> — діє клієнтський default (поведінка незмінна).
+    /// </param>
     /// <returns>Результат зв'язування з номером пристрою.</returns>
     /// <exception cref="ArgumentNullException">Виникає, якщо deviceLinkUri або deviceName дорівнює null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Виникає, якщо <paramref name="timeout"/> від'ємний.</exception>
     /// <exception cref="InvalidOperationException">Виникає при помилці завершення процесу зв'язування.</exception>
     /// <exception cref="JsonRpcException">Виникає при помилці JSON-RPC запиту.</exception>
+    /// <exception cref="TimeoutException">Виникає, якщо відповідь не отримано за <paramref name="timeout"/> (якщо задано) або за клієнтським default'ом.</exception>
     /// <exception cref="OperationCanceledException">Виникає, якщо операцію скасовано.</exception>
     /// <example>
     /// <code>
     /// // Крок 1: Початок процесу зв'язування
-    /// var linkInfo = await signalDevices.StartLink(cancellationToken);
-    /// 
+    /// var linkInfo = await signalDevices.StartLinkAsync(cancellationToken);
+    ///
     /// // Виведення QR-коду для сканування на іншому пристрої
     /// Console.WriteLine($"Відскануйте цей код: {linkInfo.DeviceLinkUri}");
-    /// 
-    /// // Крок 2: Завершення процесу після сканування
-    /// var result = await signalDevices.FinishLink(
-    ///     deviceLinkUri: "tsdevice:/?uuid=...",
+    ///
+    /// // Крок 2: Завершення процесу після сканування (з довшим per-call таймаутом на ручний скан)
+    /// var result = await signalDevices.FinishLinkAsync(
+    ///     deviceLinkUri: "sgnl://linkdevice?uuid=...",
     ///     deviceName: "Мій новий пристрій",
-    ///     cancellationToken);
+    ///     cancellationToken,
+    ///     timeout: TimeSpan.FromSeconds(150));
     /// </code>
     /// </example>
+    [SuppressMessage("Design", "CA1068:CancellationToken parameters must come last",
+        Justification = "add-per-call-rpc-timeout: опц. timeout свідомо доданий ПІСЛЯ cancellationToken — " +
+            "це API-additive seam. Постановка timeout перед ct зламала б call-site-сумісність: наявні " +
+            "позиційні ct-аргументи зв'язалися б із timeout (TimeSpan?) → compile-error у консумерів.")]
     Task<FinishLinkResponse> FinishLinkAsync(
         string deviceLinkUri,
         string deviceName,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        TimeSpan? timeout = null
     );
 
     // deprecated-shim-removal §3: `FinishLink` Async-suffix-less shim видалено.

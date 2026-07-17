@@ -199,8 +199,8 @@ public class EdgeCaseFollowupTests
                 It.IsAny<JsonTypeInfo<SubscribeReceiveParameters>>(),
                 It.IsAny<JsonTypeInfo<JsonElement>>(),
                 It.IsAny<CancellationToken>()))
-            .Returns<string, SubscribeReceiveParameters, JsonTypeInfo<SubscribeReceiveParameters>, JsonTypeInfo<JsonElement>, CancellationToken>(
-                async (_, _, _, _, ct) =>
+            .Returns<string, SubscribeReceiveParameters, JsonTypeInfo<SubscribeReceiveParameters>, JsonTypeInfo<JsonElement>, CancellationToken, TimeSpan?>(
+                async (_, _, _, _, ct, _) =>
                 {
                     // Реагуємо на cancellation так, як це робить справжній JsonRpcClient.
                     using var reg = ct.Register(() => rpcGate.TrySetCanceled(ct));

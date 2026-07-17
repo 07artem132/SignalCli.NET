@@ -115,7 +115,7 @@ public class SignalEventServiceDispatchTests
 
         // Невелика затримка у моку — щоб усі 10 викликачів встигли зайти у lock-section.
         rpc.Setup(c => c.InvokeMethodAsync<SubscribeReceiveParameters, JsonElement>("subscribeReceive", It.IsAny<SubscribeReceiveParameters>(), It.IsAny<JsonTypeInfo<SubscribeReceiveParameters>>(), It.IsAny<JsonTypeInfo<JsonElement>>(), It.IsAny<CancellationToken>()))
-            .Returns(async (string _, SubscribeReceiveParameters _, JsonTypeInfo<SubscribeReceiveParameters> _, JsonTypeInfo<JsonElement> _, CancellationToken _) =>
+            .Returns(async (string _, SubscribeReceiveParameters _, JsonTypeInfo<SubscribeReceiveParameters> _, JsonTypeInfo<JsonElement> _, CancellationToken _, TimeSpan? _) =>
             {
                 // CancellationToken intentionally not forwarded — тест перевіряє reservation race
                 // незалежно від caller cancel.

@@ -3,6 +3,27 @@
 Формат заснований на [Keep a Changelog](https://keepachangelog.com/),
 проєкт дотримується [семантичного версіонування](https://semver.org/lang/uk/).
 
+## [4.10.2] — 2026-07-17
+
+Patch — API-additive per-call RPC timeout override. Non-breaking; існуючі виклики компілюються й поводяться незмінно (новий параметр опціональний, доданий останнім).
+
+### ✨ Нове
+
+- **Тепер можна задати таймаут на ОКРЕМИЙ RPC-виклик, не чіпаючи глобальний `RequestTimeoutSeconds`.** `ISignalCliClient.InvokeMethodAsync` отримав опціональний останній параметр `TimeSpan? timeout = null`: передаси додатнє значення — воно переважає клієнтський default саме для цього виклику; `null` або `TimeSpan.Zero` → діє глобальний default (як і раніше). Від'ємне значення → `ArgumentOutOfRangeException` на межі. Навіщо: деякі операції законно триваліші за глобальні 30 с і не мали способу це виразити без підняття таймауту для всього клієнта. *(capability `add-per-call-rpc-timeout`; seam у `JsonRpcClient.InvokeMethodAsync` — той самий TimeProvider-aware `CancellationTokenSource(effectiveTimeout, _timeProvider)`)*
+
+- **`ISignalDevices.FinishLinkAsync` тепер приймає `TimeSpan? timeout = null` — щоб QR-лінкування не падало з таймауту, поки користувач сканує код.** Фаза `finishLink` interactive: primary device мусить вручну відсканувати QR і підтвердити — це легко довше за глобальні 30 с. Передай, напр., `timeout: TimeSpan.FromSeconds(150)`. Симетричний `StartLinkAsync` НЕ змінено — у нього немає довгої interactive-фази. Закриває залежність consumer-а `WsRpcServer` (`finishLink` потребує ≥130 с на ручний скан). *(прокидається `FinishLinkAsync` → `InvokeMethodAsync` → `JsonRpcClient`)*
+
+### 🛠 Інше
+
+- **`TimeoutException`-повідомлення тепер показує фактично застосований таймаут** (per-call, якщо заданий), а не завжди глобальний — точніша діагностика для довгих викликів.
+- **Тести:** 509 → 514. 4 нові у `Rpc/PerCallTimeoutTests.cs` (per-call коротший за default таймаутить раніше; per-call довший — default не спрацьовує передчасно; `null` = client default — усі три віртуалізовані через `FakeTimeProvider`, нуль wall-clock, rule #11; плюс boundary-тест: від'ємний → `ArgumentOutOfRangeException`). +1 у `DeviceManagement/SignalDevicesCrudTests.cs` (`FinishLinkAsync` прокидає timeout у клієнт). Плюс механічне оновлення ~30 Moq `.Callback<>`/`.Returns<>`-сетапів на `InvokeMethodAsync` до 6-арності (додано параметр).
+
+### 🛡️ Захист від регресій
+
+- **RG03 (`PublicApiSurfaceTests`) baseline оновлено** для трьох змінених сигнатур (`IJsonRpcSender`/`ISignalCliClient.InvokeMethodAsync`, `ISignalDevices.FinishLinkAsync`) — додано `System.Nullable<System.TimeSpan>` останнім параметром. Additive-only, жоден член не видалено.
+
+OpenSpec: [`openspec/changes/add-per-call-rpc-timeout/`](openspec/changes/add-per-call-rpc-timeout/).
+
 ## [4.10.1] — 2026-07-16
 
 Patch — виправлення silent-null wire-bug'у у device-linking флоу. Non-breaking; публічна поверхня незмінна (`StartLinkResponse.DeviceLinkUri` лишається тим самим PascalCase property).

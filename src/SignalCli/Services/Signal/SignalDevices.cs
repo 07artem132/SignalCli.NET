@@ -39,7 +39,7 @@ internal sealed class SignalDevices(
         return response;
     }
 
-    public async Task<FinishLinkResponse> FinishLinkAsync(string deviceLinkUri, string deviceName, CancellationToken cancellationToken = default)
+    public async Task<FinishLinkResponse> FinishLinkAsync(string deviceLinkUri, string deviceName, CancellationToken cancellationToken = default, TimeSpan? timeout = null)
     {
         // post-modernize-tuning §8c.11 (audit N5): validate inputs at the boundary —
         // ArgumentException for null/empty замість 400-class signal-cli-помилки після RPC.
@@ -48,13 +48,17 @@ internal sealed class SignalDevices(
 
         // §8c.7: bare-catch прибрано.
         SignalDevicesLog.FinishLinkRequested(_logger, deviceName);
+        // add-per-call-rpc-timeout: прокидаємо per-call timeout — finishLink має довгу
+        // interactive-фазу (ручний QR-скан на primary), яка легко перевищує глобальний
+        // RequestTimeoutSeconds. null → діє клієнтський default.
         var response = await _signalCliClient
             .InvokeMethodAsync(
                 "finishLink",
                 new FinishLinkParameters(deviceLinkUri, deviceName),
                 SignalJsonContext.Default.FinishLinkParameters,
                 SignalJsonContext.Default.FinishLinkResponse,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                timeout).ConfigureAwait(false);
 
         if (response == null)
         {

@@ -37,8 +37,8 @@ public class SignalMessageInteractiveTests
                 It.IsAny<JsonTypeInfo<SendReactionParameters>>(),
                 It.IsAny<JsonTypeInfo<SendMessageResponse>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, SendReactionParameters, JsonTypeInfo<SendReactionParameters>, JsonTypeInfo<SendMessageResponse>, CancellationToken>(
-                (m, p, _, _, _) => { capturedMethod = m; capturedParams = p; })
+            .Callback<string, SendReactionParameters, JsonTypeInfo<SendReactionParameters>, JsonTypeInfo<SendMessageResponse>, CancellationToken, TimeSpan?>(
+                (m, p, _, _, _, _) => { capturedMethod = m; capturedParams = p; })
             .ReturnsAsync(Ok(42L));
 
         var sut = new SignalMessage(client.Object, Mock.Of<ILogger<SignalMessage>>());
@@ -97,8 +97,8 @@ public class SignalMessageInteractiveTests
                 It.IsAny<JsonTypeInfo<SendReceiptParameters>>(),
                 It.IsAny<JsonTypeInfo<SendMessageResponse>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, SendReceiptParameters, JsonTypeInfo<SendReceiptParameters>, JsonTypeInfo<SendMessageResponse>, CancellationToken>(
-                (_, p, _, _, _) => captured = p)
+            .Callback<string, SendReceiptParameters, JsonTypeInfo<SendReceiptParameters>, JsonTypeInfo<SendMessageResponse>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(Ok());
 
         var sut = new SignalMessage(client.Object, Mock.Of<ILogger<SignalMessage>>());
@@ -122,8 +122,8 @@ public class SignalMessageInteractiveTests
                 It.IsAny<JsonTypeInfo<SendReceiptParameters>>(),
                 It.IsAny<JsonTypeInfo<SendMessageResponse>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, SendReceiptParameters, JsonTypeInfo<SendReceiptParameters>, JsonTypeInfo<SendMessageResponse>, CancellationToken>(
-                (_, p, _, _, _) => captured = p)
+            .Callback<string, SendReceiptParameters, JsonTypeInfo<SendReceiptParameters>, JsonTypeInfo<SendMessageResponse>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(Ok());
 
         var sut = new SignalMessage(client.Object, Mock.Of<ILogger<SignalMessage>>());
@@ -147,8 +147,8 @@ public class SignalMessageInteractiveTests
                 It.IsAny<JsonTypeInfo<SendTypingParameters>>(),
                 It.IsAny<JsonTypeInfo<SendMessageResponse>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, SendTypingParameters, JsonTypeInfo<SendTypingParameters>, JsonTypeInfo<SendMessageResponse>, CancellationToken>(
-                (_, p, _, _, _) => captured = p)
+            .Callback<string, SendTypingParameters, JsonTypeInfo<SendTypingParameters>, JsonTypeInfo<SendMessageResponse>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(Ok());
 
         var sut = new SignalMessage(client.Object, Mock.Of<ILogger<SignalMessage>>());
@@ -170,8 +170,8 @@ public class SignalMessageInteractiveTests
                 It.IsAny<JsonTypeInfo<SendTypingParameters>>(),
                 It.IsAny<JsonTypeInfo<SendMessageResponse>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, SendTypingParameters, JsonTypeInfo<SendTypingParameters>, JsonTypeInfo<SendMessageResponse>, CancellationToken>(
-                (_, p, _, _, _) => captured = p)
+            .Callback<string, SendTypingParameters, JsonTypeInfo<SendTypingParameters>, JsonTypeInfo<SendMessageResponse>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(Ok());
 
         var sut = new SignalMessage(client.Object, Mock.Of<ILogger<SignalMessage>>());
@@ -195,8 +195,8 @@ public class SignalMessageInteractiveTests
                 It.IsAny<JsonTypeInfo<RemoteDeleteParameters>>(),
                 It.IsAny<JsonTypeInfo<SendMessageResponse>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, RemoteDeleteParameters, JsonTypeInfo<RemoteDeleteParameters>, JsonTypeInfo<SendMessageResponse>, CancellationToken>(
-                (_, p, _, _, _) => captured = p)
+            .Callback<string, RemoteDeleteParameters, JsonTypeInfo<RemoteDeleteParameters>, JsonTypeInfo<SendMessageResponse>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(Ok());
 
         var sut = new SignalMessage(client.Object, Mock.Of<ILogger<SignalMessage>>());

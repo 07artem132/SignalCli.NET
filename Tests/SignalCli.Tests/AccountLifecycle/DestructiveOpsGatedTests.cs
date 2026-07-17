@@ -126,8 +126,8 @@ public class DestructiveOpsGatedTests
                 It.IsAny<System.Text.Json.Serialization.Metadata.JsonTypeInfo<UnregisterParameters>>(),
                 It.IsAny<System.Text.Json.Serialization.Metadata.JsonTypeInfo<System.Text.Json.JsonElement>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, UnregisterParameters, System.Text.Json.Serialization.Metadata.JsonTypeInfo<UnregisterParameters>, System.Text.Json.Serialization.Metadata.JsonTypeInfo<System.Text.Json.JsonElement>, CancellationToken>(
-                (_, p, _, _, _) => captured = p)
+            .Callback<string, UnregisterParameters, System.Text.Json.Serialization.Metadata.JsonTypeInfo<UnregisterParameters>, System.Text.Json.Serialization.Metadata.JsonTypeInfo<System.Text.Json.JsonElement>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(default(System.Text.Json.JsonElement));
 
         var sut = NewSut(enabled: true, client);

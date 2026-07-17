@@ -623,7 +623,7 @@
             Підтримує типізовані запити та відповіді через узагальнені параметри.
             </remarks>
         </member>
-        <member name="M:SignalCli.Interfaces.Rpc.IJsonRpcSender.InvokeMethodAsync``2(System.String,``0,System.Text.Json.Serialization.Metadata.JsonTypeInfo{``0},System.Text.Json.Serialization.Metadata.JsonTypeInfo{``1},System.Threading.CancellationToken)">
+        <member name="M:SignalCli.Interfaces.Rpc.IJsonRpcSender.InvokeMethodAsync``2(System.String,``0,System.Text.Json.Serialization.Metadata.JsonTypeInfo{``0},System.Text.Json.Serialization.Metadata.JsonTypeInfo{``1},System.Threading.CancellationToken,System.Nullable{System.TimeSpan})">
             <summary>
             Асинхронно викликає метод JSON-RPC. AOT-сумісна signature: викликач передає
             source-generated <see cref="T:System.Text.Json.Serialization.Metadata.JsonTypeInfo`1"/>-метадані для запиту й відповіді.
@@ -640,8 +640,15 @@
             Source-gen метадані для десеріалізації <typeparamref name="TResponse"/>.
             </param>
             <param name="cancellationToken">Токен скасування операції.</param>
+            <param name="timeout">
+            add-per-call-rpc-timeout: опціональний per-call таймаут, що переважає клієнтський default
+            (<c>RequestTimeoutSeconds</c>) лише для цього виклику. <c>null</c> або
+            <see cref="F:System.TimeSpan.Zero"/> — «не задано»: діє клієнтський default. Додатне значення —
+            для довгих interactive-операцій (напр. <c>finishLink</c> з ручним QR-скануванням).
+            </param>
             <returns>Типізована відповідь від сервера.</returns>
             <exception cref="T:System.ArgumentNullException">Виникає, якщо <paramref name="parameters"/>, <paramref name="requestTypeInfo"/> або <paramref name="responseTypeInfo"/> дорівнюють null.</exception>
+            <exception cref="T:System.ArgumentOutOfRangeException">Виникає, якщо <paramref name="timeout"/> від'ємний.</exception>
             <exception cref="T:System.InvalidOperationException">Виникає при помилці десеріалізації відповіді.</exception>
             <exception cref="T:SignalCli.Exceptions.JsonRpcException">Виникає, якщо сервер повернув помилку.</exception>
             <exception cref="T:System.OperationCanceledException">Виникає, якщо операцію скасовано.</exception>
@@ -765,7 +772,7 @@
             Надає можливість взаємодії з Signal месенджером через його CLI інтерфейс.
             </summary>
         </member>
-        <member name="M:SignalCli.Interfaces.SignalCli.ISignalCliClient.InvokeMethodAsync``2(System.String,``0,System.Text.Json.Serialization.Metadata.JsonTypeInfo{``0},System.Text.Json.Serialization.Metadata.JsonTypeInfo{``1},System.Threading.CancellationToken)">
+        <member name="M:SignalCli.Interfaces.SignalCli.ISignalCliClient.InvokeMethodAsync``2(System.String,``0,System.Text.Json.Serialization.Metadata.JsonTypeInfo{``0},System.Text.Json.Serialization.Metadata.JsonTypeInfo{``1},System.Threading.CancellationToken,System.Nullable{System.TimeSpan})">
             <summary>
             Асинхронно викликає вказаний метод Signal CLI з переданими параметрами.
             AOT-сумісна signature: викликач передає source-generated <see cref="T:System.Text.Json.Serialization.Metadata.JsonTypeInfo`1"/>
@@ -778,6 +785,14 @@
             <param name="requestTypeInfo">Source-gen метадані для серіалізації запиту (з <c>SignalJsonContext.Default</c>).</param>
             <param name="responseTypeInfo">Source-gen метадані для десеріалізації відповіді.</param>
             <param name="cancellationToken">Токен скасування для переривання операції.</param>
+            <param name="timeout">
+            add-per-call-rpc-timeout: опціональний per-call таймаут, що переважає клієнтський default
+            (<c>RequestTimeoutSeconds</c>) лише для цього виклику. <c>null</c> або
+            <see cref="F:System.TimeSpan.Zero"/> — «не задано»: діє клієнтський default (поведінка незмінна).
+            Додатне значення — для довгих interactive-операцій (напр. <c>finishLink</c> з ручним
+            QR-скануванням), триваліших за глобальний таймаут. Від'ємне значення →
+            <see cref="T:System.ArgumentOutOfRangeException"/>.
+            </param>
             <returns>Об'єкт відповіді від Signal CLI.</returns>
             <remarks>
             post-modernize-tuning §6.7 (audit P6): public-signature змінено для AOT-сумісності.
@@ -785,6 +800,10 @@
             тепер metadata-провайдер є явним аргументом. Це **breaking** — попередній shape з 3-ма
             аргументами видалено (overload-resolution не розрізняє методи лише за наявністю опціональних
             параметрів через double-default-conflict).
+            <para>
+            add-per-call-rpc-timeout: опціональний <paramref name="timeout"/> доданий ОСТАННІМ — це
+            API-additive зміна (існуючі call-site'и без аргументу компілюються й поводяться незмінно).
+            </para>
             </remarks>
         </member>
         <member name="M:SignalCli.Interfaces.SignalCli.ISignalCliClient.VersionAsync(System.Threading.CancellationToken)">
@@ -1160,33 +1179,44 @@
             <exception cref="T:SignalCli.Exceptions.JsonRpcException">Виникає при помилці JSON-RPC запиту.</exception>
             <exception cref="T:System.OperationCanceledException">Виникає, якщо операцію скасовано.</exception>
         </member>
-        <member name="M:SignalCli.Interfaces.Signal.ISignalDevices.FinishLinkAsync(System.String,System.String,System.Threading.CancellationToken)">
-            <summary>
-            Завершує процес зв'язування нового пристрою з обліковим записом.
-            </summary>
-            <param name="deviceLinkUri">URI для зв'язування, отриманий під час сканування QR-коду.</param>
-            <param name="deviceName">Назва нового пристрою.</param>
-            <param name="cancellationToken">Токен скасування операції.</param>
-            <returns>Результат зв'язування з номером пристрою.</returns>
-            <exception cref="T:System.ArgumentNullException">Виникає, якщо deviceLinkUri або deviceName дорівнює null.</exception>
-            <exception cref="T:System.InvalidOperationException">Виникає при помилці завершення процесу зв'язування.</exception>
-            <exception cref="T:SignalCli.Exceptions.JsonRpcException">Виникає при помилці JSON-RPC запиту.</exception>
-            <exception cref="T:System.OperationCanceledException">Виникає, якщо операцію скасовано.</exception>
-            <example>
-            <code>
-            // Крок 1: Початок процесу зв'язування
-            var linkInfo = await signalDevices.StartLink(cancellationToken);
+        <member name="M:SignalCli.Interfaces.Signal.ISignalDevices.FinishLinkAsync(System.String,System.String,System.Threading.CancellationToken,System.Nullable{System.TimeSpan})">
+             <summary>
+             Завершує процес зв'язування нового пристрою з обліковим записом.
+             </summary>
+             <param name="deviceLinkUri">URI для зв'язування, отриманий під час сканування QR-коду.</param>
+             <param name="deviceName">Назва нового пристрою.</param>
+             <param name="cancellationToken">Токен скасування операції.</param>
+             <param name="timeout">
+             add-per-call-rpc-timeout: опціональний per-call таймаут RPC-виклику <c>finishLink</c>, що
+             переважає клієнтський default (<c>RequestTimeoutSeconds</c>, зазвичай 30 с) лише для цієї
+             операції. Причина: <c>finishLink</c> має довгу interactive-фазу — primary device мусить
+             вручну відсканувати QR-код і підтвердити зв'язування, що легко перевищує глобальний
+             таймаут. Передайте, наприклад, <c>TimeSpan.FromSeconds(150)</c>, щоб дати користувачеві час.
+             <c>null</c> — діє клієнтський default (поведінка незмінна).
+             </param>
+             <returns>Результат зв'язування з номером пристрою.</returns>
+             <exception cref="T:System.ArgumentNullException">Виникає, якщо deviceLinkUri або deviceName дорівнює null.</exception>
+             <exception cref="T:System.ArgumentOutOfRangeException">Виникає, якщо <paramref name="timeout"/> від'ємний.</exception>
+             <exception cref="T:System.InvalidOperationException">Виникає при помилці завершення процесу зв'язування.</exception>
+             <exception cref="T:SignalCli.Exceptions.JsonRpcException">Виникає при помилці JSON-RPC запиту.</exception>
+             <exception cref="T:System.TimeoutException">Виникає, якщо відповідь не отримано за <paramref name="timeout"/> (якщо задано) або за клієнтським default'ом.</exception>
+             <exception cref="T:System.OperationCanceledException">Виникає, якщо операцію скасовано.</exception>
+             <example>
+             <code>
+             // Крок 1: Початок процесу зв'язування
+             var linkInfo = await signalDevices.StartLinkAsync(cancellationToken);
             
-            // Виведення QR-коду для сканування на іншому пристрої
-            Console.WriteLine($"Відскануйте цей код: {linkInfo.DeviceLinkUri}");
+             // Виведення QR-коду для сканування на іншому пристрої
+             Console.WriteLine($"Відскануйте цей код: {linkInfo.DeviceLinkUri}");
             
-            // Крок 2: Завершення процесу після сканування
-            var result = await signalDevices.FinishLink(
-                deviceLinkUri: "tsdevice:/?uuid=...",
-                deviceName: "Мій новий пристрій",
-                cancellationToken);
-            </code>
-            </example>
+             // Крок 2: Завершення процесу після сканування (з довшим per-call таймаутом на ручний скан)
+             var result = await signalDevices.FinishLinkAsync(
+                 deviceLinkUri: "sgnl://linkdevice?uuid=...",
+                 deviceName: "Мій новий пристрій",
+                 cancellationToken,
+                 timeout: TimeSpan.FromSeconds(150));
+             </code>
+             </example>
         </member>
         <member name="M:SignalCli.Interfaces.Signal.ISignalDevices.AddDeviceAsync(System.String,System.String,System.Threading.CancellationToken)">
             <summary>
@@ -10170,7 +10200,7 @@
             <param name="options">Конфігурація — для отримання <see cref="P:SignalCli.Models.SignalCliOptions.RequestTimeoutSeconds"/>.</param>
             <param name="timeProvider">
             audit N4: опціональний постачальник часу для <c>CancellationTokenSource(timeout, TimeProvider)</c>
-            у <see cref="M:SignalCli.Services.Rpc.JsonRpcClient.InvokeMethodAsync``2(System.String,``0,System.Text.Json.Serialization.Metadata.JsonTypeInfo{``0},System.Text.Json.Serialization.Metadata.JsonTypeInfo{``1},System.Threading.CancellationToken)"/>. За замовчуванням <see cref="P:System.TimeProvider.System"/>; у тестах
+            у <see cref="M:SignalCli.Services.Rpc.JsonRpcClient.InvokeMethodAsync``2(System.String,``0,System.Text.Json.Serialization.Metadata.JsonTypeInfo{``0},System.Text.Json.Serialization.Metadata.JsonTypeInfo{``1},System.Threading.CancellationToken,System.Nullable{System.TimeSpan})"/>. За замовчуванням <see cref="P:System.TimeProvider.System"/>; у тестах
             підставляється <c>FakeTimeProvider</c> — щоб віртуально провертати таймаут.
             </param>
             <remarks>D.4: приймає типовану <see cref="T:SignalCli.Models.SignalCliOptions"/> замість legacy <c>Config</c>.</remarks>
@@ -10224,7 +10254,7 @@
             <param name="jsonLine">JSON-рядок для обробки.</param>
             <param name="cancellationToken">Токен скасування — пов'язаний із stdout-циклом.</param>
         </member>
-        <member name="M:SignalCli.Services.Rpc.JsonRpcClient.InvokeMethodAsync``2(System.String,``0,System.Text.Json.Serialization.Metadata.JsonTypeInfo{``0},System.Text.Json.Serialization.Metadata.JsonTypeInfo{``1},System.Threading.CancellationToken)">
+        <member name="M:SignalCli.Services.Rpc.JsonRpcClient.InvokeMethodAsync``2(System.String,``0,System.Text.Json.Serialization.Metadata.JsonTypeInfo{``0},System.Text.Json.Serialization.Metadata.JsonTypeInfo{``1},System.Threading.CancellationToken,System.Nullable{System.TimeSpan})">
             <summary>
             Асинхронно викликає вказаний метод JSON-RPC з переданими параметрами.
             </summary>
@@ -10235,10 +10265,19 @@
             <param name="requestTypeInfo">Source-gen метадані для серіалізації запиту.</param>
             <param name="responseTypeInfo">Source-gen метадані для десеріалізації відповіді.</param>
             <param name="cancellationToken">Токен скасування для переривання операції.</param>
+            <param name="timeout">
+            add-per-call-rpc-timeout: опціональний per-call таймаут, що переважає клієнтський
+            default (<see cref="P:SignalCli.Models.SignalCliOptions.RequestTimeoutSeconds"/>) саме для цього виклику.
+            <c>null</c> або <see cref="F:System.TimeSpan.Zero"/> — «не задано»: діє клієнтський default
+            (поведінка незмінна). Додатне значення застосовується до timeout-CTS замість default'у.
+            Використовується для довгих interactive-операцій (напр. <c>finishLink</c> з ручним
+            QR-скануванням), які триваліші за глобальний таймаут.
+            </param>
             <returns>Об'єкт відповіді від сервера JSON-RPC.</returns>
             <exception cref="T:System.ObjectDisposedException">Виникає, якщо об'єкт був утилізований.</exception>
             <exception cref="T:System.ArgumentNullException">Виникає, якщо параметри дорівнюють null.</exception>
-            <exception cref="T:System.TimeoutException">Виникає, якщо відповідь не отримано за <see cref="P:SignalCli.Models.SignalCliOptions.RequestTimeoutSeconds"/>.</exception>
+            <exception cref="T:System.ArgumentOutOfRangeException">Виникає, якщо <paramref name="timeout"/> від'ємний.</exception>
+            <exception cref="T:System.TimeoutException">Виникає, якщо відповідь не отримано за <paramref name="timeout"/> (якщо задано) або за <see cref="P:SignalCli.Models.SignalCliOptions.RequestTimeoutSeconds"/>.</exception>
             <exception cref="T:System.OperationCanceledException">Виникає, якщо викликач скасував запит через <paramref name="cancellationToken"/>.</exception>
             <exception cref="T:System.InvalidOperationException">Виникає, якщо отримано нульову відповідь або не вдалося перетворити результат.</exception>
             <exception cref="T:SignalCli.Exceptions.JsonRpcException">Виникає, якщо сервер повернув помилку.</exception>
