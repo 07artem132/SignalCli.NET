@@ -3,6 +3,19 @@
 Формат заснований на [Keep a Changelog](https://keepachangelog.com/),
 проєкт дотримується [семантичного версіонування](https://semver.org/lang/uk/).
 
+## [4.10.3] — 2026-07-17
+
+Patch — критичний upstream-фікс вхідних повідомлень (signal-cli `0.14.6`) + захист event-диспетчера від порожніх receive-нотіфікацій. Non-breaking.
+
+### ✨ Нове
+
+- **`SignalCli.Runtime` (і `.Native` / `.Jre.win-x64` / `.Jre.osx-arm64`) підняті до signal-cli `0.14.6`** (версія пакета `0.14.3.1` → `0.14.6.1`). Причина — критичний upstream-баг [AsamK/signal-cli#2059](https://github.com/AsamK/signal-cli/issues/2059): приблизно з 10 червня 2026 Signal-сервер перестав слати `serverGuid` у частині sealed-sender конвертів, а signal-cli ≤0.14.4.1 мав Kotlin `!!`-нон-нал-асершн у `SignalServiceContent.createFromProto` → `NullPointerException` → **ВСІ вхідні sealed-sender повідомлення дропались** (надсилання не зачеплене). Фікс приземлився в signal-cli 0.14.5; беремо 0.14.6 (latest). JDK-вимога незмінна — **25** (`Main` class-file major 69, звірено з артефактом). 8 protocol-facts перевірено проти 0.14.6 — без змін JSON-RPC/receive-mode/error-code/envelope-поведінки.
+
+### 🛠 Інше
+
+- **`SignalEventService.OnNotificationReceived` тепер гардить порожнє навантаження** (`params` або `params.result == null`): лог-і-скіп на Debug(511) `NotificationPayloadMissing` замість `NullReferenceException`, яка ловилась як Error(508) `NotificationDispatchFailed` на КОЖНЕ повідомлення. Робить receive-шлях стійким до малформед/недекодованих нотіфікацій (до фіксу #2059 кожен sealed-sender конверт без serverGuid спамив Error-лог).
+- **Тести:** 514 → 515. Новий `NullPayload_SkipsAsDebug_NotErrorDispatchFail_AndStaysAlive` у `SignalEventServiceDispatchTests` (`FakeLogger` пінить Debug(511)×2, відсутність Error(508), і що сервіс лишається живим після порожніх нотіфікацій).
+
 ## [4.10.2] — 2026-07-17
 
 Patch — API-additive per-call RPC timeout override. Non-breaking; існуючі виклики компілюються й поводяться незмінно (новий параметр опціональний, доданий останнім).

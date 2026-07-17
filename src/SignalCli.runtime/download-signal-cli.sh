@@ -7,11 +7,11 @@ set -euo pipefail
 #
 # Усі аргументи опціональні:
 #   $1 — OUT_DIR  (default: signal-cli)
-#   $2 — VERSION  (default: 0.14.3)
+#   $2 — VERSION  (default: 0.14.6)
 #   $3 — SHA256   (default: pinned value below)
 OUT_DIR="${1:-signal-cli}"
-VERSION="${2:-0.14.3}"
-EXPECTED_SHA256="${3:-60a0a51312d07ed0cd6f4d5080b2ffe6ee838ea99f92297f2803e24af1826c6f}"
+VERSION="${2:-0.14.6}"
+EXPECTED_SHA256="${3:-e90f4faea709b3c0a55909646a2b94289b9779ba9c8fd5c6eaa847d3f67312eb}"
 
 if [ -f "$OUT_DIR/bin/signal-cli" ]; then
   echo "✅ signal-cli вже існує в $OUT_DIR, завантаження не потрібне."

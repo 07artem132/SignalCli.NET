@@ -10,16 +10,16 @@
 
         <PackageId>SignalCli.Runtime.Jre.osx-arm64</PackageId>
         <Authors>07artem132</Authors>
-        <Description>signal-cli 0.14.3 runtime bundled with an Eclipse Temurin 25 JRE for macOS arm64 (Apple Silicon) — NO system Java required. Drop-in replacement for SignalCli.Runtime; Config.JavaExecutable is auto-discovered from the bundled jre/. Bundles the GPLv3 signal-cli and a GPLv2-with-Classpath-Exception JRE.</Description>
+        <Description>signal-cli 0.14.6 runtime bundled with an Eclipse Temurin 25 JRE for macOS arm64 (Apple Silicon) — NO system Java required. Drop-in replacement for SignalCli.Runtime; Config.JavaExecutable is auto-discovered from the bundled jre/. Bundles the GPLv3 signal-cli and a GPLv2-with-Classpath-Exception JRE.</Description>
         <PackageProjectUrl>https://github.com/07artem132/SignalCli.NET</PackageProjectUrl>
         <RepositoryUrl>https://github.com/07artem132/SignalCli.NET</RepositoryUrl>
         <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
         <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
-        <Version>0.14.3.1</Version>
-        <AssemblyVersion>0.14.3.1</AssemblyVersion>
-        <FileVersion>0.14.3.1</FileVersion>
+        <Version>0.14.6.1</Version>
+        <AssemblyVersion>0.14.6.1</AssemblyVersion>
+        <FileVersion>0.14.6.1</FileVersion>
 
-        <!-- Bundled JRE coordinates (Eclipse Temurin). signal-cli 0.14.3's Main is
+        <!-- Bundled JRE coordinates (Eclipse Temurin). signal-cli 0.14.6's Main is
              compiled to class-file version 69.0, which requires a Java 25 runtime. -->
         <JreFeature>25</JreFeature>
         <JreVersion>25.0.3+9</JreVersion>

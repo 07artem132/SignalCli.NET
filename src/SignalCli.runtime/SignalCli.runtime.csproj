@@ -13,16 +13,16 @@
         <RepositoryUrl>https://github.com/07artem132/SignalCli.NET</RepositoryUrl>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-        <Version>0.14.3.1</Version>
-        <AssemblyVersion>0.14.3.1</AssemblyVersion>
-        <FileVersion>0.14.3.1</FileVersion>
+        <Version>0.14.6.1</Version>
+        <AssemblyVersion>0.14.6.1</AssemblyVersion>
+        <FileVersion>0.14.6.1</FileVersion>
 
         <!-- post-modernize-tuning §8d.4-§8d.6 (audit N6): canonical version + SHA-256 of the
              upstream signal-cli archive live in this csproj. The download scripts accept
              these as args; bumping signal-cli = edit two lines here, no script edits.
-             Verified value: GitHub Releases https://github.com/AsamK/signal-cli/releases/tag/v0.14.3 -->
-        <SignalCliVersion>0.14.3</SignalCliVersion>
-        <SignalCliSha256>60a0a51312d07ed0cd6f4d5080b2ffe6ee838ea99f92297f2803e24af1826c6f</SignalCliSha256>
+             Verified value: GitHub Releases https://github.com/AsamK/signal-cli/releases/tag/v0.14.6 -->
+        <SignalCliVersion>0.14.6</SignalCliVersion>
+        <SignalCliSha256>e90f4faea709b3c0a55909646a2b94289b9779ba9c8fd5c6eaa847d3f67312eb</SignalCliSha256>
     </PropertyGroup>
 
     <!-- Цілі для завантаження та копіювання signal-cli у вихідну папку (за потреби).

@@ -405,8 +405,19 @@ internal sealed class SignalEventService(
     {
         try
         {
-            int subscriptionId = notification.Params.Subscription;
-            var eventArgs = notification.Params.Result;
+            // Захист (#2059/on-start): signal-cli може віддати receive-нотіфікацію без корисного
+            // навантаження — params або params.result приходять null (напр. sealed-sender конверт
+            // без serverGuid, який upstream не зміг обробити до фіксу signal-cli 0.14.5). Гардимо
+            // до розіменування, щоб не впасти в NRE і не спамити лог; лог-і-скіп.
+            var payload = notification.Params;
+            if (payload is null || payload.Result is null)
+            {
+                SignalEventServiceLog.NotificationPayloadMissing(_logger);
+                return;
+            }
+
+            int subscriptionId = payload.Subscription;
+            var eventArgs = payload.Result;
             // Припускається, що eventArgs.Envelope вже має тип JsonMessageEnvelope
             JsonMessageEnvelope? jsonEnvelope = eventArgs.Envelope;
             if (jsonEnvelope == null)
