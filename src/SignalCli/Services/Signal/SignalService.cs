@@ -25,7 +25,8 @@ internal class SignalService : ISignalCliClient
         TRequest parameters,
         JsonTypeInfo<TRequest> requestTypeInfo,
         JsonTypeInfo<TResponse> responseTypeInfo,
-        CancellationToken cancellationToken = default) where TResponse : notnull
+        CancellationToken cancellationToken = default,
+        TimeSpan? timeout = null) where TResponse : notnull
     {
             try
             {
@@ -34,8 +35,9 @@ internal class SignalService : ISignalCliClient
                 SignalServiceLog.InvokeMethod(_logger, method);
 
                 // §6.7: forward source-gen TypeInfo'и далі по chain'у — AOT-safe.
+                // add-per-call-rpc-timeout: прокидаємо опціональний per-call timeout у транспорт.
                 var response = await _rpcClient.Client
-                    .InvokeMethodAsync(method, parameters, requestTypeInfo, responseTypeInfo, cancellationToken)
+                    .InvokeMethodAsync(method, parameters, requestTypeInfo, responseTypeInfo, cancellationToken, timeout)
                     .ConfigureAwait(false);
 
                 if (response is null)

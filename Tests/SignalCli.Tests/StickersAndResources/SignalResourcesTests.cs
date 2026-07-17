@@ -72,8 +72,8 @@ public class SignalResourcesTests
                 It.IsAny<JsonTypeInfo<GetAvatarParameters>>(),
                 It.IsAny<JsonTypeInfo<JsonAttachmentData>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, GetAvatarParameters, JsonTypeInfo<GetAvatarParameters>, JsonTypeInfo<JsonAttachmentData>, CancellationToken>(
-                (_, p, _, _, _) => captured = p)
+            .Callback<string, GetAvatarParameters, JsonTypeInfo<GetAvatarParameters>, JsonTypeInfo<JsonAttachmentData>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(new JsonAttachmentData(ValidBase64));
 
         var sut = new SignalResources(client.Object, Mock.Of<ILogger<SignalResources>>());

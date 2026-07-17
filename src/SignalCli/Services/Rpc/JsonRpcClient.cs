@@ -418,10 +418,19 @@ internal sealed class JsonRpcClient : IJsonRpcClient
     /// <param name="requestTypeInfo">Source-gen метадані для серіалізації запиту.</param>
     /// <param name="responseTypeInfo">Source-gen метадані для десеріалізації відповіді.</param>
     /// <param name="cancellationToken">Токен скасування для переривання операції.</param>
+    /// <param name="timeout">
+    /// add-per-call-rpc-timeout: опціональний per-call таймаут, що переважає клієнтський
+    /// default (<see cref="SignalCliOptions.RequestTimeoutSeconds"/>) саме для цього виклику.
+    /// <c>null</c> або <see cref="TimeSpan.Zero"/> — «не задано»: діє клієнтський default
+    /// (поведінка незмінна). Додатне значення застосовується до timeout-CTS замість default'у.
+    /// Використовується для довгих interactive-операцій (напр. <c>finishLink</c> з ручним
+    /// QR-скануванням), які триваліші за глобальний таймаут.
+    /// </param>
     /// <returns>Об'єкт відповіді від сервера JSON-RPC.</returns>
     /// <exception cref="ObjectDisposedException">Виникає, якщо об'єкт був утилізований.</exception>
     /// <exception cref="ArgumentNullException">Виникає, якщо параметри дорівнюють null.</exception>
-    /// <exception cref="TimeoutException">Виникає, якщо відповідь не отримано за <see cref="SignalCliOptions.RequestTimeoutSeconds"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Виникає, якщо <paramref name="timeout"/> від'ємний.</exception>
+    /// <exception cref="TimeoutException">Виникає, якщо відповідь не отримано за <paramref name="timeout"/> (якщо задано) або за <see cref="SignalCliOptions.RequestTimeoutSeconds"/>.</exception>
     /// <exception cref="OperationCanceledException">Виникає, якщо викликач скасував запит через <paramref name="cancellationToken"/>.</exception>
     /// <exception cref="InvalidOperationException">Виникає, якщо отримано нульову відповідь або не вдалося перетворити результат.</exception>
     /// <exception cref="JsonRpcException">Виникає, якщо сервер повернув помилку.</exception>
@@ -430,7 +439,8 @@ internal sealed class JsonRpcClient : IJsonRpcClient
         TRequest parameters,
         JsonTypeInfo<TRequest> requestTypeInfo,
         JsonTypeInfo<TResponse> responseTypeInfo,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        TimeSpan? timeout = null)
         where TResponse : notnull
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -439,6 +449,13 @@ internal sealed class JsonRpcClient : IJsonRpcClient
             throw new ArgumentNullException(nameof(parameters));
         ArgumentNullException.ThrowIfNull(requestTypeInfo);
         ArgumentNullException.ThrowIfNull(responseTypeInfo);
+
+        // add-per-call-rpc-timeout: від'ємний per-call таймаут — програмна помилка виклику.
+        // Валідуємо на межі (до планування CTS), щоб дати чіткий ArgumentOutOfRangeException
+        // замість пізнішого throw'у в конструкторі CancellationTokenSource.
+        if (timeout is { } requestedTimeout && requestedTimeout < TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(timeout), requestedTimeout,
+                "Per-call таймаут не може бути від'ємним.");
 
         // §8c.4 скасовано: CA1305-аналізатор не визнає що digits 0-9 culture-invariant,
         // тож лишаємо InvariantCulture, але через named-constant — без using.
@@ -473,10 +490,15 @@ internal sealed class JsonRpcClient : IJsonRpcClient
         var tcs = new TaskCompletionSource<JsonRpcResponse?>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pendingRequests[requestId] = tcs;
 
+        // add-per-call-rpc-timeout: ефективний таймаут — per-call override, якщо заданий і
+        // додатний; інакше клієнтський default (_requestTimeout). null/TimeSpan.Zero → default,
+        // тож поведінка існуючих call-site'ів без аргументу лишається незмінною.
+        var effectiveTimeout = timeout is { } t && t > TimeSpan.Zero ? t : _requestTimeout;
+
         // F1: окрема timeout-CTS, щоб відрізнити таймаут від callerCancel.
         // audit N4: TimeProvider-aware overload (.NET 8+) — тести з FakeTimeProvider
         // можуть провернути таймаут віртуально, без wall-clock-залежності.
-        using var timeoutCts = new CancellationTokenSource(_requestTimeout, _timeProvider);
+        using var timeoutCts = new CancellationTokenSource(effectiveTimeout, _timeProvider);
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
         try
@@ -531,7 +553,7 @@ internal sealed class JsonRpcClient : IJsonRpcClient
                     status = "timeout";
                     activity?.SetStatus(ActivityStatusCode.Error, nameof(TimeoutException));
                     throw new TimeoutException(
-                        $"JSON-RPC метод '{method}' не отримав відповіді за {_requestTimeout.TotalSeconds:F0} с");
+                        $"JSON-RPC метод '{method}' не отримав відповіді за {effectiveTimeout.TotalSeconds:F0} с");
                 }
             }
         }

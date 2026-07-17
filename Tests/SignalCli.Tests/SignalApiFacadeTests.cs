@@ -63,7 +63,7 @@ public class SignalApiFacadeTests
         var client = Client();
         FinishLinkParameters? captured = null;
         client.Setup(c => c.InvokeMethodAsync<FinishLinkParameters, FinishLinkResponse>("finishLink", It.IsAny<FinishLinkParameters>(), It.IsAny<JsonTypeInfo<FinishLinkParameters>>(), It.IsAny<JsonTypeInfo<FinishLinkResponse>>(), It.IsAny<CancellationToken>()))
-            .Callback<string, FinishLinkParameters, JsonTypeInfo<FinishLinkParameters>, JsonTypeInfo<FinishLinkResponse>, CancellationToken>((_, p, _, _, _) => captured = p)
+            .Callback<string, FinishLinkParameters, JsonTypeInfo<FinishLinkParameters>, JsonTypeInfo<FinishLinkResponse>, CancellationToken, TimeSpan?>((_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(new FinishLinkResponse("+380501234567"));
 
         var result = await new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>())
@@ -95,7 +95,7 @@ public class SignalApiFacadeTests
         // post-modernize-tuning §4.20 (audit N10): wrapper-record (Items: IReadOnlyList<Group>).
         var expected = new ListGroupsResponse([]);
         client.Setup(c => c.InvokeMethodAsync<ListGroupsParameters, ListGroupsResponse>("listGroups", It.IsAny<ListGroupsParameters>(), It.IsAny<JsonTypeInfo<ListGroupsParameters>>(), It.IsAny<JsonTypeInfo<ListGroupsResponse>>(), It.IsAny<CancellationToken>()))
-            .Callback<string, ListGroupsParameters, JsonTypeInfo<ListGroupsParameters>, JsonTypeInfo<ListGroupsResponse>, CancellationToken>((_, p, _, _, _) => captured = p)
+            .Callback<string, ListGroupsParameters, JsonTypeInfo<ListGroupsParameters>, JsonTypeInfo<ListGroupsResponse>, CancellationToken, TimeSpan?>((_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(expected);
 
         var result = await new SignalGroups(client.Object, Mock.Of<ILogger<SignalGroups>>())

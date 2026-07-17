@@ -68,8 +68,8 @@ public class SignalStickersTests
                 It.IsAny<JsonTypeInfo<AddStickerPackParameters>>(),
                 It.IsAny<JsonTypeInfo<JsonElement>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, AddStickerPackParameters, JsonTypeInfo<AddStickerPackParameters>, JsonTypeInfo<JsonElement>, CancellationToken>(
-                (_, p, _, _, _) => captured = p)
+            .Callback<string, AddStickerPackParameters, JsonTypeInfo<AddStickerPackParameters>, JsonTypeInfo<JsonElement>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(default(JsonElement));
 
         var sut = new SignalStickers(client.Object, Mock.Of<ILogger<SignalStickers>>());

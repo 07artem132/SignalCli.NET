@@ -33,12 +33,15 @@ Console.WriteLine($"Скануйте QR з URI: {link.DeviceLinkUri}");
 Task<FinishLinkResponse> FinishLinkAsync(
     string deviceLinkUri,
     string deviceName,
-    CancellationToken cancellationToken = default);
+    CancellationToken cancellationToken = default,
+    TimeSpan? timeout = null);
 ```
 
 Завершує лінкування після того, як primary device відсканував QR. Blocking — чекає response від Signal server'а.
 
 `FinishLinkResponse.Number` — E.164 номер primary акаунту, до якого зв'язалися (PascalCase property — wire-name `"number"`).
+
+Опціональний `timeout` (додано 4.10.2) переважає глобальний `RequestTimeoutSeconds` саме для цього виклику. Фаза `finishLink` interactive — primary мусить вручну відсканувати QR, що легко довше за глобальні 30 с; передай, напр., `TimeSpan.FromSeconds(150)`. `null` → діє клієнтський default. Від'ємне значення → `ArgumentOutOfRangeException`.
 
 **signal-cli RPC:** `FinishLinkCommand.java` @ `bda4e7fc`.
 
@@ -48,11 +51,12 @@ ShowQrCode(start.DeviceLinkUri);
 
 var result = await signalDevices.FinishLinkAsync(
     deviceLinkUri: start.DeviceLinkUri,
-    deviceName: "Worker bot");
+    deviceName: "Worker bot",
+    timeout: TimeSpan.FromSeconds(150)); // час на ручний QR-скан
 Console.WriteLine($"Linked до акаунту: {result.Number}");
 ```
 
-**Винятки:** `ArgumentNullException` якщо `deviceLinkUri` чи `deviceName` — `null`.
+**Винятки:** `ArgumentNullException` якщо `deviceLinkUri` чи `deviceName` — `null`; `ArgumentOutOfRangeException` якщо `timeout` від'ємний; `TimeoutException` якщо відповіді немає за `timeout` (або клієнтським default'ом).
 
 ---
 

@@ -18,8 +18,8 @@ public class SignalMessageTests
         var signalCli = new Mock<ISignalCliClient>();
         signalCli
             .Setup(c => c.InvokeMethodAsync<SendMessageFullParameters, SendMessageResponse>(It.IsAny<string>(), It.IsAny<SendMessageFullParameters>(), It.IsAny<JsonTypeInfo<SendMessageFullParameters>>(), It.IsAny<JsonTypeInfo<SendMessageResponse>>(), It.IsAny<CancellationToken>()))
-            .Callback<string, SendMessageFullParameters, JsonTypeInfo<SendMessageFullParameters>, JsonTypeInfo<SendMessageResponse>, CancellationToken>(
-                (_, p, _, _, _) => passedAttachmentPath = p.Attachments?.FirstOrDefault())
+            .Callback<string, SendMessageFullParameters, JsonTypeInfo<SendMessageFullParameters>, JsonTypeInfo<SendMessageResponse>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => passedAttachmentPath = p.Attachments?.FirstOrDefault())
             .ThrowsAsync(new InvalidOperationException("boom"));
 
         var sut = new SignalMessage(signalCli.Object, Mock.Of<ILogger<SignalMessage>>());

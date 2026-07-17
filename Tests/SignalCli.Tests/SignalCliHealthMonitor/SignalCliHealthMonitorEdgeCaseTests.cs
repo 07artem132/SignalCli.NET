@@ -35,7 +35,7 @@ public class SignalCliHealthMonitorEdgeCaseTests : SignalCliHealthMonitorTestBas
         var pingCount = 0;
         JsonRpcClientMock
             .Setup(c => c.InvokeMethodAsync<VersionParameters, VersionResponse>(It.IsAny<string>(), It.IsAny<VersionParameters>(), It.IsAny<JsonTypeInfo<VersionParameters>>(), It.IsAny<JsonTypeInfo<VersionResponse>>(), It.IsAny<CancellationToken>()))
-            .Returns<string, VersionParameters, JsonTypeInfo<VersionParameters>, JsonTypeInfo<VersionResponse>, CancellationToken>(async (m, p, _, _, ct) =>
+            .Returns<string, VersionParameters, JsonTypeInfo<VersionParameters>, JsonTypeInfo<VersionResponse>, CancellationToken, TimeSpan?>(async (m, p, _, _, ct, _) =>
             {
                 pingCount++;
                 await Task.Delay(TimeSpan.FromSeconds(2), ct); // Використовуємо переданий токен
@@ -80,7 +80,7 @@ public class SignalCliHealthMonitorEdgeCaseTests : SignalCliHealthMonitorTestBas
         var errorThrown = false;
         JsonRpcClientMock
             .Setup(c => c.InvokeMethodAsync<VersionParameters, VersionResponse>(It.IsAny<string>(), It.IsAny<VersionParameters>(), It.IsAny<JsonTypeInfo<VersionParameters>>(), It.IsAny<JsonTypeInfo<VersionResponse>>(), It.IsAny<CancellationToken>()))
-            .Returns<string, VersionParameters, JsonTypeInfo<VersionParameters>, JsonTypeInfo<VersionResponse>, CancellationToken>((m, p, _, _, ct) =>
+            .Returns<string, VersionParameters, JsonTypeInfo<VersionParameters>, JsonTypeInfo<VersionResponse>, CancellationToken, TimeSpan?>((m, p, _, _, ct, _) =>
             {
                 if (errorThrown) return Task.FromResult(new VersionResponse("test-version"));
                 errorThrown = true;

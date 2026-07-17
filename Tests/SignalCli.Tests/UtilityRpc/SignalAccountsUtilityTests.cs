@@ -90,8 +90,8 @@ public class SignalAccountsUtilityTests
                 It.IsAny<JsonTypeInfo<SubmitRateLimitChallengeParameters>>(),
                 It.IsAny<JsonTypeInfo<JsonElement>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, SubmitRateLimitChallengeParameters, JsonTypeInfo<SubmitRateLimitChallengeParameters>, JsonTypeInfo<JsonElement>, CancellationToken>(
-                (_, p, _, _, _) => captured = p)
+            .Callback<string, SubmitRateLimitChallengeParameters, JsonTypeInfo<SubmitRateLimitChallengeParameters>, JsonTypeInfo<JsonElement>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(default(JsonElement));
 
         var sut = NewSut(client);
@@ -127,8 +127,8 @@ public class SignalAccountsUtilityTests
                 It.IsAny<JsonTypeInfo<SendContactsParameters>>(),
                 It.IsAny<JsonTypeInfo<JsonElement>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, SendContactsParameters, JsonTypeInfo<SendContactsParameters>, JsonTypeInfo<JsonElement>, CancellationToken>(
-                (_, p, _, _, _) => captured = p)
+            .Callback<string, SendContactsParameters, JsonTypeInfo<SendContactsParameters>, JsonTypeInfo<JsonElement>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(default(JsonElement));
 
         var sut = NewSut(client);

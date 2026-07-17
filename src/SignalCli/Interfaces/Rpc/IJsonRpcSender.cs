@@ -1,4 +1,5 @@
-﻿using System.Text.Json.Serialization.Metadata;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Text.Json.Serialization.Metadata;
 using SignalCli.Exceptions;
 
 namespace SignalCli.Interfaces.Rpc;
@@ -28,8 +29,15 @@ public interface IJsonRpcSender
     /// Source-gen метадані для десеріалізації <typeparamref name="TResponse"/>.
     /// </param>
     /// <param name="cancellationToken">Токен скасування операції.</param>
+    /// <param name="timeout">
+    /// add-per-call-rpc-timeout: опціональний per-call таймаут, що переважає клієнтський default
+    /// (<c>RequestTimeoutSeconds</c>) лише для цього виклику. <c>null</c> або
+    /// <see cref="TimeSpan.Zero"/> — «не задано»: діє клієнтський default. Додатне значення —
+    /// для довгих interactive-операцій (напр. <c>finishLink</c> з ручним QR-скануванням).
+    /// </param>
     /// <returns>Типізована відповідь від сервера.</returns>
     /// <exception cref="ArgumentNullException">Виникає, якщо <paramref name="parameters"/>, <paramref name="requestTypeInfo"/> або <paramref name="responseTypeInfo"/> дорівнюють null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Виникає, якщо <paramref name="timeout"/> від'ємний.</exception>
     /// <exception cref="InvalidOperationException">Виникає при помилці десеріалізації відповіді.</exception>
     /// <exception cref="JsonRpcException">Виникає, якщо сервер повернув помилку.</exception>
     /// <exception cref="OperationCanceledException">Виникає, якщо операцію скасовано.</exception>
@@ -50,11 +58,16 @@ public interface IJsonRpcSender
     ///     cancellationToken);
     /// </code>
     /// </example>
+    [SuppressMessage("Design", "CA1068:CancellationToken parameters must come last",
+        Justification = "add-per-call-rpc-timeout: опц. timeout свідомо доданий ПІСЛЯ cancellationToken — " +
+            "це API-additive seam. Постановка timeout перед ct зламала б call-site-сумісність: наявні " +
+            "позиційні ct-аргументи зв'язалися б із timeout (TimeSpan?) → compile-error у консумерів.")]
     Task<TResponse> InvokeMethodAsync<TRequest, TResponse>(
         string method,
         TRequest parameters,
         JsonTypeInfo<TRequest> requestTypeInfo,
         JsonTypeInfo<TResponse> responseTypeInfo,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        TimeSpan? timeout = null
     ) where TResponse : notnull;
 }

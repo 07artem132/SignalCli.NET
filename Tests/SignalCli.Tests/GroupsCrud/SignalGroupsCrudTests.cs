@@ -64,8 +64,8 @@ public class SignalGroupsCrudTests
                 It.IsAny<JsonTypeInfo<UpdateGroupParameters>>(),
                 It.IsAny<JsonTypeInfo<UpdateGroupResponse>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, UpdateGroupParameters, JsonTypeInfo<UpdateGroupParameters>, JsonTypeInfo<UpdateGroupResponse>, CancellationToken>(
-                (_, p, _, _, _) => captured = p)
+            .Callback<string, UpdateGroupParameters, JsonTypeInfo<UpdateGroupParameters>, JsonTypeInfo<UpdateGroupResponse>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(new UpdateGroupResponse(TimeStamp: 1L, Results: null, GroupId: null));
 
         var sut = new SignalGroups(client.Object, Mock.Of<ILogger<SignalGroups>>());
@@ -100,8 +100,8 @@ public class SignalGroupsCrudTests
                 It.IsAny<JsonTypeInfo<UpdateGroupParameters>>(),
                 It.IsAny<JsonTypeInfo<UpdateGroupResponse>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, UpdateGroupParameters, JsonTypeInfo<UpdateGroupParameters>, JsonTypeInfo<UpdateGroupResponse>, CancellationToken>(
-                (_, p, _, _, _) => captured = p)
+            .Callback<string, UpdateGroupParameters, JsonTypeInfo<UpdateGroupParameters>, JsonTypeInfo<UpdateGroupResponse>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(new UpdateGroupResponse(TimeStamp: 1L, Results: null, GroupId: "NEW-GROUP-ID"));
 
         var sut = new SignalGroups(client.Object, Mock.Of<ILogger<SignalGroups>>());
@@ -177,8 +177,8 @@ public class SignalGroupsCrudTests
                 It.IsAny<JsonTypeInfo<QuitGroupParameters>>(),
                 It.IsAny<JsonTypeInfo<QuitGroupResponse>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, QuitGroupParameters, JsonTypeInfo<QuitGroupParameters>, JsonTypeInfo<QuitGroupResponse>, CancellationToken>(
-                (_, p, _, _, _) => captured = p)
+            .Callback<string, QuitGroupParameters, JsonTypeInfo<QuitGroupParameters>, JsonTypeInfo<QuitGroupResponse>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(new QuitGroupResponse(1L, []));
 
         var sut = new SignalGroups(client.Object, Mock.Of<ILogger<SignalGroups>>());

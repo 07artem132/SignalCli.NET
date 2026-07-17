@@ -28,8 +28,8 @@ public class SignalContactsTests
                 It.IsAny<JsonTypeInfo<ListContactsParameters>>(),
                 It.IsAny<JsonTypeInfo<ListContactsResponse>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, ListContactsParameters, JsonTypeInfo<ListContactsParameters>, JsonTypeInfo<ListContactsResponse>, CancellationToken>(
-                (_, p, _, _, _) => captured = p)
+            .Callback<string, ListContactsParameters, JsonTypeInfo<ListContactsParameters>, JsonTypeInfo<ListContactsResponse>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(new ListContactsResponse([]));
 
         var sut = new SignalContacts(client.Object, Mock.Of<ILogger<SignalContacts>>());
@@ -63,8 +63,8 @@ public class SignalContactsTests
                 It.IsAny<JsonTypeInfo<ListIdentitiesParameters>>(),
                 It.IsAny<JsonTypeInfo<ListIdentitiesResponse>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, ListIdentitiesParameters, JsonTypeInfo<ListIdentitiesParameters>, JsonTypeInfo<ListIdentitiesResponse>, CancellationToken>(
-                (_, p, _, _, _) => captured = p)
+            .Callback<string, ListIdentitiesParameters, JsonTypeInfo<ListIdentitiesParameters>, JsonTypeInfo<ListIdentitiesResponse>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(new ListIdentitiesResponse([]));
 
         var sut = new SignalContacts(client.Object, Mock.Of<ILogger<SignalContacts>>());
@@ -87,8 +87,8 @@ public class SignalContactsTests
                 It.IsAny<JsonTypeInfo<TrustParameters>>(),
                 It.IsAny<JsonTypeInfo<JsonElement>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, TrustParameters, JsonTypeInfo<TrustParameters>, JsonTypeInfo<JsonElement>, CancellationToken>(
-                (_, p, _, _, _) => captured = p)
+            .Callback<string, TrustParameters, JsonTypeInfo<TrustParameters>, JsonTypeInfo<JsonElement>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(default(JsonElement));
 
         var sut = new SignalContacts(client.Object, Mock.Of<ILogger<SignalContacts>>());
@@ -110,8 +110,8 @@ public class SignalContactsTests
                 It.IsAny<JsonTypeInfo<TrustParameters>>(),
                 It.IsAny<JsonTypeInfo<JsonElement>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, TrustParameters, JsonTypeInfo<TrustParameters>, JsonTypeInfo<JsonElement>, CancellationToken>(
-                (_, p, _, _, _) => captured = p)
+            .Callback<string, TrustParameters, JsonTypeInfo<TrustParameters>, JsonTypeInfo<JsonElement>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(default(JsonElement));
 
         var sut = new SignalContacts(client.Object, Mock.Of<ILogger<SignalContacts>>());
@@ -138,8 +138,8 @@ public class SignalContactsTests
                 It.IsAny<JsonTypeInfo<RemoveContactParameters>>(),
                 It.IsAny<JsonTypeInfo<JsonElement>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, RemoveContactParameters, JsonTypeInfo<RemoveContactParameters>, JsonTypeInfo<JsonElement>, CancellationToken>(
-                (_, p, _, _, _) => captured = p)
+            .Callback<string, RemoveContactParameters, JsonTypeInfo<RemoveContactParameters>, JsonTypeInfo<JsonElement>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(default(JsonElement));
 
         var sut = new SignalContacts(client.Object, Mock.Of<ILogger<SignalContacts>>());
@@ -182,8 +182,8 @@ public class SignalContactsTests
                 It.IsAny<JsonTypeInfo<BlockParameters>>(),
                 It.IsAny<JsonTypeInfo<JsonElement>>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, BlockParameters, JsonTypeInfo<BlockParameters>, JsonTypeInfo<JsonElement>, CancellationToken>(
-                (_, p, _, _, _) => captured = p)
+            .Callback<string, BlockParameters, JsonTypeInfo<BlockParameters>, JsonTypeInfo<JsonElement>, CancellationToken, TimeSpan?>(
+                (_, p, _, _, _, _) => captured = p)
             .ReturnsAsync(default(JsonElement));
 
         var sut = new SignalContacts(client.Object, Mock.Of<ILogger<SignalContacts>>());
