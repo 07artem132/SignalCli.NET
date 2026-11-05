@@ -22,7 +22,7 @@
         <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.14"/>
         <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.14"/>
         <!-- nf005 (audit v2.1): тримаємо у лінії 10.x (Microsoft.Extensions.* test-helpers
-             мають окрему cadence — остання стабільна 10.7.0). MS Learn підтверджує пакет
+             мають окрему cadence від runtime-пакетів 10.0.x; зараз 10.11.0). MS Learn підтверджує пакет
              (https://learn.microsoft.com/dotnet/core/extensions/timeprovider-testing);
              public-surface (Advance, Start, GetUtcNow, SetLocalTimeZone) — без breaking-changes.
              Реліз містить fixes для .NET 10 BackgroundService.ExecuteAsync threading semantics —
