@@ -24,7 +24,13 @@ namespace SignalCli.Tests;
 /// але не factual increment counter'ів. Цей файл закриває цю прогалину для трьох
 /// найважливіших instrument'ів (rpc.duration, events.dropped, process.restarts) через
 /// MeterListener-based capture з тагами та точним count'ом.
-/// </summary>
+/// <remarks>
+/// <c>Meter("SignalCli.NET")</c> — статичний і спільний на процес, тож <see cref="MeterListener"/> бачить
+/// вимірювання з УСІХ паралельних тестів. Колекція <c>HostedService</c> серіалізує цей клас із
+/// <c>SignalCliHostedService*Tests</c>, які теж емулюють crash → <c>process.restarts{trigger=crash}</c>;
+/// без цього точний count (<c>Assert.Equal(1, …)</c>) ловив чужий інкремент (CI: Expected 1, Actual 2).
+/// </remarks>
+[Collection("HostedService")]
 public sealed class ObservabilityCounterTests : IDisposable
 {
     private readonly Lock _captureLock = new();

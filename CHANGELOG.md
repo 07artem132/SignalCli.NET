@@ -3,6 +3,17 @@
 Формат заснований на [Keep a Changelog](https://keepachangelog.com/),
 проєкт дотримується [семантичного версіонування](https://semver.org/lang/uk/).
 
+## [4.10.4] — 2026-11-05
+
+Patch — оновлення NuGet-залежностей. Non-breaking, без змін публічного API та wire-поведінки.
+
+### 🛠 Інше
+
+- **`Microsoft.Extensions.*` 10.0.9 → 10.0.14** (servicing-лінія .NET 10: `Hosting`, `Options`, `Logging.Abstractions`, `Configuration`, `DependencyInjection`, `Diagnostics.HealthChecks` тощо) — у `SignalCli.NET`, `SignalCli.NET.HealthChecks`, прикладі та тестах.
+- **Тестовий тулінг:** `Microsoft.Extensions.TimeProvider.Testing` / `Diagnostics.Testing` 10.7.0 → 10.11.0, `Microsoft.NET.Test.Sdk` 18.7.0 → 18.11.0, `coverlet.collector` 10.0.1 → 10.1.0, `Moq` 4.20.72 → 4.21.0.
+- **Свідомо не оновлено:** `System.Reactive` лишається 6.1.0 (7.0 — мажорний реліз публічної залежності, для patch-релізу зайвий ризик для consumer-ів), `xunit` 2.x / `xunit.runner.visualstudio` 3.x (v3 — міграція, не bump). Runtime-пакети (`SignalCli.Runtime*`, signal-cli 0.14.6, Temurin 25.0.3+9) не змінювались.
+- **Тести:** 515 → 515, 0 warnings (`TreatWarningsAsErrors`). `ObservabilityCounterTests` переведено в колекцію `HostedService`: статичний `Meter` спільний на процес, і паралельні crash-тести hosted-service давали зайвий інкремент `process.restarts{trigger=crash}` (на windows-latest: Expected 1, Actual 2).
+
 ## [4.10.3] — 2026-07-17
 
 Patch — критичний upstream-фікс вхідних повідомлень (signal-cli `0.14.6`) + захист event-диспетчера від порожніх receive-нотіфікацій. Non-breaking.
