@@ -102,6 +102,6 @@
              тягне OptionsBuilder<T>.Bind(IConfigurationSection) extension. -->
         <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.14"/>
         <!-- post-modernize-tuning §6.3 (audit B2): Nito.AsyncEx removed — SemaphoreSlim replaces AsyncLock. -->
-        <PackageReference Include="System.Reactive" Version="6.1.0"/>
+        <PackageReference Include="System.Reactive" Version="7.0.0"/>
     </ItemGroup>
 </Project>

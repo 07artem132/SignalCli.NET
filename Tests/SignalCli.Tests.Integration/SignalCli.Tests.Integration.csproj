@@ -5,14 +5,23 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <IsPackable>false</IsPackable>
+        <!-- xunit v3: тестовий проєкт — самостійний виконуваний файл. -->
+        <OutputType>Exe</OutputType>
+        <!--
+          xUnit1051 (xunit v3): порада передавати TestContext.Current.CancellationToken у кожен виклик
+          з CancellationToken. Тести вже обмежені власними таймаутами й FakeTimeProvider; це косметика
+          скасування, не коректність, а 384 механічні правки не варті шуму в diff.
+        -->
+        <NoWarn>$(NoWarn);xUnit1051</NoWarn>
         <!-- E2E-тести запускають справжній signal-cli; не пакуємось у NuGet. -->
     </PropertyGroup>
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.14"/>
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0"/>
-        <PackageReference Include="xunit" Version="2.9.3"/>
-        <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5"/>
+        <!-- xunit.v3.mtp-off: xunit v3 на VSTest-хості, тож фільтри й збір покриття dotnet test у CI без змін. -->
+        <PackageReference Include="xunit.v3.mtp-off" Version="4.0.2"/>
+        <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1"/>
     </ItemGroup>
 
     <ItemGroup>
