@@ -102,7 +102,8 @@ public sealed class ObservabilityCounterTests : IDisposable
             "someMethod",
             new TestProbeRequest(),
             TestSerializationContext.Default.TestProbeRequest,
-            TestSerializationContext.Default.TestProbeResponse);
+            TestSerializationContext.Default.TestProbeResponse,
+            TestContext.Current.CancellationToken);
 
         // Inject response synchronously through reflection helper (existing pattern from
         // JsonRpcClientTests.CallProcessMessage).
@@ -161,7 +162,7 @@ public sealed class ObservabilityCounterTests : IDisposable
         var service = new SignalEventService(
             Mock.Of<ILogger<SignalEventService>>(), provider.Object, signalCli.Object);
         await service.StartAsync(CancellationToken.None);
-        var subResp = await service.SubscribeAsync("+380999000111");
+        var subResp = await service.SubscribeAsync("+380999000111", TestContext.Current.CancellationToken);
         var subId = subResp.Id;
 
         // Прокидаємо 1100 typing-нотифікацій (channelCapacity = 1024). NO consumer на

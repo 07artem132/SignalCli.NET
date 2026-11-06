@@ -166,7 +166,7 @@ public class EdgeCaseFollowupTests
 
         // Чекаємо доки subscriber отримає всі — fan-out з bounded channel CapacityOne
         // має повністю drain'нути (FullMode=Wait блокує producer'а доки consumer відчитає).
-        var completed = await Task.WhenAny(doneSignal.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var completed = await Task.WhenAny(doneSignal.Task, Task.Delay(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
         Assert.Same(doneSignal.Task, completed);
 
         // Assert — FIFO порядок: timestamps мають бути 0,1,2,...,49.
@@ -218,7 +218,7 @@ public class EdgeCaseFollowupTests
         var leaderTask = service.SubscribeAsync(account, leaderCts.Token);
 
         // Чекаємо ~50ms щоб leader зайняв _pendingSubscribes slot.
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
 
         // Follower підходить другим — він застрягне на той самий TCS-placeholder.
         var followerTask = service.SubscribeAsync(account, CancellationToken.None);

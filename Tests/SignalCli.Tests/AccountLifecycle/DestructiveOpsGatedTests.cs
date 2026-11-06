@@ -37,7 +37,7 @@ public class DestructiveOpsGatedTests
     {
         var sut = NewSut(enabled: false);
         var opts = new UpdateAccountOptions.Builder("+1").WithDeviceName("x").Build();
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.UpdateAccountAsync(opts));
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.UpdateAccountAsync(opts, TestContext.Current.CancellationToken));
         Assert.Contains("EnableDestructiveOperations", ex.Message);
     }
 
@@ -45,14 +45,14 @@ public class DestructiveOpsGatedTests
     public async Task UnregisterAsync_GatedOff_Throws()
     {
         var sut = NewSut(enabled: false);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.UnregisterAsync("+1"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.UnregisterAsync("+1", cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task DeleteLocalAccountDataAsync_GatedOff_Throws()
     {
         var sut = NewSut(enabled: false);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.DeleteLocalAccountDataAsync("+1"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.DeleteLocalAccountDataAsync("+1", cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -60,7 +60,7 @@ public class DestructiveOpsGatedTests
     {
         var sut = NewSut(enabled: false);
         var opts = new StartChangeNumberOptions { Account = "+1", NewNumber = "+2" };
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.StartChangeNumberAsync(opts));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.StartChangeNumberAsync(opts, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public class DestructiveOpsGatedTests
     {
         var sut = NewSut(enabled: false);
         var opts = new FinishChangeNumberOptions { Account = "+1", NewNumber = "+2", VerificationCode = "123456" };
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.FinishChangeNumberAsync(opts));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.FinishChangeNumberAsync(opts, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -76,21 +76,21 @@ public class DestructiveOpsGatedTests
     {
         var sut = NewSut(enabled: false);
         var opts = new UpdateConfigurationOptions { Account = "+1" };
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.UpdateConfigurationAsync(opts));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.UpdateConfigurationAsync(opts, TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task SetPinAsync_GatedOff_Throws()
     {
         var sut = NewSut(enabled: false);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.SetPinAsync("+1", "1234"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.SetPinAsync("+1", "1234", TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task RemovePinAsync_GatedOff_Throws()
     {
         var sut = NewSut(enabled: false);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.RemovePinAsync("+1"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.RemovePinAsync("+1", TestContext.Current.CancellationToken));
     }
 
     // ---- Non-destructive methods (ListAccounts/SyncAccount) НЕ повинні affected ----
@@ -108,7 +108,7 @@ public class DestructiveOpsGatedTests
             .ReturnsAsync(new ListAccountsResponse([]));
 
         var sut = NewSut(enabled: false, client);
-        var resp = await sut.ListAccountsAsync();
+        var resp = await sut.ListAccountsAsync(TestContext.Current.CancellationToken);
 
         Assert.NotNull(resp); // listAccounts — non-destructive, gate не fire'ить.
     }
@@ -131,7 +131,7 @@ public class DestructiveOpsGatedTests
             .ReturnsAsync(default(System.Text.Json.JsonElement));
 
         var sut = NewSut(enabled: true, client);
-        await sut.UnregisterAsync("+1", deleteAccount: true);
+        await sut.UnregisterAsync("+1", deleteAccount: true, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.NotNull(captured);
         Assert.True(captured.DeleteAccount);

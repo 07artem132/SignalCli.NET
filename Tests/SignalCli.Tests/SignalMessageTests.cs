@@ -32,7 +32,7 @@ public class SignalMessageTests
             attachments: [entry]).Build();
 
         // Act
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.SendAttachmentAsync(options));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.SendAttachmentAsync(options, TestContext.Current.CancellationToken));
 
         // Assert: великий обсяг пішов через temp-файл (шлях, а не data-URI)...
         Assert.NotNull(passedAttachmentPath);
@@ -78,7 +78,7 @@ public class SignalMessageTests
         recipientsProp.SetValue(options, CountingRecipients());
 
         // Act
-        await sut.SendTextMessageAsync(options);
+        await sut.SendTextMessageAsync(options, TestContext.Current.CancellationToken);
 
         // Assert: GetEnumerator виклик ОДИН раз (single-pass materialization).
         Assert.Equal(1, enumerationCount);

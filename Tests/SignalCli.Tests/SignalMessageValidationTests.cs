@@ -43,7 +43,7 @@ public class SignalMessageValidationTests
             [new GroupRecipient("g1"), new GroupRecipient("g2")],
             "hi").Build();
 
-        await Assert.ThrowsAsync<ArgumentException>(() => sut.SendTextMessageAsync(options));
+        await Assert.ThrowsAsync<ArgumentException>(() => sut.SendTextMessageAsync(options, TestContext.Current.CancellationToken));
     }
 
     // ---- Small attachment -> inline data URI ----
@@ -55,7 +55,7 @@ public class SignalMessageValidationTests
         var options = new AttachmentMessageOptions.Builder(
             "+1", [new UserRecipient("+2")], [entry]).Build();
 
-        await sut.SendAttachmentAsync(options);
+        await sut.SendAttachmentAsync(options, TestContext.Current.CancellationToken);
 
         var att = captured()!.Attachments!.ToList();
         Assert.Single(att);
@@ -70,7 +70,7 @@ public class SignalMessageValidationTests
         var options = new StickerMessageOptions.Builder(
             "+1", [new UserRecipient("+2")], "pack:3").Build();
 
-        await sut.SendStickerAsync(options);
+        await sut.SendStickerAsync(options, TestContext.Current.CancellationToken);
 
         Assert.Equal("pack:3", captured()!.Sticker);
     }
@@ -91,7 +91,7 @@ public class SignalMessageValidationTests
         {
             var options = new AttachmentMessageOptions.Builder(
                 "+1", [new UserRecipient("+2")], [entry]).Build();
-            await sut.SendAttachmentAsync(options);
+            await sut.SendAttachmentAsync(options, TestContext.Current.CancellationToken);
 
             var att = captured()!.Attachments!.ToList();
             Assert.Single(att);
@@ -116,7 +116,7 @@ public class SignalMessageValidationTests
             [new GroupRecipient("g1"), new UserRecipient("+2")],
             "mixed").Build();
 
-        var ex = await Assert.ThrowsAsync<ArgumentException>(() => sut.SendTextMessageAsync(options));
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => sut.SendTextMessageAsync(options, TestContext.Current.CancellationToken));
         Assert.Equal("recipients", ex.ParamName);
     }
 
@@ -125,21 +125,21 @@ public class SignalMessageValidationTests
     public async Task D12_SendTextMessage_NullOptions_ThrowsArgumentNullException()
     {
         var (sut, _) = CreateSut();
-        await Assert.ThrowsAsync<ArgumentNullException>(() => sut.SendTextMessageAsync(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => sut.SendTextMessageAsync(null!, TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task D12_SendAttachment_NullOptions_ThrowsArgumentNullException()
     {
         var (sut, _) = CreateSut();
-        await Assert.ThrowsAsync<ArgumentNullException>(() => sut.SendAttachmentAsync(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => sut.SendAttachmentAsync(null!, TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task D12_SendSticker_NullOptions_ThrowsArgumentNullException()
     {
         var (sut, _) = CreateSut();
-        await Assert.ThrowsAsync<ArgumentNullException>(() => sut.SendStickerAsync(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => sut.SendStickerAsync(null!, TestContext.Current.CancellationToken));
     }
 
     // D.24 (F24): paramName має бути одне ім'я (а не joined-list).
@@ -153,7 +153,7 @@ public class SignalMessageValidationTests
         // Тут ми перевіряємо принципово, що SignalMessage НЕ кидає на валідних опціях.
         var (sut, _) = CreateSut();
         var options = new TextMessageOptions.Builder("+1", [new UserRecipient("+2")], "ok").Build();
-        var ex = await Record.ExceptionAsync(() => sut.SendTextMessageAsync(options));
+        var ex = await Record.ExceptionAsync(() => sut.SendTextMessageAsync(options, TestContext.Current.CancellationToken));
         Assert.Null(ex);
     }
 
@@ -165,7 +165,7 @@ public class SignalMessageValidationTests
         var options = new TextMessageOptions.Builder("+1", [new UserRecipient("+2")], "*hi*")
             .UseStyle().Build();
 
-        await sut.SendTextMessageAsync(options);
+        await sut.SendTextMessageAsync(options, TestContext.Current.CancellationToken);
 
         var p = captured()!;
         Assert.Equal("hi", p.Message);

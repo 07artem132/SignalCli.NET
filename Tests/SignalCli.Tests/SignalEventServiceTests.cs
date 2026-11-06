@@ -66,7 +66,7 @@ public class SignalEventServiceTests
     {
         var service = CreateService(out var notifications);
         await service.StartAsync(CancellationToken.None);
-        await service.SubscribeAsync(Account);
+        await service.SubscribeAsync(Account, TestContext.Current.CancellationToken);
 
         var textCount = 0;
         var attachmentCount = 0;
@@ -88,7 +88,7 @@ public class SignalEventServiceTests
     {
         var service = CreateService(out var notifications);
         await service.StartAsync(CancellationToken.None);
-        await service.SubscribeAsync(Account);
+        await service.SubscribeAsync(Account, TestContext.Current.CancellationToken);
 
         var textCount = 0;
         var reactionCount = 0;

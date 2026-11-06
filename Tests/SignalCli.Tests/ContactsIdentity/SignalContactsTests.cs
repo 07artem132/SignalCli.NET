@@ -33,7 +33,7 @@ public class SignalContactsTests
             .ReturnsAsync(new ListContactsResponse([]));
 
         var sut = new SignalContacts(client.Object, Mock.Of<ILogger<SignalContacts>>());
-        await sut.ListContactsAsync("+1", recipients: ["+2"], allRecipients: true, blocked: false, name: "Foo", includeInternal: true);
+        await sut.ListContactsAsync("+1", recipients: ["+2"], allRecipients: true, blocked: false, name: "Foo", includeInternal: true, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal("+1", captured!.Account);
         Assert.True(captured.AllRecipients);
@@ -46,7 +46,7 @@ public class SignalContactsTests
     public async Task ListContactsAsync_EmptyAccount_Throws()
     {
         var sut = new SignalContacts(Mock.Of<ISignalCliClient>(), Mock.Of<ILogger<SignalContacts>>());
-        await Assert.ThrowsAsync<ArgumentException>(() => sut.ListContactsAsync(""));
+        await Assert.ThrowsAsync<ArgumentException>(() => sut.ListContactsAsync("", cancellationToken: TestContext.Current.CancellationToken));
     }
 
     // ---- ListIdentitiesAsync ----
@@ -68,7 +68,7 @@ public class SignalContactsTests
             .ReturnsAsync(new ListIdentitiesResponse([]));
 
         var sut = new SignalContacts(client.Object, Mock.Of<ILogger<SignalContacts>>());
-        await sut.ListIdentitiesAsync("+1", recipient: "+2");
+        await sut.ListIdentitiesAsync("+1", recipient: "+2", cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal("+2", captured!.Number);
     }
@@ -92,7 +92,7 @@ public class SignalContactsTests
             .ReturnsAsync(default(JsonElement));
 
         var sut = new SignalContacts(client.Object, Mock.Of<ILogger<SignalContacts>>());
-        await sut.TrustAllKnownKeysAsync("+1", "+2");
+        await sut.TrustAllKnownKeysAsync("+1", "+2", TestContext.Current.CancellationToken);
 
         Assert.True(captured!.TrustAllKnownKeys);
         Assert.Null(captured.VerifiedSafetyNumber);
@@ -115,7 +115,7 @@ public class SignalContactsTests
             .ReturnsAsync(default(JsonElement));
 
         var sut = new SignalContacts(client.Object, Mock.Of<ILogger<SignalContacts>>());
-        await sut.TrustVerifiedAsync("+1", "+2", "12345 67890");
+        await sut.TrustVerifiedAsync("+1", "+2", "12345 67890", TestContext.Current.CancellationToken);
 
         Assert.False(captured!.TrustAllKnownKeys);
         Assert.Equal("12345 67890", captured.VerifiedSafetyNumber);
@@ -143,7 +143,7 @@ public class SignalContactsTests
             .ReturnsAsync(default(JsonElement));
 
         var sut = new SignalContacts(client.Object, Mock.Of<ILogger<SignalContacts>>());
-        await sut.RemoveContactAsync("+1", "+2", mode);
+        await sut.RemoveContactAsync("+1", "+2", mode, TestContext.Current.CancellationToken);
 
         // §F9: XOR гарантовано (рівно одне з {hide=true, forget=true, обидва=false}).
         Assert.Equal(expectedHide, captured!.Hide);
@@ -165,7 +165,7 @@ public class SignalContactsTests
         removeProp.SetValue(options, true);
 
         var sut = new SignalContacts(Mock.Of<ISignalCliClient>(), Mock.Of<ILogger<SignalContacts>>());
-        await Assert.ThrowsAsync<ArgumentException>(() => sut.UpdateProfileAsync(options));
+        await Assert.ThrowsAsync<ArgumentException>(() => sut.UpdateProfileAsync(options, TestContext.Current.CancellationToken));
     }
 
     // ---- Block/Unblock ----
@@ -187,7 +187,7 @@ public class SignalContactsTests
             .ReturnsAsync(default(JsonElement));
 
         var sut = new SignalContacts(client.Object, Mock.Of<ILogger<SignalContacts>>());
-        await sut.BlockAsync("+1"); // обидва nulls — допустимо (upstream приймає empty arrays silently)
+        await sut.BlockAsync("+1", cancellationToken: TestContext.Current.CancellationToken); // обидва nulls — допустимо (upstream приймає empty arrays silently)
 
         Assert.NotNull(captured);
         Assert.Equal("+1", captured.Account);

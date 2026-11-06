@@ -47,7 +47,7 @@ public class SignalMessageInteractiveTests
             .WithNotifySelf()
             .Build();
 
-        var resp = await sut.SendReactionAsync(options);
+        var resp = await sut.SendReactionAsync(options, TestContext.Current.CancellationToken);
 
         Assert.Equal("sendReaction", capturedMethod);
         Assert.NotNull(capturedParams);
@@ -62,7 +62,7 @@ public class SignalMessageInteractiveTests
     public async Task SendReactionAsync_NullOptions_Throws()
     {
         var sut = new SignalMessage(Mock.Of<ISignalCliClient>(), Mock.Of<ILogger<SignalMessage>>());
-        await Assert.ThrowsAsync<ArgumentNullException>(() => sut.SendReactionAsync(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => sut.SendReactionAsync(null!, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -81,7 +81,7 @@ public class SignalMessageInteractiveTests
         var sut = new SignalMessage(client.Object, Mock.Of<ILogger<SignalMessage>>());
         var options = new ReactionOptions.Builder("+1", "👍", 100L).WithRecipients(["+2"]).Build();
 
-        await Assert.ThrowsAsync<UntrustedIdentityException>(() => sut.SendReactionAsync(options));
+        await Assert.ThrowsAsync<UntrustedIdentityException>(() => sut.SendReactionAsync(options, TestContext.Current.CancellationToken));
     }
 
     // ---- SendReceiptAsync ----
@@ -104,7 +104,7 @@ public class SignalMessageInteractiveTests
         var sut = new SignalMessage(client.Object, Mock.Of<ILogger<SignalMessage>>());
         var options = new ReceiptOptions.Builder("+1", "+2", [1L, 2L]).WithType(ReceiptType.Viewed).Build();
 
-        await sut.SendReceiptAsync(options);
+        await sut.SendReceiptAsync(options, TestContext.Current.CancellationToken);
 
         Assert.NotNull(captured);
         Assert.Equal("viewed", captured!.Type); // lowercase per §F7 / argparse choices
@@ -129,7 +129,7 @@ public class SignalMessageInteractiveTests
         var sut = new SignalMessage(client.Object, Mock.Of<ILogger<SignalMessage>>());
         var options = new ReceiptOptions.Builder("+1", "+2", [1L]).Build();
 
-        await sut.SendReceiptAsync(options);
+        await sut.SendReceiptAsync(options, TestContext.Current.CancellationToken);
 
         Assert.Equal("read", captured!.Type);
     }
@@ -154,7 +154,7 @@ public class SignalMessageInteractiveTests
         var sut = new SignalMessage(client.Object, Mock.Of<ILogger<SignalMessage>>());
         var options = new TypingOptions.Builder("+1").WithRecipients(["+2"]).Build();
 
-        await sut.SendTypingAsync(options);
+        await sut.SendTypingAsync(options, TestContext.Current.CancellationToken);
 
         Assert.False(captured!.Stop); // default START → Stop=false
     }
@@ -177,7 +177,7 @@ public class SignalMessageInteractiveTests
         var sut = new SignalMessage(client.Object, Mock.Of<ILogger<SignalMessage>>());
         var options = new TypingOptions.Builder("+1").WithRecipients(["+2"]).AsStop().Build();
 
-        await sut.SendTypingAsync(options);
+        await sut.SendTypingAsync(options, TestContext.Current.CancellationToken);
 
         Assert.True(captured!.Stop);
     }
@@ -202,7 +202,7 @@ public class SignalMessageInteractiveTests
         var sut = new SignalMessage(client.Object, Mock.Of<ILogger<SignalMessage>>());
         var options = new RemoteDeleteOptions.Builder("+1", 555L).WithRecipients(["+2"]).Build();
 
-        await sut.SendRemoteDeleteAsync(options);
+        await sut.SendRemoteDeleteAsync(options, TestContext.Current.CancellationToken);
 
         Assert.Equal(555L, captured!.TargetTimestamp); // long, не list
     }
@@ -223,6 +223,6 @@ public class SignalMessageInteractiveTests
         var sut = new SignalMessage(client.Object, Mock.Of<ILogger<SignalMessage>>());
         var options = new ReactionOptions.Builder("+1", "👍", 100L).WithRecipients(["+2"]).Build();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.SendReactionAsync(options));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.SendReactionAsync(options, TestContext.Current.CancellationToken));
     }
 }

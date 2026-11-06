@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ windows-latest, macos-14, ubuntu-latest ]
+        os: [ windows-latest, macos-15, ubuntu-latest ]   # macos-14 образ GitHub більше не видає ("configuration not supported")
     runs-on: ${{ matrix.os }}
     env:
       Integration_Project: Tests/SignalCli.Tests.Integration/SignalCli.Tests.Integration.csproj

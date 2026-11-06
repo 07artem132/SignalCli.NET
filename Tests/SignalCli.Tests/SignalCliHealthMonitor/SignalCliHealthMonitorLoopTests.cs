@@ -37,7 +37,7 @@ public class SignalCliHealthMonitorLoopTests : SignalCliHealthMonitorTestBase
         var monitor = CreateMonitor(service);
 
         await monitor.StartAsync(CancellationToken.None);
-        await secondPairSeen.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await secondPairSeen.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         await monitor.StopAsync(CancellationToken.None);
         await service.StopAsync(CancellationToken.None);
 
@@ -64,7 +64,7 @@ public class SignalCliHealthMonitorLoopTests : SignalCliHealthMonitorTestBase
 
         // Act
         await monitor.StartAsync(CancellationToken.None);
-        await Task.Delay(1000);
+        await Task.Delay(1000, TestContext.Current.CancellationToken);
         await monitor.StopAsync(CancellationToken.None);
 
         // Assert
@@ -110,7 +110,7 @@ public class SignalCliHealthMonitorLoopTests : SignalCliHealthMonitorTestBase
         await monitor.StartAsync(CancellationToken.None);
 
         // Чекаємо подію (а не довільний sleep) із розумним fallback-таймаутом.
-        await pingObserved.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await pingObserved.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         // Зупиняємо монітор ВІДРАЗУ, поки лічильник не накопичує тисячі ітерацій (OOM-ризик).
         await monitor.StopAsync(CancellationToken.None);
@@ -152,7 +152,7 @@ public class SignalCliHealthMonitorLoopTests : SignalCliHealthMonitorTestBase
         var monitor = CreateMonitor(service);
 
         await monitor.StartAsync(CancellationToken.None);
-        await debugSeen.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await debugSeen.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         await monitor.StopAsync(CancellationToken.None);
 
         VerifyDebugLog("PingCliAsync: немає поточного StreamPair => CLI не готовий", Times.AtLeastOnce());
@@ -196,9 +196,9 @@ public class SignalCliHealthMonitorLoopTests : SignalCliHealthMonitorTestBase
             // годиннику; інакше Advance може спрацювати в порожнечу.
             for (var i = 0; i < 3; i++)
             {
-                await Task.Delay(50);
+                await Task.Delay(50, TestContext.Current.CancellationToken);
                 fakeTime.Advance(TimeSpan.FromSeconds(1));
-                Assert.True(await pingFired.WaitAsync(TimeSpan.FromSeconds(5)),
+                Assert.True(await pingFired.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken),
                     $"Очікувався пінг #{i + 1} після Advance(1c) у віртуальному часі");
             }
 

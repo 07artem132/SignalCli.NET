@@ -64,7 +64,7 @@ public class SignalCliHealthCheckTests
         var (check, state, _) = Build();
         state.UpdateState(ProcessState.Running);
 
-        var result = await check.CheckHealthAsync(ContextWith());
+        var result = await check.CheckHealthAsync(ContextWith(), TestContext.Current.CancellationToken);
 
         Assert.Equal(HealthStatus.Degraded, result.Status);
         Assert.Contains("no successful ping", result.Description);
@@ -79,7 +79,7 @@ public class SignalCliHealthCheckTests
         var (check, state, _) = Build();
         state.UpdateState(ProcessState.Failed, error: new InvalidOperationException("test"));
 
-        var result = await check.CheckHealthAsync(ContextWith());
+        var result = await check.CheckHealthAsync(ContextWith(), TestContext.Current.CancellationToken);
 
         Assert.Equal(HealthStatus.Unhealthy, result.Status);
         Assert.Equal("Failed", result.Data["state"]);
@@ -91,7 +91,7 @@ public class SignalCliHealthCheckTests
         var (check, state, _) = Build();
         state.UpdateState(ProcessState.Stopped);
 
-        var result = await check.CheckHealthAsync(ContextWith(HealthStatus.Degraded));
+        var result = await check.CheckHealthAsync(ContextWith(HealthStatus.Degraded), TestContext.Current.CancellationToken);
 
         // Consumer choose Degraded as failure → Stopped reports Degraded, not Unhealthy.
         Assert.Equal(HealthStatus.Degraded, result.Status);
@@ -103,7 +103,7 @@ public class SignalCliHealthCheckTests
         var (check, _, _) = Build();
         // initial state is NotStarted
 
-        var result = await check.CheckHealthAsync(ContextWith());
+        var result = await check.CheckHealthAsync(ContextWith(), TestContext.Current.CancellationToken);
 
         Assert.Equal(HealthStatus.Degraded, result.Status);
         Assert.Equal("NotStarted", result.Data["state"]);
@@ -115,7 +115,7 @@ public class SignalCliHealthCheckTests
         var (check, state, _) = Build();
         state.UpdateState(ProcessState.Running);
 
-        var result = await check.CheckHealthAsync(ContextWith());
+        var result = await check.CheckHealthAsync(ContextWith(), TestContext.Current.CancellationToken);
 
         // post-modernize-tuning §11.C.2 / §11.D.1: privacy invariant — data-bag має
         // лише process state + ping outcome + timestamp. Перевіряємо явно, що відомі

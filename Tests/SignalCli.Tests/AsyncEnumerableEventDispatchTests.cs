@@ -57,7 +57,7 @@ public class AsyncEnumerableEventDispatchTests
         // Arrange
         using var service = Create(out var notifications);
         await service.StartAsync(CancellationToken.None);
-        await service.SubscribeAsync(Account);
+        await service.SubscribeAsync(Account, TestContext.Current.CancellationToken);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
@@ -83,7 +83,7 @@ public class AsyncEnumerableEventDispatchTests
         // Arrange
         var service = Create(out var notifications);
         await service.StartAsync(CancellationToken.None);
-        await service.SubscribeAsync(Account);
+        await service.SubscribeAsync(Account, TestContext.Current.CancellationToken);
 
         notifications.OnNext(Notify(EnvelopeWithText("first")));
 
@@ -99,10 +99,10 @@ public class AsyncEnumerableEventDispatchTests
         });
 
         // Дамо тасці прочитати перший елемент.
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
         service.Dispose();
 
-        var result = await readingTask.WaitAsync(TimeSpan.FromSeconds(5));
+        var result = await readingTask.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         // Assert: цикл завершився нормально, без виключень; перший елемент потрапив.
         Assert.Contains("first", result);
@@ -114,7 +114,7 @@ public class AsyncEnumerableEventDispatchTests
         // Arrange
         using var service = Create(out var notifications);
         await service.StartAsync(CancellationToken.None);
-        await service.SubscribeAsync(Account);
+        await service.SubscribeAsync(Account, TestContext.Current.CancellationToken);
 
         var rxCount = 0;
         using var sub = service.TextMessages.Subscribe(_ => Interlocked.Increment(ref rxCount));

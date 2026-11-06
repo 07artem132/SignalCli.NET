@@ -34,7 +34,7 @@ public class SignalResourcesTests
         var client = ClientReturningData<GetAttachmentParameters>(ValidBase64);
         var sut = new SignalResources(client.Object, Mock.Of<ILogger<SignalResources>>());
 
-        var bytes = await sut.GetAttachmentAsync("+1", "attachment-id");
+        var bytes = await sut.GetAttachmentAsync("+1", "attachment-id", TestContext.Current.CancellationToken);
 
         Assert.Equal("Hello", System.Text.Encoding.UTF8.GetString(bytes));
     }
@@ -46,7 +46,7 @@ public class SignalResourcesTests
         var client = ClientReturningData<GetAttachmentParameters>("NOT VALID BASE64 @@@");
         var sut = new SignalResources(client.Object, Mock.Of<ILogger<SignalResources>>());
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.GetAttachmentAsync("+1", "id"));
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.GetAttachmentAsync("+1", "id", TestContext.Current.CancellationToken));
         Assert.Contains("invalid base64", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("getAttachment", ex.Message);
     }
@@ -55,7 +55,7 @@ public class SignalResourcesTests
     public async Task GetAttachmentAsync_EmptyId_Throws()
     {
         var sut = new SignalResources(Mock.Of<ISignalCliClient>(), Mock.Of<ILogger<SignalResources>>());
-        await Assert.ThrowsAsync<ArgumentException>(() => sut.GetAttachmentAsync("+1", ""));
+        await Assert.ThrowsAsync<ArgumentException>(() => sut.GetAttachmentAsync("+1", "", TestContext.Current.CancellationToken));
     }
 
     // ---- GetAvatarAsync ----
@@ -79,7 +79,7 @@ public class SignalResourcesTests
         var sut = new SignalResources(client.Object, Mock.Of<ILogger<SignalResources>>());
         var opts = new GetAvatarOptions.Builder("+1").WithContact("+2").Build();
 
-        var bytes = await sut.GetAvatarAsync(opts);
+        var bytes = await sut.GetAvatarAsync(opts, TestContext.Current.CancellationToken);
 
         Assert.Equal("+2", captured!.Contact);
         Assert.Null(captured.Profile);
@@ -97,7 +97,7 @@ public class SignalResourcesTests
         profileProp.SetValue(opts, "+3");
 
         var sut = new SignalResources(Mock.Of<ISignalCliClient>(), Mock.Of<ILogger<SignalResources>>());
-        await Assert.ThrowsAsync<ArgumentException>(() => sut.GetAvatarAsync(opts));
+        await Assert.ThrowsAsync<ArgumentException>(() => sut.GetAvatarAsync(opts, TestContext.Current.CancellationToken));
     }
 
     // ---- GetStickerAsync ----
@@ -108,7 +108,7 @@ public class SignalResourcesTests
         var client = ClientReturningData<GetStickerParameters>(ValidBase64);
         var sut = new SignalResources(client.Object, Mock.Of<ILogger<SignalResources>>());
 
-        var bytes = await sut.GetStickerAsync("+1", "abcdef0123456789abcdef0123456789", stickerId: 0);
+        var bytes = await sut.GetStickerAsync("+1", "abcdef0123456789abcdef0123456789", stickerId: 0, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal("Hello", System.Text.Encoding.UTF8.GetString(bytes));
     }
@@ -119,7 +119,7 @@ public class SignalResourcesTests
         // Client-side hex-validation запобігає upstream IOException → -32603.
         var sut = new SignalResources(Mock.Of<ISignalCliClient>(), Mock.Of<ILogger<SignalResources>>());
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            sut.GetStickerAsync("+1", "NOT-HEX-32-CHARS", stickerId: 0));
+            sut.GetStickerAsync("+1", "NOT-HEX-32-CHARS", stickerId: 0, cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -127,7 +127,7 @@ public class SignalResourcesTests
     {
         var sut = new SignalResources(Mock.Of<ISignalCliClient>(), Mock.Of<ILogger<SignalResources>>());
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            sut.GetStickerAsync("+1", "abc", stickerId: 0)); // < 32 chars
+            sut.GetStickerAsync("+1", "abc", stickerId: 0, cancellationToken: TestContext.Current.CancellationToken)); // < 32 chars
     }
 
     [Fact]
@@ -136,6 +136,6 @@ public class SignalResourcesTests
         // Lowercase-hex enforce'ується щоб match upstream Hex.toByteArray expectations.
         var sut = new SignalResources(Mock.Of<ISignalCliClient>(), Mock.Of<ILogger<SignalResources>>());
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            sut.GetStickerAsync("+1", "ABCDEF0123456789ABCDEF0123456789", stickerId: 0));
+            sut.GetStickerAsync("+1", "ABCDEF0123456789ABCDEF0123456789", stickerId: 0, cancellationToken: TestContext.Current.CancellationToken));
     }
 }

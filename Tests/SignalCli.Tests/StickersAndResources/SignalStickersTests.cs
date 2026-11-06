@@ -24,7 +24,7 @@ public class SignalStickersTests
             .ReturnsAsync(new UploadStickerPackResponse("https://signal.art/#abc"));
 
         var sut = new SignalStickers(client.Object, Mock.Of<ILogger<SignalStickers>>());
-        var resp = await sut.UploadStickerPackAsync("+1", "/tmp/pack.zip");
+        var resp = await sut.UploadStickerPackAsync("+1", "/tmp/pack.zip", TestContext.Current.CancellationToken);
 
         Assert.Contains("signal.art", resp.Url);
     }
@@ -43,7 +43,7 @@ public class SignalStickersTests
             .ReturnsAsync(new ListStickerPacksResponse([]));
 
         var sut = new SignalStickers(client.Object, Mock.Of<ILogger<SignalStickers>>());
-        var resp = await sut.ListStickerPacksAsync("+1");
+        var resp = await sut.ListStickerPacksAsync("+1", TestContext.Current.CancellationToken);
 
         Assert.NotNull(resp);
         Assert.Empty(resp);
@@ -53,7 +53,7 @@ public class SignalStickersTests
     public async Task AddStickerPackAsync_EmptyUris_Throws()
     {
         var sut = new SignalStickers(Mock.Of<ISignalCliClient>(), Mock.Of<ILogger<SignalStickers>>());
-        await Assert.ThrowsAsync<ArgumentException>(() => sut.AddStickerPackAsync("+1", []));
+        await Assert.ThrowsAsync<ArgumentException>(() => sut.AddStickerPackAsync("+1", [], TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public class SignalStickersTests
             .ReturnsAsync(default(JsonElement));
 
         var sut = new SignalStickers(client.Object, Mock.Of<ILogger<SignalStickers>>());
-        await sut.AddStickerPackAsync("+1", ["https://signal.art/#a", "https://signal.art/#b"]);
+        await sut.AddStickerPackAsync("+1", ["https://signal.art/#a", "https://signal.art/#b"], TestContext.Current.CancellationToken);
 
         Assert.Equal(2, captured!.Uri.Count());
     }

@@ -30,7 +30,7 @@ public class SignalGroupsCrudTests
             .ReturnsAsync(new JoinGroupResponse(42L, null, "Z3JvdXBJZA==", OnlyRequested: true));
 
         var sut = new SignalGroups(client.Object, Mock.Of<ILogger<SignalGroups>>());
-        var resp = await sut.JoinGroupAsync("+1", "https://signal.group/#abc");
+        var resp = await sut.JoinGroupAsync("+1", "https://signal.group/#abc", TestContext.Current.CancellationToken);
 
         Assert.Equal("Z3JvdXBJZA==", resp.GroupId);
         Assert.True(resp.OnlyRequested);
@@ -40,14 +40,14 @@ public class SignalGroupsCrudTests
     public async Task JoinGroupAsync_EmptyAccount_Throws()
     {
         var sut = new SignalGroups(Mock.Of<ISignalCliClient>(), Mock.Of<ILogger<SignalGroups>>());
-        await Assert.ThrowsAsync<ArgumentException>(() => sut.JoinGroupAsync("", "uri"));
+        await Assert.ThrowsAsync<ArgumentException>(() => sut.JoinGroupAsync("", "uri", TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task JoinGroupAsync_EmptyUri_Throws()
     {
         var sut = new SignalGroups(Mock.Of<ISignalCliClient>(), Mock.Of<ILogger<SignalGroups>>());
-        await Assert.ThrowsAsync<ArgumentException>(() => sut.JoinGroupAsync("+1", ""));
+        await Assert.ThrowsAsync<ArgumentException>(() => sut.JoinGroupAsync("+1", "", TestContext.Current.CancellationToken));
     }
 
     // ---- UpdateGroupAsync ----
@@ -76,7 +76,7 @@ public class SignalGroupsCrudTests
             .WithPermissionAddMember(GroupPermission.OnlyAdmins)
             .Build();
 
-        var resp = await sut.UpdateGroupAsync(opts);
+        var resp = await sut.UpdateGroupAsync(opts, TestContext.Current.CancellationToken);
 
         Assert.Equal("g==", captured!.GroupId);
         Assert.Equal("new name", captured.Name);
@@ -107,7 +107,7 @@ public class SignalGroupsCrudTests
         var sut = new SignalGroups(client.Object, Mock.Of<ILogger<SignalGroups>>());
         var opts = new UpdateGroupOptions.Builder("+1").WithName("brand new group").Build();
 
-        var resp = await sut.UpdateGroupAsync(opts);
+        var resp = await sut.UpdateGroupAsync(opts, TestContext.Current.CancellationToken);
 
         Assert.Null(captured!.GroupId); // create-mode: groupId не передано
         Assert.Equal("brand new group", captured.Name);
@@ -118,7 +118,7 @@ public class SignalGroupsCrudTests
     public async Task UpdateGroupAsync_NullOptions_Throws()
     {
         var sut = new SignalGroups(Mock.Of<ISignalCliClient>(), Mock.Of<ILogger<SignalGroups>>());
-        await Assert.ThrowsAsync<ArgumentNullException>(() => sut.UpdateGroupAsync(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => sut.UpdateGroupAsync(null!, TestContext.Current.CancellationToken));
     }
 
     // ---- QuitGroupAsync ----
@@ -137,7 +137,7 @@ public class SignalGroupsCrudTests
             .ReturnsAsync(new QuitGroupResponse(TimeStamp: 42L, Results: []));
 
         var sut = new SignalGroups(client.Object, Mock.Of<ILogger<SignalGroups>>());
-        var resp = await sut.QuitGroupAsync("+1", "g==");
+        var resp = await sut.QuitGroupAsync("+1", "g==", cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(42L, resp.TimeStamp);
         Assert.False(resp.WasAlreadyNotMember);
@@ -159,7 +159,7 @@ public class SignalGroupsCrudTests
             .ReturnsAsync(new QuitGroupResponse(TimeStamp: null, Results: null));
 
         var sut = new SignalGroups(client.Object, Mock.Of<ILogger<SignalGroups>>());
-        var resp = await sut.QuitGroupAsync("+1", "g==");
+        var resp = await sut.QuitGroupAsync("+1", "g==", cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(resp.WasAlreadyNotMember);
         Assert.Null(resp.TimeStamp);
@@ -182,7 +182,7 @@ public class SignalGroupsCrudTests
             .ReturnsAsync(new QuitGroupResponse(1L, []));
 
         var sut = new SignalGroups(client.Object, Mock.Of<ILogger<SignalGroups>>());
-        await sut.QuitGroupAsync("+1", "g==", deleteLocally: true, admins: ["+2", "+3"]);
+        await sut.QuitGroupAsync("+1", "g==", deleteLocally: true, admins: ["+2", "+3"], cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(captured!.Delete);
         Assert.Equal(new[] { "+2", "+3" }, captured.Admins);
@@ -192,6 +192,6 @@ public class SignalGroupsCrudTests
     public async Task QuitGroupAsync_EmptyGroupId_Throws()
     {
         var sut = new SignalGroups(Mock.Of<ISignalCliClient>(), Mock.Of<ILogger<SignalGroups>>());
-        await Assert.ThrowsAsync<ArgumentException>(() => sut.QuitGroupAsync("+1", ""));
+        await Assert.ThrowsAsync<ArgumentException>(() => sut.QuitGroupAsync("+1", "", cancellationToken: TestContext.Current.CancellationToken));
     }
 }

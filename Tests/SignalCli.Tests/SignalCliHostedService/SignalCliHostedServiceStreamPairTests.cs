@@ -82,7 +82,7 @@ public class SignalCliHostedServiceStreamPairTests : SignalCliHostedServiceTests
     {
         // Arrange
         var service = CreateService();
-        var readyTask = service.WaitForReadyAsync();
+        var readyTask = service.WaitForReadyAsync(TestContext.Current.CancellationToken);
 
         // Act
         await service.StartAsync(CancellationToken.None);
@@ -102,7 +102,7 @@ public class SignalCliHostedServiceStreamPairTests : SignalCliHostedServiceTests
         await service.StartAsync(CancellationToken.None);
 
         // Act
-        var readyTask = service.WaitForReadyAsync();
+        var readyTask = service.WaitForReadyAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(readyTask.IsCompleted);
@@ -120,7 +120,7 @@ public class SignalCliHostedServiceStreamPairTests : SignalCliHostedServiceTests
             .Setup(r => r.StartProcessWithHandle(It.IsAny<ProcessConfig>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(expectedException);
 
-        var readyTask = service.WaitForReadyAsync();
+        var readyTask = service.WaitForReadyAsync(TestContext.Current.CancellationToken);
 
         // Act
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.StartAsync(CancellationToken.None));
@@ -149,9 +149,9 @@ public class SignalCliHostedServiceStreamPairTests : SignalCliHostedServiceTests
     {
         // Arrange
         var service = CreateService();
-        var task1 = service.WaitForReadyAsync();
-        var task2 = service.WaitForReadyAsync();
-        var task3 = service.WaitForReadyAsync();
+        var task1 = service.WaitForReadyAsync(TestContext.Current.CancellationToken);
+        var task2 = service.WaitForReadyAsync(TestContext.Current.CancellationToken);
+        var task3 = service.WaitForReadyAsync(TestContext.Current.CancellationToken);
 
         // Act
         await service.StartAsync(CancellationToken.None);
@@ -204,7 +204,7 @@ public class SignalCliHostedServiceStreamPairTests : SignalCliHostedServiceTests
         processMock.Setup(p => p.HasExited).Returns(true);
         processMock.Raise(p => p.Exited += null, EventArgs.Empty);
 
-        await Task.Delay(100); // Даємо час на обробку події
+        await Task.Delay(100, TestContext.Current.CancellationToken); // Даємо час на обробку події
 
         // Assert
         Assert.True(streamPairs.Count >= 4);

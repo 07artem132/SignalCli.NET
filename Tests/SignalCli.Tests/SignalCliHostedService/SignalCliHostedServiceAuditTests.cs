@@ -33,12 +33,12 @@ public class SignalCliHostedServiceAuditTests : SignalCliHostedServiceTestsBase
         // Намагаємось викликати OnProcessExited та StopAsync «майже одночасно».
         // OnProcessExitedAsync завжди серіалізується через _operationLock, тож хоч хто з них
         // зайде в лок другим — побачить _stopping=true або state=Stopped і вийде, не рестартуючи.
-        var exitTask = Task.Run(() => processMock.Raise(p => p.Exited += null, EventArgs.Empty));
+        var exitTask = Task.Run(() => processMock.Raise(p => p.Exited += null, EventArgs.Empty), TestContext.Current.CancellationToken);
         var stopTask = service.StopAsync(CancellationToken.None);
         await Task.WhenAll(exitTask, stopTask);
 
         // Чекаємо ще трохи на можливі залишкові посттригери.
-        await Task.Delay(200);
+        await Task.Delay(200, TestContext.Current.CancellationToken);
 
         // Жодного нового запуску процесу — це і є відсутність restart-after-stop.
         Assert.Equal(initial, ProcessStartCallCount);
@@ -62,7 +62,7 @@ public class SignalCliHostedServiceAuditTests : SignalCliHostedServiceTestsBase
         Mock.Get(first!).Raise(p => p.Exited += null, EventArgs.Empty);
 
         // Чекаємо стабілізації нового процесу понад RestartWindow — лічильник скинеться.
-        await Task.Delay(TimeSpan.FromSeconds(Options.RestartWindowSeconds + 1));
+        await Task.Delay(TimeSpan.FromSeconds(Options.RestartWindowSeconds + 1), TestContext.Current.CancellationToken);
 
         // Другий крах — за старою (лінійною) логікою цей рестарт уже був би заборонений
         // (бюджет вичерпано). Із віконним скиданням рестарт має відбутися.
@@ -72,7 +72,7 @@ public class SignalCliHostedServiceAuditTests : SignalCliHostedServiceTestsBase
         Mock.Get(second!).Raise(p => p.Exited += null, EventArgs.Empty);
 
         // Даємо час на async-рестарт всередині OnProcessExitedAsync.
-        await Task.Delay(500);
+        await Task.Delay(500, TestContext.Current.CancellationToken);
 
         Assert.True(ProcessStartCallCount > afterFirstRestartCount,
             $"Очікувався додатковий рестарт після скидання вікна; стартів: {ProcessStartCallCount}");

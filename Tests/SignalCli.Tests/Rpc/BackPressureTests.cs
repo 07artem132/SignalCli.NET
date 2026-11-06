@@ -104,7 +104,7 @@ public sealed class BackPressureTests
         }
 
         // Assert: всі N доставлено. Real-time fallback — BurstSize * SubscriberDelayMs * 3.
-        await allDone.Task.WaitAsync(TimeSpan.FromMilliseconds(BurstSize * SubscriberDelayMs * 4));
+        await allDone.Task.WaitAsync(TimeSpan.FromMilliseconds(BurstSize * SubscriberDelayMs * 4), TestContext.Current.CancellationToken);
 
         List<int> snapshot;
         lock (receivedOrder) { snapshot = [.. receivedOrder]; }

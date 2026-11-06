@@ -147,7 +147,8 @@ public class JsonRpcErrorTests
             "ambiguous",
             new TestProbeRequest(),
             TestSerializationContext.Default.TestProbeRequest,
-            TestSerializationContext.Default.TestProbeResponse);
+            TestSerializationContext.Default.TestProbeResponse,
+            TestContext.Current.CancellationToken);
 
         // Patологічна dual-field відповідь. Реальний signal-cli ніколи такого не ємітить
         // (Jackson сам блокує дублікати у serialize-side), але як defense-in-depth ми

@@ -92,7 +92,7 @@ public class SignalCliHostedServiceStateTests : SignalCliHostedServiceTestsBase
         processMock.Setup(p => p.HasExited).Returns(true);
         processMock.Raise(p => p.Exited += null, EventArgs.Empty);
 
-        await Task.Delay(100); // Даємо час на обробку події та автоперезапуск
+        await Task.Delay(100, TestContext.Current.CancellationToken); // Даємо час на обробку події та автоперезапуск
 
         // Assert
         // Перевіряємо, що пройшли через Failed перед автоперезапуском
@@ -221,7 +221,7 @@ public class SignalCliHostedServiceStateTests : SignalCliHostedServiceTestsBase
         await processStartedTcs.Task;
 
         // Ожидаем завершения всех перезапусков с таймаутом
-        await Task.WhenAny(allRestartsFinishedTcs.Task, Task.Delay(5000));
+        await Task.WhenAny(allRestartsFinishedTcs.Task, Task.Delay(5000, TestContext.Current.CancellationToken));
 
         // Assert
         // +1 до maxAttempts, бо перший старт не зараховується як спроба

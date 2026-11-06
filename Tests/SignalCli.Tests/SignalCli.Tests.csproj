@@ -5,6 +5,8 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <IsPackable>false</IsPackable>
+        <!-- xunit v3: тестовий проєкт — самостійний виконуваний файл. -->
+        <OutputType>Exe</OutputType>
         <!-- nf004 (audit v2.1): main lib давно warning-clean із TreatWarningsAsErrors=true;
              тест-проєкт жив без цього й тихо акумулював 3 xUnit1031 warnings у
              SyncDisposeDuringCleanupTests.cs. Тепер опто-в — будь-який новий аналізатор-warning
@@ -32,8 +34,9 @@
         <PackageReference Include="Microsoft.Extensions.Diagnostics.Testing" Version="10.11.0"/>
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0"/>
         <PackageReference Include="Moq" Version="4.21.0" />
-        <PackageReference Include="xunit" Version="2.9.3"/>
-        <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5"/>
+        <!-- xunit.v3.mtp-off: xunit v3 на VSTest-хості, тож фільтри й збір покриття dotnet test у CI без змін. -->
+        <PackageReference Include="xunit.v3.mtp-off" Version="4.0.2"/>
+        <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1"/>
     </ItemGroup>
 
     <ItemGroup>

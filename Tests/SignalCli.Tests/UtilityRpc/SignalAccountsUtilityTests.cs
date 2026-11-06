@@ -46,7 +46,7 @@ public class SignalAccountsUtilityTests
             ]));
 
         var sut = NewSut(client);
-        var resp = await sut.GetUserStatusAsync("+1", recipients: ["+1"]);
+        var resp = await sut.GetUserStatusAsync("+1", recipients: ["+1"], cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Single(resp);
         Assert.True(resp[0].IsRegistered);
@@ -67,7 +67,7 @@ public class SignalAccountsUtilityTests
 
         var sut = NewSut(client);
         // EnableDestructiveOperations НЕ виставлено — і це OK для GetUserStatus.
-        var resp = await sut.GetUserStatusAsync("+1");
+        var resp = await sut.GetUserStatusAsync("+1", cancellationToken: TestContext.Current.CancellationToken);
         Assert.Empty(resp);
     }
 
@@ -75,7 +75,7 @@ public class SignalAccountsUtilityTests
     public async Task GetUserStatusAsync_EmptyAccount_Throws()
     {
         var sut = NewSut();
-        await Assert.ThrowsAsync<ArgumentException>(() => sut.GetUserStatusAsync(""));
+        await Assert.ThrowsAsync<ArgumentException>(() => sut.GetUserStatusAsync("", cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public class SignalAccountsUtilityTests
             .ReturnsAsync(default(JsonElement));
 
         var sut = NewSut(client);
-        await sut.SubmitRateLimitChallengeAsync("+1", "challenge", "captcha");
+        await sut.SubmitRateLimitChallengeAsync("+1", "challenge", "captcha", TestContext.Current.CancellationToken);
 
         Assert.Equal("challenge", captured!.Challenge);
         Assert.Equal("captcha", captured.Captcha);
@@ -105,14 +105,14 @@ public class SignalAccountsUtilityTests
     public async Task SubmitRateLimitChallengeAsync_EmptyChallenge_Throws()
     {
         var sut = NewSut();
-        await Assert.ThrowsAsync<ArgumentException>(() => sut.SubmitRateLimitChallengeAsync("+1", "", "captcha"));
+        await Assert.ThrowsAsync<ArgumentException>(() => sut.SubmitRateLimitChallengeAsync("+1", "", "captcha", TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task SubmitRateLimitChallengeAsync_EmptyCaptcha_Throws()
     {
         var sut = NewSut();
-        await Assert.ThrowsAsync<ArgumentException>(() => sut.SubmitRateLimitChallengeAsync("+1", "challenge", ""));
+        await Assert.ThrowsAsync<ArgumentException>(() => sut.SubmitRateLimitChallengeAsync("+1", "challenge", "", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -132,7 +132,7 @@ public class SignalAccountsUtilityTests
             .ReturnsAsync(default(JsonElement));
 
         var sut = NewSut(client);
-        await sut.SendContactsAsync("+1");
+        await sut.SendContactsAsync("+1", TestContext.Current.CancellationToken);
 
         Assert.Equal("+1", captured!.Account);
     }

@@ -61,18 +61,18 @@ public sealed class StopProcessTimeoutVirtualizationTests : SignalCliHostedServi
         Assert.Equal(ProcessState.Running, StateManager.CurrentState);
 
         // Act: StopAsync в Task.Run — бо це blocking-call (WaitForExitAsync чекає token-cancel).
-        var stopTask = Task.Run(() => service.StopAsync(CancellationToken.None));
+        var stopTask = Task.Run(() => service.StopAsync(CancellationToken.None), TestContext.Current.CancellationToken);
 
         // Невелика затримка щоб StopAsync встиг дойти до await WaitForExitAsync і
         // зареєструвати timeoutCts на FakeTime'овому годиннику.
         await Task.Yield();
-        await Task.Delay(50); // дозволяємо WaitForExitAsync-mock'у запустись
+        await Task.Delay(50, TestContext.Current.CancellationToken); // дозволяємо WaitForExitAsync-mock'у запустись
 
         // Провертаємо віртуальний годинник за StopTimeoutSeconds.
         fakeTime.Advance(TimeSpan.FromSeconds(Options.StopTimeoutSeconds + 1));
 
         // Assert: Kill викликано до 5с real-time (швидко після Advance).
-        await killCalled.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await stopTask.WaitAsync(TimeSpan.FromSeconds(5));
+        await killCalled.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await stopTask.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
     }
 }

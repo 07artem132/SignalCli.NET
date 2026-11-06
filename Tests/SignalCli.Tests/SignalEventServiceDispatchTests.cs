@@ -45,7 +45,7 @@ public class SignalEventServiceDispatchTests
     {
         var service = Create(out var n, out _);
         await service.StartAsync(CancellationToken.None);
-        await service.SubscribeAsync(Account);
+        await service.SubscribeAsync(Account, TestContext.Current.CancellationToken);
         var count = 0;
         service.TypingNotifications.Subscribe(_ => count++);
 
@@ -59,7 +59,7 @@ public class SignalEventServiceDispatchTests
     {
         var service = Create(out var n, out _);
         await service.StartAsync(CancellationToken.None);
-        await service.SubscribeAsync(Account);
+        await service.SubscribeAsync(Account, TestContext.Current.CancellationToken);
         var count = 0;
         service.Receipts.Subscribe(_ => count++);
 
@@ -73,7 +73,7 @@ public class SignalEventServiceDispatchTests
     {
         var service = Create(out var n, out _);
         await service.StartAsync(CancellationToken.None);
-        await service.SubscribeAsync(Account);
+        await service.SubscribeAsync(Account, TestContext.Current.CancellationToken);
         var count = 0;
         service.Syncs.Subscribe(_ => count++);
 
@@ -91,9 +91,9 @@ public class SignalEventServiceDispatchTests
         var service = Create(out _, out var rpc);
         await service.StartAsync(CancellationToken.None);
 
-        var first = await service.SubscribeAsync(Account);
-        var second = await service.SubscribeAsync(Account);
-        var third = await service.SubscribeAsync(Account);
+        var first = await service.SubscribeAsync(Account, TestContext.Current.CancellationToken);
+        var second = await service.SubscribeAsync(Account, TestContext.Current.CancellationToken);
+        var third = await service.SubscribeAsync(Account, TestContext.Current.CancellationToken);
 
         // Усі три виклики повертають один і той самий ID (з RPC-мока — SubId).
         Assert.Equal(SubId, first.Id);
@@ -148,7 +148,7 @@ public class SignalEventServiceDispatchTests
         var service = Create(out _, out _);
         await service.StartAsync(CancellationToken.None);
 
-        var ex = await Assert.ThrowsAnyAsync<ArgumentException>(() => service.SubscribeAsync(account!));
+        var ex = await Assert.ThrowsAnyAsync<ArgumentException>(() => service.SubscribeAsync(account!, TestContext.Current.CancellationToken));
         Assert.Equal("account", ex.ParamName);
     }
 
@@ -158,7 +158,7 @@ public class SignalEventServiceDispatchTests
         var service = Create(out _, out _);
         await service.StartAsync(CancellationToken.None);
 
-        var result = await service.UnsubscribeAsync(9999);
+        var result = await service.UnsubscribeAsync(9999, TestContext.Current.CancellationToken);
         Assert.NotNull(result);
     }
 
@@ -196,7 +196,7 @@ public class SignalEventServiceDispatchTests
         var service = new SignalEventService(fakeLogger, provider.Object, signalCli.Object);
 
         await service.StartAsync(CancellationToken.None);
-        await service.SubscribeAsync(Account);
+        await service.SubscribeAsync(Account, TestContext.Current.CancellationToken);
         var typingCount = 0;
         service.TypingNotifications.Subscribe(_ => typingCount++);
 

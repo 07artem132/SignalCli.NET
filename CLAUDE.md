@@ -6,7 +6,7 @@ Guidance for AI coding agents (Claude Code, Copilot, etc.) working in this repos
 
 **SignalCli.NET** — a .NET wrapper around [`signal-cli`](https://github.com/AsamK/signal-cli) (a Java app) that exposes a typed API for the Signal messenger. The library launches and supervises `signal-cli` in JSON-RPC mode over stdin/stdout, correlates requests/responses, and surfaces incoming events through **two parallel surfaces**: `IObservable<T>` (Rx, for fan-out/broadcast) and `IAsyncEnumerable<T>` (Channels, default for `await foreach`).
 
-- Target framework: **net10.0 (LTS)**, language **C# 14**. Package version **4.0.3**.
+- Target framework: **net10.0 (LTS)**, language **C# 14**. Package version — `<SignalCliPackageVersion>` у `Directory.Build.props` (актуальне значення на `main`).
 - Requires **JDK 25+** (signal-cli 0.14.3's `Main` is class-file version 69.0 = Java 25) and **signal-cli 0.14.3** (downloaded by the `SignalCli.Runtime` package at build time). Java is **not** required with the native package (`SignalCli.Runtime.Native`, Linux x64) or the bundled-JRE packages (`SignalCli.Runtime.Jre.win-x64`, `SignalCli.Runtime.Jre.osx-arm64`).
 
 ## Build & test
@@ -126,6 +126,8 @@ Path-scoped agent instructions live in `.claude/rules/` (load conditionally when
 **Кожен bump `<SignalCliPackageVersion>` у `Directory.Build.props` МУСИТЬ супроводжуватись відповідною `## [X.Y.Z] — YYYY-MM-DD` секцією у `CHANGELOG.md` — у **тому самому коміті**.** Без винятків. Включно з patch-bumps, test-only fix-релізами, doc-sync-патчами. Якщо тобі нема що написати — релізу не повинно бути; не bump'ай version "про запас".
 
 Структура секції CHANGELOG, voice template, bad-vs-good приклади — `.claude/rules/openspec-workflow.md` § CHANGELOG voice template (loads automatically when editing `CHANGELOG.md`).
+
+**Релізи автоматичні.** Кожен push у `main` запускає `.github/workflows/auto-release.yml` → `scripts/auto-release.sh`: якщо PR сам підняв версію (з CHANGELOG-секцією) — тегується як є; якщо ні, а shipped-поверхня змінилась — conventional-commit bump комітом `release: X.Y.Z`, який **у тому ж коміті** додає секцію CHANGELOG (переносить `## [Unreleased]`, якщо він заповнений, інакше генерує список комітів). Тег → dispatch `publish-nuget.yml` (тест-гейт, GitHub Release, пакети). Тег руками не ставити.
 
 Перевірка при PR: `git diff <base>..HEAD -- Directory.Build.props CHANGELOG.md` — якщо одне змінилось без іншого, перевір чому. (Reflection-based regression guard для цього неможливий — CHANGELOG.md не доступний з runtime-assembly; це enforce'ується процесом review, не build-failure.)
 

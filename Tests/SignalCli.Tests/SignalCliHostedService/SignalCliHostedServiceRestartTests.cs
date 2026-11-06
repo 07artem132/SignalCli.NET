@@ -89,7 +89,7 @@ public class SignalCliHostedServiceRestartTests : SignalCliHostedServiceTestsBas
         initialProcessMock.Raise(p => p.Exited += null, EventArgs.Empty);
         
         // Чекаємо автоперезапуск
-        await Task.Delay(100);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(ProcessState.Running, StateManager.CurrentState);
@@ -122,7 +122,7 @@ public class SignalCliHostedServiceRestartTests : SignalCliHostedServiceTestsBas
         processMock.Setup(p => p.HasExited).Returns(true);
         processMock.Raise(p => p.Exited += null, EventArgs.Empty);
         
-        await Task.Delay(100);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(ProcessState.Failed, StateManager.CurrentState);
@@ -218,7 +218,7 @@ public class SignalCliHostedServiceRestartTests : SignalCliHostedServiceTestsBas
         processMock1.Setup(p => p.HasExited).Returns(true);
         processMock1.Raise(p => p.Exited += null, EventArgs.Empty);
         
-        await Task.Delay(100); // Чекаємо перезапуск
+        await Task.Delay(100, TestContext.Current.CancellationToken); // Чекаємо перезапуск
         Assert.Equal(ProcessState.Running, StateManager.CurrentState);
         
         // Другий перезапуск має бути можливим, оскільки лічильник скинувся
@@ -227,7 +227,7 @@ public class SignalCliHostedServiceRestartTests : SignalCliHostedServiceTestsBas
         processMock2.Setup(p => p.HasExited).Returns(true);
         processMock2.Raise(p => p.Exited += null, EventArgs.Empty);
         
-        await Task.Delay(100);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(ProcessState.Running, StateManager.CurrentState);

@@ -58,7 +58,7 @@ public sealed class PerCallTimeoutTests
             new TestProbeRequest(),
             TestSerializationContext.Default.TestProbeRequest,
             TestSerializationContext.Default.TestProbeResponse,
-            cancellationToken: default,
+            cancellationToken: TestContext.Current.CancellationToken,
             timeout: TimeSpan.FromSeconds(5));
 
         await Task.Yield();
@@ -71,7 +71,7 @@ public sealed class PerCallTimeoutTests
         fakeTime.Advance(TimeSpan.FromSeconds(2));
 
         var ex = await Assert.ThrowsAsync<TimeoutException>(async () =>
-            await invokeTask.WaitAsync(TimeSpan.FromSeconds(5)));
+            await invokeTask.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
         Assert.Contains("per-call-short", ex.Message);
         // Повідомлення несе фактично застосований (per-call) таймаут, не глобальний default.
         Assert.Contains("5 с", ex.Message);
@@ -89,7 +89,7 @@ public sealed class PerCallTimeoutTests
             new TestProbeRequest(),
             TestSerializationContext.Default.TestProbeRequest,
             TestSerializationContext.Default.TestProbeResponse,
-            cancellationToken: default,
+            cancellationToken: TestContext.Current.CancellationToken,
             timeout: TimeSpan.FromSeconds(130));
 
         await Task.Yield();
@@ -103,7 +103,7 @@ public sealed class PerCallTimeoutTests
         fakeTime.Advance(TimeSpan.FromSeconds(100));
 
         var ex = await Assert.ThrowsAsync<TimeoutException>(async () =>
-            await invokeTask.WaitAsync(TimeSpan.FromSeconds(5)));
+            await invokeTask.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
         Assert.Contains("130 с", ex.Message);
     }
 
@@ -119,7 +119,7 @@ public sealed class PerCallTimeoutTests
             new TestProbeRequest(),
             TestSerializationContext.Default.TestProbeRequest,
             TestSerializationContext.Default.TestProbeResponse,
-            cancellationToken: default,
+            cancellationToken: TestContext.Current.CancellationToken,
             timeout: null);
 
         await Task.Yield();
@@ -132,7 +132,7 @@ public sealed class PerCallTimeoutTests
         fakeTime.Advance(TimeSpan.FromSeconds(2));
 
         var ex = await Assert.ThrowsAsync<TimeoutException>(async () =>
-            await invokeTask.WaitAsync(TimeSpan.FromSeconds(5)));
+            await invokeTask.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
         Assert.Contains("10 с", ex.Message);
     }
 
@@ -149,7 +149,7 @@ public sealed class PerCallTimeoutTests
                 new TestProbeRequest(),
                 TestSerializationContext.Default.TestProbeRequest,
                 TestSerializationContext.Default.TestProbeResponse,
-                cancellationToken: default,
+                cancellationToken: TestContext.Current.CancellationToken,
                 timeout: TimeSpan.FromSeconds(-1)));
         Assert.Equal("timeout", ex.ParamName);
     }
