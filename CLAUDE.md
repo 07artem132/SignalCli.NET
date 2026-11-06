@@ -29,7 +29,7 @@ The repo's `NuGet.Config` has a `<packageSourceMapping>` that points `SignalCli.
 dotnet restore <project> --source https://api.nuget.org/v3/index.json -p:NuGetAudit=false
 ```
 
-`--source` overrides the GitHub feed; `-p:NuGetAudit=false` skips the (also unreachable) vulnerability scanner. Once restored, `dotnet build/test --no-restore` works normally. The `dotnet` SDK itself is `apt`-installable from `packages.microsoft.com` (which is allowlisted in our container policy).
+`--source` overrides the GitHub feed; `-p:NuGetAudit=false` skips the (also unreachable) vulnerability scanner. Once restored, `dotnet build/test --no-restore` works normally. The SDK is pinned in `global.json` (10.0.403); install it with `dotnet-install.sh --jsonfile global.json` (the distro apt `dotnet-sdk-10.0` is 10.0.1xx and doesn't satisfy the pin).
 
 ## Architecture (key types)
 

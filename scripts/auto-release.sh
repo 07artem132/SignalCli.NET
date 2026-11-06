@@ -42,7 +42,8 @@ VERSION_FILES=("Directory.Build.props|SignalCliPackageVersion")
 CHANGELOG="CHANGELOG.md"
 # Не shipped-поверхня: зміни лише тут релізу не потребують.
 # Версії runtime-пакетів (SignalCli.Runtime*) живуть у src/ і теж релізяться — src/ не exempt.
-EXEMPT=(':!docs' ':!*.md' ':!.claude' ':!.github' ':!openspec' ':!scripts' ':!Tests' ':!Example'
+# global.json — пін SDK для збірки, не shipped-поверхня (пакет/бінарі від нього не змінюються).
+EXEMPT=(':!global.json' ':!docs' ':!*.md' ':!.claude' ':!.github' ':!openspec' ':!scripts' ':!Tests' ':!Example'
         ':!coverage.runsettings' ':!*.DotSettings' ':!AUDIT-FINDINGS*')
 # ------------------------------------------------------------------------------------------------
 

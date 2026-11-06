@@ -4,7 +4,7 @@
 # Що робить:
 #   1) Лише у віддаленому середовищі (CLAUDE_CODE_REMOTE=true) — інакше виходить тихо,
 #      щоб не заважати локальній розробці.
-#   2) Ставить .NET 10 SDK через apt (за наявності — пропускає).
+#   2) Ставить .NET SDK з global.json через dotnet-install.sh (за наявності — пропускає).
 #   3) Виконує `dotnet restore` для Tests/SignalCli.Tests, що тягне NuGet для тестів
 #      і референсованого `src/SignalCli`. Це і прогріває кеш, і кешується між сесіями.
 #   4) Будує `src/SignalCli` як швидку перевірку, що SDK/проєкт у робочому стані.
@@ -32,21 +32,23 @@ cd "$REPO_DIR"
 echo "[session-start] Готую середовище для SignalCli.NET у $REPO_DIR"
 
 # 1) .NET 10 SDK
-if ! command -v dotnet >/dev/null 2>&1; then
-    echo "[session-start] Встановлюю dotnet-sdk-10.0 (apt)..."
-    # SUDO_PREFIX обираємо один раз: у remote-контейнері root → sudo не потрібен.
-    SUDO_PREFIX=""
-    if [ "$(id -u)" != "0" ] && command -v sudo >/dev/null 2>&1; then
-        SUDO_PREFIX="sudo"
+# SDK пінено в global.json (Roslyn генератора JSON-RPC.NET = компілятор SDK 10.0.4xx). Distro-пакет
+# dotnet-sdk-10.0 з apt — це feature band 10.0.1xx, він global.json не задовольняє, тож ставимо
+# офіційним dotnet-install.sh у ~/.dotnet рівно ту версію, яку просить global.json.
+if ! dotnet --version >/dev/null 2>&1; then
+    echo "[session-start] SDK з global.json не знайдено — ставлю через dotnet-install.sh..."
+    DOTNET_DIR="$HOME/.dotnet"
+    if curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
+        && bash /tmp/dotnet-install.sh --jsonfile "$REPO_DIR/global.json" --install-dir "$DOTNET_DIR" --no-path; then
+        export DOTNET_ROOT="$DOTNET_DIR"
+        export PATH="$DOTNET_DIR:$PATH"
+        echo "export DOTNET_ROOT=\"$DOTNET_DIR\"" >> "${CLAUDE_ENV_FILE:-/dev/null}" 2>/dev/null || true
+        echo "export PATH=\"$DOTNET_DIR:\$PATH\"" >> "${CLAUDE_ENV_FILE:-/dev/null}" 2>/dev/null || true
+    else
+        echo "[session-start] УВАГА: dotnet-install.sh не вдався (мережа?) — збірка впаде на global.json." >&2
     fi
-    # Ігноруємо помилки `apt-get update` від сторонніх PPA (deadsnakes/ondrej тощо) —
-    # dotnet-sdk-10.0 у штатних noble-updates/security, і apt-cache уже їх знає.
-    $SUDO_PREFIX apt-get update -qq || true
-    $SUDO_PREFIX env DEBIAN_FRONTEND=noninteractive \
-        apt-get install -y --no-install-recommends dotnet-sdk-10.0
-else
-    echo "[session-start] dotnet уже встановлено: $(dotnet --version)"
 fi
+echo "[session-start] dotnet: $(dotnet --version 2>/dev/null || echo 'нема')"
 
 # Telemetry off — детермінованіші логи в сесії.
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
