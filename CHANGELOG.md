@@ -3,6 +3,20 @@
 Формат заснований на [Keep a Changelog](https://keepachangelog.com/),
 проєкт дотримується [семантичного версіонування](https://semver.org/lang/uk/).
 
+## [4.11.0] — 2026-11-06
+
+Minor — залежності на останніх stable-лініях і автоматичні релізи. Публічний API та wire-поведінка без змін.
+
+### ✨ Нове
+
+- **Релізи тепер автоматичні: кожен merge у `main` сам ставить тег і публікує пакети.** Ручний push тегу `v*` більше не потрібен. Якщо PR підняв версію сам, реліз виходить із нею. Якщо ні, а змінився код бібліотеки чи runtime-пакетів, версія піднімається за conventional commits (`feat` → minor, `!`/`BREAKING CHANGE` → major, решта → patch), і секція CHANGELOG додається в тому самому коміті. Merge, що змінює лише docs, тести чи CI, релізу не створює. *(`.github/workflows/auto-release.yml`, `scripts/auto-release.sh`)*
+
+### 🛠 Інше
+
+- **`System.Reactive` 6.1.0 → 7.0.0.** Транзитивна залежність для consumer-ів: якщо ти напряму посилаєшся на `System.Reactive` 6.x, NuGet підніме її до 7.0. Бібліотека, приклад і 515 тестів зібрались і пройшли без змін коду; публічні сигнатури `SignalCli.NET` віддають `IObservable<T>` з BCL, тож baseline `SignalCli.public-api.txt` не змінився.
+- **Тести на xunit v3:** `xunit` 2.9.3 → `xunit.v3.mtp-off` 4.0.2, `xunit.runner.visualstudio` 3.1.5 → 4.0.1. Варіант `mtp-off` тримає VSTest-хост, тож `dotnet test --filter "Category!=E2E"` і збір покриття в CI працюють як раніше. `xUnit1051` (порада передавати `TestContext.Current.CancellationToken`) вимкнено в test csproj.
+- **Тести:** 515 → 515, 0 warnings (`TreatWarningsAsErrors`).
+
 ## [4.10.4] — 2026-11-05
 
 Patch — оновлення NuGet-залежностей. Non-breaking, без змін публічного API та wire-поведінки.

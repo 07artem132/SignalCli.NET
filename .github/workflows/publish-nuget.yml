@@ -1,11 +1,12 @@
 name: Publish NuGet
 
 # Публікує пакети у GitHub Packages:
-#  - push тегу `v*` → workflow САМ створює GitHub Release (--generate-notes) і публікує пакети
-#    (auto-release, як у застосунку). Все в одному прогоні: реліз, створений через GITHUB_TOKEN,
-#    НЕ тригерить `release:published` (GitHub блокує рекурсію), тож окремий publish не спрацював би.
+#  - workflow_dispatch на тег v* — основний шлях: auto-release.yml після кожного merge у main
+#    ставить тег і запускає цей workflow на нього. Тут створюється GitHub Release (--generate-notes)
+#    і публікуються пакети. (Тег, запушений через GITHUB_TOKEN, `push: tags` не тригерить.)
+#  - push тегу `v*` руками → те саме.
 #  - release:published (ручне створення релізу) → лише публікація (крок Create Release пропускається).
-#  - workflow_dispatch → ручний прогін.
+#  - workflow_dispatch на гілку → ручний прогін без релізу.
 on:
   push:
     tags: ["v*"]
@@ -46,17 +47,21 @@ jobs:
       - name: Test
         run: dotnet test Tests/SignalCli.Tests/SignalCli.Tests.csproj -c Release --no-build --filter "Category!=E2E"
 
-      # Тег → workflow сам створює GitHub Release (лише після зеленого тесту). На release:published
+      # Тег (push або dispatch) → workflow сам створює GitHub Release (лише після зеленого тесту). На release:published
       # цей крок пропускається (реліз уже існує). Пакети живуть у GitHub Packages — asset-ів не чіпляємо
       # (зокрема великі JRE-payload-и не роздуваємо в реліз).
       - name: Create GitHub Release
-        if: github.event_name == 'push'
+        if: startsWith(github.ref, 'refs/tags/v') && github.event_name != 'release'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: >
-          gh release create "${{ github.ref_name }}"
-          --title "SignalCli.NET ${{ github.ref_name }}"
-          --generate-notes
+          TAG: ${{ github.ref_name }}
+        # Ідемпотентно: повторний прогін на той самий тег не падає на "release already exists".
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Реліз $TAG уже існує — пропускаю створення."
+          else
+            gh release create "$TAG" --title "SignalCli.NET $TAG" --generate-notes --verify-tag
+          fi
 
       - name: Pack SignalCli.NET
         run: dotnet pack src/SignalCli/SignalCli.csproj -c Release --no-build -o "${{ github.workspace }}/nupkgs"
