@@ -102,7 +102,7 @@ public class SignalCliHostedServiceDisposalTests : SignalCliHostedServiceTestsBa
 
         // Act & Assert
       await  Assert.ThrowsAsync<ObjectDisposedException>(
-            () => service.WaitForReadyAsync());
+            () => service.WaitForReadyAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]

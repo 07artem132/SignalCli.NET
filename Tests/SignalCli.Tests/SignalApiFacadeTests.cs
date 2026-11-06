@@ -26,7 +26,7 @@ public class SignalApiFacadeTests
 
         var result = await new SignalAccounts(client.Object, Mock.Of<ILogger<SignalAccounts>>(),
     Microsoft.Extensions.Options.Options.Create(new SignalCli.Models.SignalCliOptions
-    { AppHome = "/tmp", LibDirectory = "lib", JavaExecutable = "/usr/bin/java" })).ListAccountsAsync();
+    { AppHome = "/tmp", LibDirectory = "lib", JavaExecutable = "/usr/bin/java" })).ListAccountsAsync(TestContext.Current.CancellationToken);
 
         Assert.Same(expected, result);
     }
@@ -41,7 +41,7 @@ public class SignalApiFacadeTests
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => new SignalAccounts(client.Object, Mock.Of<ILogger<SignalAccounts>>(),
     Microsoft.Extensions.Options.Options.Create(new SignalCli.Models.SignalCliOptions
-    { AppHome = "/tmp", LibDirectory = "lib", JavaExecutable = "/usr/bin/java" })).ListAccountsAsync());
+    { AppHome = "/tmp", LibDirectory = "lib", JavaExecutable = "/usr/bin/java" })).ListAccountsAsync(TestContext.Current.CancellationToken));
     }
 
     // ---- SignalDevices ----
@@ -52,7 +52,7 @@ public class SignalApiFacadeTests
         client.Setup(c => c.InvokeMethodAsync<StartLinkParameters, StartLinkResponse>("startLink", It.IsAny<StartLinkParameters>(), It.IsAny<JsonTypeInfo<StartLinkParameters>>(), It.IsAny<JsonTypeInfo<StartLinkResponse>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new StartLinkResponse("sgnl://linkdevice?uuid=x"));
 
-        var result = await new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>()).StartLinkAsync();
+        var result = await new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>()).StartLinkAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("sgnl://linkdevice?uuid=x", result.DeviceLinkUri);
     }
@@ -67,7 +67,7 @@ public class SignalApiFacadeTests
             .ReturnsAsync(new FinishLinkResponse("+380501234567"));
 
         var result = await new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>())
-            .FinishLinkAsync("sgnl://uri", "MyDevice");
+            .FinishLinkAsync("sgnl://uri", "MyDevice", TestContext.Current.CancellationToken);
 
         Assert.Equal("+380501234567", result.Number);
         // Перевіряємо, що аргументи реально дійшли у параметри RPC (а не лише "не null")
@@ -83,7 +83,7 @@ public class SignalApiFacadeTests
             .ReturnsAsync((StartLinkResponse)null!);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>()).StartLinkAsync());
+            () => new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>()).StartLinkAsync(TestContext.Current.CancellationToken));
     }
 
     // ---- SignalGroups ----
@@ -99,7 +99,7 @@ public class SignalApiFacadeTests
             .ReturnsAsync(expected);
 
         var result = await new SignalGroups(client.Object, Mock.Of<ILogger<SignalGroups>>())
-            .ListGroupsAsync("+380501234567");
+            .ListGroupsAsync("+380501234567", TestContext.Current.CancellationToken);
 
         Assert.Same(expected, result);
         // account має дійти у параметри listGroups
@@ -116,7 +116,7 @@ public class SignalApiFacadeTests
         var provider = new Mock<IJsonRpcClientProvider>();
         provider.Setup(p => p.Client).Returns(rpc.Object);
 
-        var version = await new SignalService(provider.Object, Mock.Of<ILogger<SignalService>>()).VersionAsync();
+        var version = await new SignalService(provider.Object, Mock.Of<ILogger<SignalService>>()).VersionAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("0.14.3", version.Version);
     }
@@ -130,7 +130,7 @@ public class SignalApiFacadeTests
 
         var result = await new SignalAccounts(client.Object, Mock.Of<ILogger<SignalAccounts>>(),
     Microsoft.Extensions.Options.Options.Create(new SignalCli.Models.SignalCliOptions
-    { AppHome = "/tmp", LibDirectory = "lib", JavaExecutable = "/usr/bin/java" })).SyncAccountAsync();
+    { AppHome = "/tmp", LibDirectory = "lib", JavaExecutable = "/usr/bin/java" })).SyncAccountAsync(TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
     }
@@ -143,7 +143,7 @@ public class SignalApiFacadeTests
             .ReturnsAsync((FinishLinkResponse)null!);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>()).FinishLinkAsync("u", "n"));
+            () => new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>()).FinishLinkAsync("u", "n", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public class SignalApiFacadeTests
             .ReturnsAsync((ListGroupsResponse)null!);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => new SignalGroups(client.Object, Mock.Of<ILogger<SignalGroups>>()).ListGroupsAsync("+1"));
+            () => new SignalGroups(client.Object, Mock.Of<ILogger<SignalGroups>>()).ListGroupsAsync("+1", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -167,6 +167,6 @@ public class SignalApiFacadeTests
         provider.Setup(p => p.Client).Returns(rpc.Object);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => new SignalService(provider.Object, Mock.Of<ILogger<SignalService>>()).VersionAsync());
+            () => new SignalService(provider.Object, Mock.Of<ILogger<SignalService>>()).VersionAsync(TestContext.Current.CancellationToken));
     }
 }

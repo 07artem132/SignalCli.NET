@@ -7,12 +7,6 @@
         <IsPackable>false</IsPackable>
         <!-- xunit v3: тестовий проєкт — самостійний виконуваний файл. -->
         <OutputType>Exe</OutputType>
-        <!--
-          xUnit1051 (xunit v3): порада передавати TestContext.Current.CancellationToken у кожен виклик
-          з CancellationToken. Тести вже обмежені власними таймаутами й FakeTimeProvider; це косметика
-          скасування, не коректність, а 384 механічні правки не варті шуму в diff.
-        -->
-        <NoWarn>$(NoWarn);xUnit1051</NoWarn>
         <!-- E2E-тести запускають справжній signal-cli; не пакуємось у NuGet. -->
     </PropertyGroup>
 

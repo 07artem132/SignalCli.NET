@@ -73,8 +73,7 @@ public class ProcessRunnerTests
 
         // Act & Assert
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await runner.StartProcessWithHandle(config)
-        );
+            await runner.StartProcessWithHandle(config, TestContext.Current.CancellationToken));
 
         // Додатково можна перевірити, що Dispose був викликаний у випадку помилки
         mockProcess.Verify(p => p.Dispose(), Times.Once);
@@ -124,7 +123,7 @@ public class ProcessRunnerTests
         };
 
         // Act
-        var (process, streams) = await runner.StartProcessWithHandle(config);
+        var (process, streams) = await runner.StartProcessWithHandle(config, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(process);
@@ -201,7 +200,7 @@ public class ProcessRunnerTests
         };
 
         // Act
-        var (process, streams) = await runner.StartProcessWithHandle(config);
+        var (process, streams) = await runner.StartProcessWithHandle(config, TestContext.Current.CancellationToken);
 
         // Assert: перевіряємо Environment
         Assert.Equal("VALUE1", capturedPsi.Environment["VAR1"]);

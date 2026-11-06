@@ -58,11 +58,11 @@ public sealed class StateManagerReentrancyTests
 
         // Act: ініціюємо ланцюжок Starting → (reenter) → Stopping.
         // Виконуємо в Task.Run щоб мати 2с-deadlock-window-monitoring через WaitAsync.
-        var driveTask = Task.Run(() => stateManager.UpdateState(ProcessState.Starting));
+        var driveTask = Task.Run(() => stateManager.UpdateState(ProcessState.Starting), TestContext.Current.CancellationToken);
 
         // Assert: ланцюг має дозавершитися до 2с — інакше deadlock.
-        await reentryDone.Task.WaitAsync(TimeSpan.FromSeconds(2));
-        await driveTask.WaitAsync(TimeSpan.FromSeconds(2));
+        await reentryDone.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        await driveTask.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
         List<ProcessState> snapshot;
         lock (observedStates) { snapshot = [.. observedStates]; }
@@ -87,10 +87,10 @@ public sealed class StateManagerReentrancyTests
             lock (observed) { observed.Add(info.State); }
         });
 
-        var task1 = Task.Run(() => stateManager.UpdateState(ProcessState.Starting));
-        var task2 = Task.Run(() => stateManager.UpdateState(ProcessState.Running));
+        var task1 = Task.Run(() => stateManager.UpdateState(ProcessState.Starting), TestContext.Current.CancellationToken);
+        var task2 = Task.Run(() => stateManager.UpdateState(ProcessState.Running), TestContext.Current.CancellationToken);
 
-        await Task.WhenAll(task1, task2).WaitAsync(TimeSpan.FromSeconds(2));
+        await Task.WhenAll(task1, task2).WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
         List<ProcessState> snapshot;
         lock (observed) { snapshot = [.. observed]; }

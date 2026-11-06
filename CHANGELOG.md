@@ -14,7 +14,7 @@ Minor — залежності на останніх stable-лініях і ав
 ### 🛠 Інше
 
 - **`System.Reactive` 6.1.0 → 7.0.0.** Транзитивна залежність для consumer-ів: якщо ти напряму посилаєшся на `System.Reactive` 6.x, NuGet підніме її до 7.0. Бібліотека, приклад і 515 тестів зібрались і пройшли без змін коду; публічні сигнатури `SignalCli.NET` віддають `IObservable<T>` з BCL, тож baseline `SignalCli.public-api.txt` не змінився.
-- **Тести на xunit v3:** `xunit` 2.9.3 → `xunit.v3.mtp-off` 4.0.2, `xunit.runner.visualstudio` 3.1.5 → 4.0.1. Варіант `mtp-off` тримає VSTest-хост, тож `dotnet test --filter "Category!=E2E"` і збір покриття в CI працюють як раніше. `xUnit1051` (порада передавати `TestContext.Current.CancellationToken`) вимкнено в test csproj.
+- **Тести на xunit v3:** `xunit` 2.9.3 → `xunit.v3.mtp-off` 4.0.2, `xunit.runner.visualstudio` 3.1.5 → 4.0.1. Варіант `mtp-off` тримає VSTest-хост, тож `dotnet test --filter "Category!=E2E"` і збір покриття в CI працюють як раніше. Порада аналізатора `xUnit1051` виправлена в кожному місці: тести передають `TestContext.Current.CancellationToken`.
 - **Тести:** 515 → 515, 0 warnings (`TreatWarningsAsErrors`).
 
 ## [4.10.4] — 2026-11-05

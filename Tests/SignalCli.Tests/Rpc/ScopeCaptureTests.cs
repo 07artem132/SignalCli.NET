@@ -49,9 +49,10 @@ public sealed class ScopeCaptureTests
             "scopeProbe",
             new TestProbeRequest(),
             TestSerializationContext.Default.TestProbeRequest,
-            TestSerializationContext.Default.TestProbeResponse);
+            TestSerializationContext.Default.TestProbeResponse,
+            TestContext.Current.CancellationToken);
         await Assert.ThrowsAsync<TimeoutException>(async () =>
-            await invokeTask.WaitAsync(TimeSpan.FromSeconds(10)));
+            await invokeTask.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
 
         // Assert — серед log-записів має бути хоч один із scope-property RpcMethod="scopeProbe".
         var entries = fakeLogger.Collector.GetSnapshot();

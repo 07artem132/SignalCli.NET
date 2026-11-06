@@ -113,7 +113,8 @@ public class JsonRpcClientTests
             "testMethod",
             new TestProbeRequest(),
             TestSerializationContext.Default.TestProbeRequest,
-            TestSerializationContext.Default.TestProbeResponse);
+            TestSerializationContext.Default.TestProbeResponse,
+            TestContext.Current.CancellationToken);
 
         // Act — імітуємо, що стрім-пара зникла
         PushNullStreamPair();
@@ -139,7 +140,8 @@ public class JsonRpcClientTests
             "test",
             new TestProbeRequest(),
             TestSerializationContext.Default.TestProbeRequest,
-            TestSerializationContext.Default.TestProbeResponse);
+            TestSerializationContext.Default.TestProbeResponse,
+            TestContext.Current.CancellationToken);
 
         // Act
         // A.6: IJsonRpcClient тепер IAsyncDisposable-only.
@@ -166,7 +168,8 @@ public class JsonRpcClientTests
             "someMethod",
             new TestProbeRequest(),
             TestSerializationContext.Default.TestProbeRequest,
-            TestSerializationContext.Default.TestProbeResponse);
+            TestSerializationContext.Default.TestProbeResponse,
+            TestContext.Current.CancellationToken);
 
         // Імітація «відповіді» з id=1 (якщо лічильник 0 => перший запит → "1").
         // §6.10: TestProbeResponse(Foo: string) → wire-property "foo" (lowercase).
@@ -195,7 +198,8 @@ public class JsonRpcClientTests
             "test",
             new TestProbeRequest(),
             TestSerializationContext.Default.TestProbeRequest,
-            TestSerializationContext.Default.TestProbeResponse);
+            TestSerializationContext.Default.TestProbeResponse,
+            TestContext.Current.CancellationToken);
 
         // Ответ с error
         var response = @"{
@@ -264,17 +268,18 @@ public class JsonRpcClientTests
             "myMethod",
             new TestProbeRequest(Hello: "world"),
             TestSerializationContext.Default.TestProbeRequest,
-            TestSerializationContext.Default.JsonElement);
+            TestSerializationContext.Default.JsonElement,
+            TestContext.Current.CancellationToken);
 
         // Даємо трохи часу, щоб SendRequestAsync встиг записати
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
 
         // Assert: читаємо з inputStream, дивимось, що там
         inputWriter.Flush(); // не забудьте сбросить буфер
         inputStream.Seek(0, SeekOrigin.Begin);
 
         using var reader = new StreamReader(inputStream);
-        var written = await reader.ReadToEndAsync();
+        var written = await reader.ReadToEndAsync(TestContext.Current.CancellationToken);
         Assert.Contains(@"""method"":""myMethod""", written);
         Assert.Contains(@"""hello"":""world""", written);
 
@@ -305,11 +310,12 @@ public class JsonRpcClientTests
             "silent",
             new TestProbeRequest(),
             TestSerializationContext.Default.TestProbeRequest,
-            TestSerializationContext.Default.TestProbeResponse);
+            TestSerializationContext.Default.TestProbeResponse,
+            TestContext.Current.CancellationToken);
 
         // Очікуємо точно TimeoutException у межах кількох таймаутів (бо є тонкі race-вікна).
         var ex = await Assert.ThrowsAsync<TimeoutException>(async () =>
-            await invokeTask.WaitAsync(TimeSpan.FromSeconds(5)));
+            await invokeTask.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
         Assert.Contains("silent", ex.Message);
     }
 
@@ -332,7 +338,7 @@ public class JsonRpcClientTests
             TestSerializationContext.Default.TestProbeRequest,
             TestSerializationContext.Default.TestProbeResponse,
             cts.Token);
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
         cts.Cancel();
 
         await Assert.ThrowsAsync<TaskCanceledException>(() => invokeTask);
@@ -358,7 +364,8 @@ public class JsonRpcClientTests
             "first",
             new TestProbeRequest(),
             TestSerializationContext.Default.TestProbeRequest,
-            TestSerializationContext.Default.TestProbeResponse);
+            TestSerializationContext.Default.TestProbeResponse,
+            TestContext.Current.CancellationToken);
 
         // Друга пара — push має скасувати pending.
         var inputB = new StreamWriter(new MemoryStream());

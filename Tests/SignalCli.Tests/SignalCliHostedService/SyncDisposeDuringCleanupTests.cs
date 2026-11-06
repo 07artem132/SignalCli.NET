@@ -95,7 +95,7 @@ public sealed class SyncDisposeDuringCleanupTests : IDisposable
             .GetField("_operationLock", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         Assert.NotNull(lockField);
         var sem = (SemaphoreSlim)lockField!.GetValue(service)!;
-        sem.Wait(); // повний lock — Dispose'у доведеться fallback'нутися через 50ms.
+        sem.Wait(TestContext.Current.CancellationToken); // повний lock — Dispose'у доведеться fallback'нутися через 50ms.
 
         try
         {

@@ -99,7 +99,7 @@ public sealed class ObservabilityPrivacyTests : IDisposable
         var service = CreateEventService(out _);
         await service.StartAsync(CancellationToken.None);
 
-        await service.SubscribeAsync(SeedPhone);
+        await service.SubscribeAsync(SeedPhone, TestContext.Current.CancellationToken);
 
         // Activity для subscribe-операції має зʼявитися (ми зареєстрували listener).
         Activity[] activitiesSnapshot;
@@ -115,7 +115,7 @@ public sealed class ObservabilityPrivacyTests : IDisposable
     {
         var service = CreateEventService(out var notifications);
         await service.StartAsync(CancellationToken.None);
-        await service.SubscribeAsync(SeedPhone);
+        await service.SubscribeAsync(SeedPhone, TestContext.Current.CancellationToken);
 
         // Прокидаємо нотифікацію з seed-тілом і seed-source через диспетчер.
         var envelope = new JsonMessageEnvelope(
@@ -140,7 +140,7 @@ public sealed class ObservabilityPrivacyTests : IDisposable
         var service = CreateEventService(out _);
         await service.StartAsync(CancellationToken.None);
 
-        await service.SubscribeAsync(SeedPhone);
+        await service.SubscribeAsync(SeedPhone, TestContext.Current.CancellationToken);
 
         // У SubscribeAsync ми не пишемо власних counter'ів, але диспетчер може дропнути
         // події у канал → counter. Незалежно від того — перевіряємо все що захопили.

@@ -55,7 +55,8 @@ public sealed class TimeoutVirtualizationTests
             "silent",
             new TestProbeRequest(),
             TestSerializationContext.Default.TestProbeRequest,
-            TestSerializationContext.Default.TestProbeResponse);
+            TestSerializationContext.Default.TestProbeResponse,
+            TestContext.Current.CancellationToken);
 
         // Даємо невеликий шанс SendRequestAsync дописати у stream і дойти до await-у TCS.
         // Це не race-вікно — навіть якщо ми Advance'немо раніше за await, FakeTime'овий timer
@@ -68,7 +69,7 @@ public sealed class TimeoutVirtualizationTests
         // Assert: маємо отримати TimeoutException БЕЗ wall-clock-очікування.
         // WaitAsync із real-time fallback 5с — bo якщо віртуалізація НЕ працює, тест зависне.
         var ex = await Assert.ThrowsAsync<TimeoutException>(async () =>
-            await invokeTask.WaitAsync(TimeSpan.FromSeconds(5)));
+            await invokeTask.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
         Assert.Contains("silent", ex.Message);
     }
 
@@ -116,6 +117,6 @@ public sealed class TimeoutVirtualizationTests
         // НЕ Advance — таймер ще не спрацював, тож має вилетіти TaskCanceledException.
 
         await Assert.ThrowsAsync<TaskCanceledException>(async () =>
-            await invokeTask.WaitAsync(TimeSpan.FromSeconds(5)));
+            await invokeTask.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
     }
 }

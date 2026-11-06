@@ -315,7 +315,7 @@ public class SignalCliE2EAdditionalTests
                         alive = false;
                         break;
                     }
-                    await Task.Delay(200);
+                    await Task.Delay(200, TestContext.Current.CancellationToken);
                 }
                 Assert.False(alive, $"PID {realPid} orphaned after DisposeAsync — process tree не cleaned up.");
             }

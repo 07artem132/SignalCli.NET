@@ -64,7 +64,7 @@ public class SignalDevicesCrudTests
         var sut = new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>());
         const string uri = "sgnl://linkdevice?uuid=abc&pub_key=unpaddedBase64Here";
 
-        await sut.AddDeviceAsync("+1", uri);
+        await sut.AddDeviceAsync("+1", uri, TestContext.Current.CancellationToken);
 
         // §F11: pass-through без padding modification — signal-cli приймає обидва форми.
         Assert.Equal(uri, captured!.Uri);
@@ -74,7 +74,7 @@ public class SignalDevicesCrudTests
     public async Task AddDeviceAsync_EmptyAccount_Throws()
     {
         var sut = new SignalDevices(Mock.Of<ISignalCliClient>(), Mock.Of<ILogger<SignalDevices>>());
-        await Assert.ThrowsAsync<ArgumentException>(() => sut.AddDeviceAsync("", "sgnl://..."));
+        await Assert.ThrowsAsync<ArgumentException>(() => sut.AddDeviceAsync("", "sgnl://...", TestContext.Current.CancellationToken));
     }
 
     // ---- ListDevicesAsync ----
@@ -95,7 +95,7 @@ public class SignalDevicesCrudTests
             ]));
 
         var sut = new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>());
-        var resp = await sut.ListDevicesAsync("+1");
+        var resp = await sut.ListDevicesAsync("+1", TestContext.Current.CancellationToken);
 
         Assert.Single(resp);
         Assert.Equal(1L, resp[0].Id);
@@ -115,7 +115,7 @@ public class SignalDevicesCrudTests
             .ReturnsAsync((ListDevicesResponse?)null!);
 
         var sut = new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>());
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ListDevicesAsync("+1"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ListDevicesAsync("+1", TestContext.Current.CancellationToken));
     }
 
     // ---- RemoveDeviceAsync ----
@@ -137,7 +137,7 @@ public class SignalDevicesCrudTests
             .ReturnsAsync(default(JsonElement));
 
         var sut = new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>());
-        await sut.RemoveDeviceAsync("+1", 42);
+        await sut.RemoveDeviceAsync("+1", 42, TestContext.Current.CancellationToken);
 
         Assert.Equal(42, captured!.DeviceId);
     }
@@ -146,14 +146,14 @@ public class SignalDevicesCrudTests
     public async Task RemoveDeviceAsync_NegativeDeviceId_Throws()
     {
         var sut = new SignalDevices(Mock.Of<ISignalCliClient>(), Mock.Of<ILogger<SignalDevices>>());
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => sut.RemoveDeviceAsync("+1", -1));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => sut.RemoveDeviceAsync("+1", -1, TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task RemoveDeviceAsync_ZeroDeviceId_Throws()
     {
         var sut = new SignalDevices(Mock.Of<ISignalCliClient>(), Mock.Of<ILogger<SignalDevices>>());
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => sut.RemoveDeviceAsync("+1", 0));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => sut.RemoveDeviceAsync("+1", 0, TestContext.Current.CancellationToken));
     }
 
     // ---- UpdateDeviceAsync ----
@@ -175,7 +175,7 @@ public class SignalDevicesCrudTests
             .ReturnsAsync(default(JsonElement));
 
         var sut = new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>());
-        await sut.UpdateDeviceAsync("+1", 5, "New Name");
+        await sut.UpdateDeviceAsync("+1", 5, "New Name", TestContext.Current.CancellationToken);
 
         Assert.Equal(5, captured!.DeviceId);
         Assert.Equal("New Name", captured.DeviceName);
@@ -185,7 +185,7 @@ public class SignalDevicesCrudTests
     public async Task UpdateDeviceAsync_NullDeviceName_Throws()
     {
         var sut = new SignalDevices(Mock.Of<ISignalCliClient>(), Mock.Of<ILogger<SignalDevices>>());
-        await Assert.ThrowsAsync<ArgumentNullException>(() => sut.UpdateDeviceAsync("+1", 1, null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => sut.UpdateDeviceAsync("+1", 1, null!, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -206,7 +206,7 @@ public class SignalDevicesCrudTests
             .ReturnsAsync(default(JsonElement));
 
         var sut = new SignalDevices(client.Object, Mock.Of<ILogger<SignalDevices>>());
-        await sut.UpdateDeviceAsync("+1", 1, ""); // empty allowed
+        await sut.UpdateDeviceAsync("+1", 1, "", TestContext.Current.CancellationToken); // empty allowed
 
         Assert.Equal("", captured!.DeviceName);
     }

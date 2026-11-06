@@ -42,15 +42,15 @@ public sealed class BackgroundServiceLifecycleTests : SignalCliHealthMonitorTest
 
         // Маленька real-time пауза, щоб ExecuteAsync встиг увійти в `WaitForNextTickAsync`
         // і зареєструвати PeriodicTimer на віртуальному годиннику; інакше Advance "у порожнечу".
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
         fakeTime.Advance(TimeSpan.FromSeconds(ServiceOptions.HealthCheckIntervalSeconds));
-        await inLoopSeen.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await inLoopSeen.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         // Тепер запитуємо StopAsync — він має:
         //  (а) тригернути stoppingToken-cancel
         //  (б) дочекатися завершення ExecuteAsync (через base.StopAsync logic у BackgroundService)
         // Real-time fallback 5с — якщо StopAsync завис понад нього, ExecuteAsync НЕ підхопив cancel.
-        await monitor.StopAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+        await monitor.StopAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         // Assert — ExecuteTask має бути або completed, або canceled-faulted.
         Assert.True(monitor.ExecuteTask is null

@@ -13,7 +13,7 @@ public class SignalCliHealthMonitorEdgeCaseTests : SignalCliHealthMonitorTestBas
         await service.StartAsync(CancellationToken.None);
         var monitor = CreateMonitor(service);
         await monitor.StartAsync(CancellationToken.None);
-        await Task.Delay(100);  // Даємо час на запуск
+        await Task.Delay(100, TestContext.Current.CancellationToken);  // Даємо час на запуск
 
         // Act & Assert
         monitor.Dispose(); // Перший виклик
@@ -58,7 +58,7 @@ public class SignalCliHealthMonitorEdgeCaseTests : SignalCliHealthMonitorTestBas
             }
             catch
             {
-                await Task.Delay(100);
+                await Task.Delay(100, TestContext.Current.CancellationToken);
             }
         }
 
@@ -89,7 +89,7 @@ public class SignalCliHealthMonitorEdgeCaseTests : SignalCliHealthMonitorTestBas
 
         var monitor = CreateMonitor(service);
         await monitor.StartAsync(CancellationToken.None);
-        await Task.Delay(1500); // Даємо час на перший пінг
+        await Task.Delay(1500, TestContext.Current.CancellationToken); // Даємо час на перший пінг
 
         // Assert
         VerifyErrorLog("PingCliAsync: пінг CLI невдалий", Times.Once());

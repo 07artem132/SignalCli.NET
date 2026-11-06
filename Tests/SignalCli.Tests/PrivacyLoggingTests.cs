@@ -32,7 +32,7 @@ public class PrivacyLoggingTests
             Microsoft.Extensions.Options.Options.Create(new SignalCli.Models.SignalCliOptions
             { AppHome = "/tmp", LibDirectory = "lib", JavaExecutable = "/usr/bin/java" }));
 
-        await sut.ListAccountsAsync();
+        await sut.ListAccountsAsync(TestContext.Current.CancellationToken);
 
         // Будь-який лог-запис рівня >= Debug із вмістом номера телефону — порушення приватності.
         foreach (var level in new[] { LogLevel.Debug, LogLevel.Information, LogLevel.Warning, LogLevel.Error })
@@ -82,7 +82,7 @@ public class PrivacyLoggingTests
         logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         var sut = new SignalGroups(client.Object, logger.Object);
 
-        await sut.ListGroupsAsync("+1");
+        await sut.ListGroupsAsync("+1", TestContext.Current.CancellationToken);
 
         foreach (var level in new[] { LogLevel.Debug, LogLevel.Information, LogLevel.Warning, LogLevel.Error })
         {
