@@ -10,7 +10,7 @@
 
 ## Що робить hook
 
-1. Ставить **`.NET 10 SDK`** через apt (`dotnet-sdk-10.0` зі штатних `noble-updates`). Базовий cloud-образ Ubuntu 24.04 не має dotnet — без цього кроку нічого не побудується.
+1. Ставить **.NET SDK з `global.json`** (10.0.403) офіційним `dotnet-install.sh` у `~/.dotnet`. Distro-пакет `dotnet-sdk-10.0` з apt — це 10.0.1xx, і `global.json` він не задовольняє. Базовий cloud-образ Ubuntu 24.04 не має dotnet — без цього кроку нічого не побудується.
 2. `dotnet restore Tests/SignalCli.Tests/SignalCli.Tests.csproj` — тягне NuGet для тестового проєкту і референсованого `src/SignalCli`. Якщо контейнер зберігає `~/.nuget/packages` між сесіями — кеш переживає; у строго ефемерному середовищі restore виконується щоразу заново.
 3. `dotnet build src/SignalCli/SignalCli.csproj` — sanity-перевірка, що SDK + код у робочому стані. На цьому етапі warm-up завершується.
 
@@ -47,7 +47,7 @@ dotnet test  Tests/SignalCli.Tests.Integration/SignalCli.Tests.Integration.cspro
 Hook потребує:
 
 - `archive.ubuntu.com` / `security.ubuntu.com` — для `apt update` і базових пакетів.
-- `packages.microsoft.com` — для `dotnet-sdk-10.0` (allowlisted у нашій container-policy; див. CLAUDE.md "Restoring packages in a sandboxed env").
+- `dot.net` / `builds.dotnet.microsoft.com` — для `dotnet-install.sh` і архіву SDK.
 - `api.nuget.org` — для `dotnet restore`.
 
 Для **повної** збірки `SignalCli.sln` додатково:
